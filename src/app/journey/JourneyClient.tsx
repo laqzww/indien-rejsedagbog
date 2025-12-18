@@ -53,7 +53,7 @@ export function JourneyClient({ milestones, posts }: JourneyClientProps) {
   };
 
   return (
-    <main className="flex-1 flex flex-col lg:flex-row">
+    <main className="flex-1 flex flex-col lg:flex-row min-h-0">
       {/* Desktop Timeline Sidebar */}
       <aside className="hidden lg:block w-80 border-r border-border overflow-y-auto bg-white">
         <div className="p-4 border-b border-border">
