@@ -23,15 +23,16 @@ export function EmptyFeed() {
 
       {/* Decorative route preview */}
       <div className="mt-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-        <span className="px-3 py-1 bg-saffron/10 rounded-full">Delhi</span>
-        <span>→</span>
-        <span className="px-3 py-1 bg-saffron/10 rounded-full">Jaipur</span>
+        <span className="px-3 py-1 bg-saffron/10 rounded-full">Kochi</span>
         <span>→</span>
         <span className="px-3 py-1 bg-saffron/10 rounded-full">Goa</span>
         <span>→</span>
-        <span className="px-3 py-1 bg-india-green/10 rounded-full">Kerala</span>
+        <span className="px-3 py-1 bg-saffron/10 rounded-full">Jaisalmer</span>
+        <span>→</span>
+        <span className="px-3 py-1 bg-india-green/10 rounded-full">Delhi</span>
       </div>
     </div>
   );
 }
+
 

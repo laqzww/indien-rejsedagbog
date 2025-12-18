@@ -58,7 +58,7 @@ export default async function HomePage() {
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-6">
             Følg med på vores eventyr gennem det utrolige Indien. 
-            Fra de majestætiske forter i Rajasthan til de fredelige backwaters i Kerala.
+            Fra de fredelige backwaters i Kerala til de majestætiske forter i Rajasthan.
           </p>
 
           {/* Next destination teaser */}

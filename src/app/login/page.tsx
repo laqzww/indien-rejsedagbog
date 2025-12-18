@@ -23,7 +23,10 @@ function LoginForm() {
 
     const supabase = createClient();
     
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
+    // Use production URL from env, fallback to window.location for local dev
+    const appUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+      ? window.location.origin
+      : 'https://indien-rejsedagbog.onrender.com';
     
     const { error } = await supabase.auth.signInWithOtp({
       email,

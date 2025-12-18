@@ -15,7 +15,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "Indien Rejsedagbog",
-  description: "Følg med på vores eventyr gennem Indien - fra Delhi til Kerala",
+  description: "Følg med på vores eventyr gennem Indien - fra Kerala til Delhi",
   keywords: ["rejsedagbog", "indien", "rejse", "travel", "india"],
   authors: [{ name: "Rejsedagbog" }],
   openGraph: {
