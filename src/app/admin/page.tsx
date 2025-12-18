@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PlusCircle, FileText, MapPin, LogOut } from "lucide-react";
+import { PlusCircle, FileText, MapPin, LogOut, Settings } from "lucide-react";
 import { formatRelativeDate } from "@/lib/utils";
 
 export default async function AdminPage() {
@@ -39,12 +39,20 @@ export default async function AdminPage() {
             Hvad vil du dele i dag?
           </p>
         </div>
-        <form action="/auth/signout" method="POST">
-          <Button variant="ghost" size="sm" type="submit" className="gap-2">
-            <LogOut className="h-4 w-4" />
-            Log ud
-          </Button>
-        </form>
+        <div className="flex items-center gap-2">
+          <Link href="/settings">
+            <Button variant="ghost" size="sm" className="gap-2">
+              <Settings className="h-4 w-4" />
+              Indstillinger
+            </Button>
+          </Link>
+          <form action="/auth/signout" method="POST">
+            <Button variant="ghost" size="sm" type="submit" className="gap-2">
+              <LogOut className="h-4 w-4" />
+              Log ud
+            </Button>
+          </form>
+        </div>
       </div>
 
       {/* Quick actions */}
