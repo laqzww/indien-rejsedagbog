@@ -2,16 +2,26 @@
 
 import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
-import type { Milestone, Post } from "@/types/database";
+import type { Milestone } from "@/types/database";
 
 // Set access token
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN!;
 
+// Simplified post type for map
+interface MapPost {
+  id: string;
+  body: string;
+  lat: number | null;
+  lng: number | null;
+  location_name: string | null;
+  media: { storage_path: string }[];
+}
+
 interface JourneyMapProps {
   milestones: Milestone[];
-  posts: (Post & { media: { storage_path: string }[] })[];
+  posts: MapPost[];
   onMilestoneClick?: (milestone: Milestone) => void;
-  onPostClick?: (post: Post) => void;
+  onPostClick?: (post: MapPost) => void;
   initialCenter?: [number, number];
   initialZoom?: number;
 }

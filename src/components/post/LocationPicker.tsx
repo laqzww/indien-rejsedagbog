@@ -25,7 +25,7 @@ export function LocationPicker({ value, onChange, disabled }: LocationPickerProp
   const [isSearching, setIsSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const debounceRef = useRef<NodeJS.Timeout>();
+  const debounceRef = useRef<NodeJS.Timeout>(undefined);
 
   // Search for locations using Mapbox Geocoding
   const searchLocations = useCallback(async (searchQuery: string) => {

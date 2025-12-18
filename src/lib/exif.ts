@@ -1,4 +1,5 @@
 import exifr from "exifr";
+import type { Json } from "@/types/database";
 
 export interface ExifData {
   lat?: number;
@@ -8,7 +9,7 @@ export interface ExifData {
   height?: number;
   cameraMake?: string;
   cameraModel?: string;
-  raw?: Record<string, unknown>;
+  raw?: Json;
 }
 
 export async function extractExifData(file: File): Promise<ExifData> {
@@ -62,7 +63,7 @@ export async function extractExifData(file: File): Promise<ExifData> {
       height,
       cameraMake: exif.Make,
       cameraModel: exif.Model,
-      raw: exif,
+      raw: exif as Json,
     };
   } catch (error) {
     console.error("Failed to parse EXIF data:", error);

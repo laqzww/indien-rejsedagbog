@@ -7,7 +7,19 @@ import { Timeline } from "@/components/map/Timeline";
 import { Button } from "@/components/ui/button";
 import { List, Map as MapIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Milestone, Post } from "@/types/database";
+import type { Milestone } from "@/types/database";
+
+// Simplified post type for journey view
+interface JourneyPost {
+  id: string;
+  body: string;
+  lat: number | null;
+  lng: number | null;
+  location_name: string | null;
+  created_at: string;
+  captured_at: string | null;
+  media: { storage_path: string }[];
+}
 
 // Dynamic import for map to avoid SSR issues
 const JourneyMap = dynamic(
@@ -24,7 +36,7 @@ const JourneyMap = dynamic(
 
 interface JourneyClientProps {
   milestones: Milestone[];
-  posts: (Post & { media: { storage_path: string }[] })[];
+  posts: JourneyPost[];
 }
 
 export function JourneyClient({ milestones, posts }: JourneyClientProps) {
@@ -36,7 +48,7 @@ export function JourneyClient({ milestones, posts }: JourneyClientProps) {
     setActiveMilestone(milestone);
   };
 
-  const handlePostClick = (post: Post) => {
+  const handlePostClick = (post: { id: string }) => {
     router.push(`/post/${post.id}`);
   };
 

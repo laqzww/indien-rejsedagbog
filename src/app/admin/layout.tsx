@@ -20,7 +20,7 @@ export default async function AdminLayout({
     .from("profiles")
     .select("is_author")
     .eq("id", user.id)
-    .single();
+    .single() as { data: { is_author: boolean } | null };
 
   if (!profile?.is_author) {
     redirect("/?error=not_authorized");

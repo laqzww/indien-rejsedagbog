@@ -125,12 +125,12 @@ export default function NewPostPage() {
           storage_path: storagePath,
           type,
           mime_type: mediaFile.file.type || null,
-          width: mediaFile.exif?.width || null,
-          height: mediaFile.exif?.height || null,
-          exif_data: mediaFile.exif?.raw || null,
-          lat: mediaFile.exif?.lat || null,
-          lng: mediaFile.exif?.lng || null,
-          captured_at: mediaFile.exif?.capturedAt?.toISOString() || null,
+          width: mediaFile.exif?.width ?? null,
+          height: mediaFile.exif?.height ?? null,
+          exif_data: mediaFile.exif?.raw ?? null,
+          lat: mediaFile.exif?.lat ?? null,
+          lng: mediaFile.exif?.lng ?? null,
+          captured_at: mediaFile.exif?.capturedAt?.toISOString() ?? null,
           display_order: i,
         });
       }
