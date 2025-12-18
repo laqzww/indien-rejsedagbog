@@ -29,7 +29,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 
   return {
-    title: `${post.body.slice(0, 50)}... | Indien Rejsedagbog`,
+    title: `${post.body.slice(0, 50)}...`,
     description: post.body.slice(0, 160),
   };
 }

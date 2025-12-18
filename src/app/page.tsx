@@ -54,7 +54,7 @@ export default async function HomePage() {
         {/* Hero section */}
         <section className="mb-12 text-center">
           <h1 className="text-4xl md:text-5xl font-bold text-navy mb-4">
-            Indien Rejsedagbog
+            Tommy og Amalies Indien Rejsedagbog
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-6">
             Følg med på vores eventyr gennem det utrolige Indien. 
@@ -107,7 +107,7 @@ export default async function HomePage() {
         <div className="container mx-auto px-4 py-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} Indien Rejsedagbog
+              © {new Date().getFullYear()} T&A Indien Rejsedagbog
             </p>
             <div className="flex items-center gap-4 text-sm text-muted-foreground">
               <Link href="/journey" className="hover:text-saffron transition-colors">

@@ -58,7 +58,10 @@ export function Logo({ className, size = "md", showText = true }: LogoProps) {
 
       {showText && (
         <div className="flex flex-col leading-tight">
-          <span className={cn("font-bold text-saffron", text)}>
+          <span className="text-xs font-medium text-muted-foreground tracking-wide">
+            Tommy & Amalie
+          </span>
+          <span className={cn("font-bold text-saffron -mt-0.5", text)}>
             Indien
           </span>
           <span className={cn("font-light text-navy -mt-1", text)}>

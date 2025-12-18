@@ -14,13 +14,16 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Indien Rejsedagbog",
-  description: "Følg med på vores eventyr gennem Indien - fra Kerala til Delhi",
-  keywords: ["rejsedagbog", "indien", "rejse", "travel", "india"],
-  authors: [{ name: "Rejsedagbog" }],
+  title: {
+    default: "T&A Indien Rejsedagbog",
+    template: "%s | T&A Indien",
+  },
+  description: "Følg med på Tommy og Amalies eventyr gennem Indien - fra Kerala til Delhi",
+  keywords: ["rejsedagbog", "indien", "rejse", "travel", "india", "tommy", "amalie"],
+  authors: [{ name: "Tommy og Amalie" }],
   openGraph: {
-    title: "Indien Rejsedagbog",
-    description: "Følg med på vores eventyr gennem Indien",
+    title: "Tommy og Amalies Indien Rejsedagbog",
+    description: "Følg med på vores eventyr gennem Indien - fra Kerala til Delhi",
     type: "website",
   },
 };

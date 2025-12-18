@@ -4,7 +4,7 @@ import { JourneyClient } from "./JourneyClient";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Rejserute | Indien Rejsedagbog",
+  title: "Rejserute",
   description: "Se hele rejseruten gennem Indien på kortet",
 };
 
