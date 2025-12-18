@@ -73,9 +73,6 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
 }
 
-/* Mapbox GL CSS import */
-@import "mapbox-gl/dist/mapbox-gl.css";
-
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
