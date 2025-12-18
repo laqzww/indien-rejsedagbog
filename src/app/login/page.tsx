@@ -75,6 +75,32 @@ function LoginForm() {
     setLoading(false);
   };
 
+  const handleForgotPassword = async () => {
+    setLoading(true);
+    setMessage(null);
+    try {
+      const supabase = createClient();
+      const siteUrl =
+        process.env.NEXT_PUBLIC_SITE_URL ||
+        (typeof window !== "undefined" ? window.location.origin : "");
+
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${siteUrl}/auth/callback?type=recovery&redirect=${encodeURIComponent(redirect)}`,
+      });
+
+      if (error) {
+        setMessage({ type: "error", text: error.message });
+      } else {
+        setMessage({
+          type: "success",
+          text: "Tjek din email for et link til at sætte et nyt password.",
+        });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Card className="border-saffron/20 shadow-xl">
       <CardHeader className="text-center">
@@ -145,9 +171,21 @@ function LoginForm() {
                 disabled={loading}
                 autoComplete="current-password"
               />
-              <p className="text-xs text-muted-foreground">
-                Har du ikke et password endnu? Brug “Magic link”.
-              </p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  Har du ikke et password endnu? Brug “Magic link” eller sæt et nyt.
+                </p>
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="px-0 h-auto text-xs"
+                  onClick={handleForgotPassword}
+                  disabled={loading || !email}
+                >
+                  Glemt password?
+                </Button>
+              </div>
             </div>
           )}
 

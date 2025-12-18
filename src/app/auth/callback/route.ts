@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse, type NextRequest } from "next/server";
+import { isEmailAllowlisted } from "@/lib/author";
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -10,11 +11,25 @@ export async function GET(request: NextRequest) {
 
   const supabase = await createClient();
 
+  const maybeProvisionAuthor = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    if (!isEmailAllowlisted(user.email)) return;
+
+    // Best-effort: if RLS blocks this, we still allow via allowlist.
+    await supabase
+      .from("profiles")
+      .upsert({ id: user.id, is_author: true }, { onConflict: "id" });
+  };
+
   // Handle PKCE flow (code exchange)
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     
     if (!error) {
+      await maybeProvisionAuthor();
       return NextResponse.redirect(`${origin}${redirect}`);
     }
     console.error("Code exchange error:", error);
@@ -24,10 +39,19 @@ export async function GET(request: NextRequest) {
   if (token_hash && type) {
     const { error } = await supabase.auth.verifyOtp({
       token_hash,
-      type: type as "email" | "magiclink",
+      type: type as "email" | "magiclink" | "recovery",
     });
     
     if (!error) {
+      await maybeProvisionAuthor();
+
+      // Password recovery: after verification, direct user to set new password.
+      if (type === "recovery") {
+        const url = new URL(`${origin}/auth/update-password`);
+        url.searchParams.set("redirect", redirect);
+        return NextResponse.redirect(url.toString());
+      }
+
       return NextResponse.redirect(`${origin}${redirect}`);
     }
     console.error("Token verification error:", error);
