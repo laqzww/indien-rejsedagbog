@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, MapPin, Calendar, Share2 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import type { Metadata } from "next";
+import { getIsAuthor } from "@/lib/author";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -40,16 +41,7 @@ export default async function PostPage({ params }: PageProps) {
 
   // Check if current user is author
   const { data: { user } } = await supabase.auth.getUser();
-  let isAuthor = false;
-  
-  if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("is_author")
-      .eq("id", user.id)
-      .single();
-    isAuthor = profile?.is_author || false;
-  }
+  const isAuthor = await getIsAuthor(supabase, user);
 
   // Fetch post with relations
   const { data: post } = await supabase

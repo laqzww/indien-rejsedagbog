@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Map, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import type { PostWithMedia } from "@/types/database";
+import { getIsAuthor } from "@/lib/author";
 
 export const revalidate = 60; // Revalidate every minute
 
@@ -14,16 +15,7 @@ export default async function HomePage() {
 
   // Get current user to check if author
   const { data: { user } } = await supabase.auth.getUser();
-  let isAuthor = false;
-  
-  if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("is_author")
-      .eq("id", user.id)
-      .single();
-    isAuthor = profile?.is_author || false;
-  }
+  const isAuthor = await getIsAuthor(supabase, user);
 
   // Fetch posts with media and profile
   const { data: postsRaw } = await supabase
