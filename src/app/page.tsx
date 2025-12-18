@@ -37,7 +37,7 @@ export default async function HomePage() {
     .limit(20);
 
   // Serialize to clean JSON (removes Supabase metadata)
-  const posts = postsRaw ? JSON.parse(JSON.stringify(postsRaw)) : null;
+  const posts: PostWithMedia[] | null = postsRaw ? JSON.parse(JSON.stringify(postsRaw)) : null;
 
   // Fetch next milestone (upcoming or current)
   const today = new Date().toISOString().split("T")[0];
