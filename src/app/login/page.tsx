@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useMemo, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Logo } from "@/components/Logo";
@@ -11,10 +11,21 @@ import { Mail, Loader2, CheckCircle, AlertCircle } from "lucide-react";
 
 function LoginForm() {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [mode, setMode] = useState<"magiclink" | "password">("password");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const searchParams = useSearchParams();
   const redirect = searchParams.get("redirect") || "/admin";
+  const errorParam = searchParams.get("error");
+
+  const initialError = useMemo(() => {
+    if (!errorParam) return null;
+    if (errorParam === "not_authorized") {
+      return "Du er logget ind, men har ikke adgang til admin.";
+    }
+    return decodeURIComponent(errorParam);
+  }, [errorParam]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,15 +34,30 @@ function LoginForm() {
 
     const supabase = createClient();
     
-    // Use production URL from env, fallback to window.location for local dev
-    const appUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-      ? window.location.origin
-      : 'https://indien-rejsedagbog.onrender.com';
-    
+    if (mode === "password") {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        setMessage({ type: "error", text: error.message });
+      } else {
+        // Server-side pages rely on auth cookies; hard navigation ensures fresh session.
+        window.location.assign(redirect);
+      }
+      setLoading(false);
+      return;
+    }
+
+    const siteUrl =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      (typeof window !== "undefined" ? window.location.origin : "");
+
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${appUrl}/auth/callback?redirect=${encodeURIComponent(redirect)}`,
+        emailRedirectTo: `${siteUrl}/auth/callback?redirect=${encodeURIComponent(redirect)}`,
       },
     });
 
@@ -43,6 +69,7 @@ function LoginForm() {
         text: "Tjek din email! Vi har sendt dig et magic link til at logge ind." 
       });
       setEmail("");
+      setPassword("");
     }
     
     setLoading(false);
@@ -57,6 +84,32 @@ function LoginForm() {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {initialError && !message && (
+          <div className="flex items-center gap-2 p-3 rounded-md text-sm bg-destructive/10 text-destructive mb-4">
+            <AlertCircle className="h-4 w-4 flex-shrink-0" />
+            {initialError}
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          <Button
+            type="button"
+            variant={mode === "password" ? "default" : "outline"}
+            onClick={() => setMode("password")}
+            disabled={loading}
+          >
+            Password
+          </Button>
+          <Button
+            type="button"
+            variant={mode === "magiclink" ? "default" : "outline"}
+            onClick={() => setMode("magiclink")}
+            disabled={loading}
+          >
+            Magic link
+          </Button>
+        </div>
+
         <form onSubmit={handleLogin} className="space-y-4">
           <div className="space-y-2">
             <label htmlFor="email" className="text-sm font-medium text-foreground">
@@ -76,6 +129,27 @@ function LoginForm() {
               />
             </div>
           </div>
+
+          {mode === "password" && (
+            <div className="space-y-2">
+              <label htmlFor="password" className="text-sm font-medium text-foreground">
+                Password
+              </label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={loading}
+                autoComplete="current-password"
+              />
+              <p className="text-xs text-muted-foreground">
+                Har du ikke et password endnu? Brug “Magic link”.
+              </p>
+            </div>
+          )}
 
           {message && (
             <div
@@ -98,10 +172,10 @@ function LoginForm() {
             {loading ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Sender...
+                {mode === "magiclink" ? "Sender..." : "Logger ind..."}
               </>
             ) : (
-              "Send magic link"
+              mode === "magiclink" ? "Send magic link" : "Log ind"
             )}
           </Button>
         </form>
