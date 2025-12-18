@@ -71,8 +71,8 @@ export function JourneyClient({ milestones, posts }: JourneyClientProps) {
         </div>
       </aside>
 
-      {/* Map */}
-      <div className="flex-1 relative">
+      {/* Map - explicit height for mobile */}
+      <div className="flex-1 relative min-h-[calc(100vh-4rem)] lg:min-h-0">
         <JourneyMap
           milestones={milestones}
           posts={posts}

@@ -37,7 +37,7 @@ export default function RootLayout({
     <html lang="da">
       <head>
         <link
-          href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css"
+          href="https://api.mapbox.com/mapbox-gl-js/v3.17.0/mapbox-gl.css"
           rel="stylesheet"
         />
       </head>

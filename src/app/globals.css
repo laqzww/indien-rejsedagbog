@@ -73,3 +73,57 @@
 .stagger-3 { animation-delay: 0.15s; }
 .stagger-4 { animation-delay: 0.2s; }
 .stagger-5 { animation-delay: 0.25s; }
+
+/* Slide up animation for mobile drawer */
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out forwards;
+}
+
+/* Fade in animation */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out forwards;
+}
+
+/* Mobile-specific mapbox adjustments */
+@media (max-width: 767px) {
+  .mapboxgl-ctrl-group {
+    margin: 10px !important;
+  }
+  
+  .mapboxgl-ctrl-group button {
+    width: 36px !important;
+    height: 36px !important;
+  }
+  
+  .mapboxgl-popup-content {
+    max-width: 250px !important;
+    font-size: 14px !important;
+  }
+  
+  .milestone-marker > div,
+  .post-marker > div {
+    /* Larger touch targets on mobile */
+    min-width: 40px;
+    min-height: 40px;
+  }
+}

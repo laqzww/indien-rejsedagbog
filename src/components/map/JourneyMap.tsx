@@ -44,6 +44,9 @@ export function JourneyMap({
     // Calculate center from milestones if not provided
     const center = initialCenter || calculateCenter(milestones);
 
+    // Detect mobile device
+    const isMobile = window.innerWidth < 768;
+
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: {
@@ -72,15 +75,28 @@ export function JourneyMap({
         ],
       },
       center: center as [number, number],
-      zoom: initialZoom,
+      zoom: isMobile ? Math.max(initialZoom - 1, 3) : initialZoom,
       attributionControl: false,
+      // Mobile optimizations
+      dragRotate: false, // Disable rotation on mobile for simpler UX
+      touchZoomRotate: true, // Enable pinch-to-zoom
+      touchPitch: false, // Disable pitch changes on mobile
     });
 
-    map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
+    // Add navigation controls - compact on mobile
+    map.current.addControl(
+      new mapboxgl.NavigationControl({ showCompass: !isMobile }),
+      "top-right"
+    );
     map.current.addControl(
       new mapboxgl.AttributionControl({ compact: true }),
       "bottom-right"
     );
+
+    // Enable cooperative gestures on mobile to prevent accidental panning
+    if (isMobile) {
+      map.current.touchZoomRotate.disableRotation();
+    }
 
     map.current.on("load", () => {
       setIsLoaded(true);
@@ -132,12 +148,17 @@ export function JourneyMap({
       }
     }
 
+    // Detect mobile for larger touch targets
+    const isMobileDevice = window.innerWidth < 768;
+    const markerSize = isMobileDevice ? 'w-10 h-10 text-base' : 'w-8 h-8 text-sm';
+    const postMarkerSize = isMobileDevice ? 'w-8 h-8 text-base' : 'w-6 h-6 text-sm';
+
     // Add milestone markers
     milestones.forEach((milestone, index) => {
       const el = document.createElement("div");
       el.className = "milestone-marker";
       el.innerHTML = `
-        <div class="w-8 h-8 rounded-full bg-saffron text-white flex items-center justify-center font-bold text-sm shadow-lg border-2 border-white cursor-pointer hover:scale-110 transition-transform">
+        <div class="${markerSize} rounded-full bg-saffron text-white flex items-center justify-center font-bold shadow-lg border-2 border-white cursor-pointer hover:scale-110 transition-transform">
           ${index + 1}
         </div>
       `;
@@ -170,7 +191,7 @@ export function JourneyMap({
       const el = document.createElement("div");
       el.className = "post-marker";
       el.innerHTML = `
-        <div class="w-6 h-6 rounded-full bg-india-green text-white flex items-center justify-center shadow-lg border-2 border-white cursor-pointer hover:scale-110 transition-transform">
+        <div class="${postMarkerSize} rounded-full bg-india-green text-white flex items-center justify-center shadow-lg border-2 border-white cursor-pointer hover:scale-110 transition-transform">
           📍
         </div>
       `;
