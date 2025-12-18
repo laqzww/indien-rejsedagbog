@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { uploadMedia, generateFilename, getFileType } from "@/lib/upload";
@@ -11,7 +11,7 @@ import { TagInput } from "@/components/post/TagInput";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Send, Loader2, MapPin, Tag, MessageSquare } from "lucide-react";
+import { ArrowLeft, Send, Loader2, MapPin, Tag, MessageSquare, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import type { ExifData } from "@/lib/exif";
 
@@ -27,6 +27,14 @@ export default function NewPostPage() {
   const [files, setFiles] = useState<MediaFile[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Check if any uploaded images are missing GPS data
+  const hasImagesWithoutGps = useMemo(() => {
+    return files.some(f => f.type === "image" && !f.hasGps);
+  }, [files]);
+
+  // Show location reminder if images without GPS and no manual location
+  const showLocationReminder = hasImagesWithoutGps && !location && files.length > 0;
 
   // Handle EXIF data from uploaded files
   const handleExifExtracted = useCallback((exif: ExifData) => {
@@ -196,7 +204,7 @@ export default function NewPostPage() {
         </Card>
 
         {/* Location */}
-        <Card>
+        <Card className={showLocationReminder ? "ring-2 ring-amber-400 ring-offset-2" : ""}>
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2">
               <MapPin className="h-5 w-5 text-india-green" />
@@ -208,7 +216,19 @@ export default function NewPostPage() {
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
+            {/* Warning when images lack GPS */}
+            {showLocationReminder && (
+              <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800">
+                <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-medium">Ingen GPS-data i billedet</p>
+                  <p className="text-amber-700 mt-0.5">
+                    Vælg venligst en lokation manuelt, så andre kan se hvor I er! 📍
+                  </p>
+                </div>
+              </div>
+            )}
             <LocationPicker
               value={location}
               onChange={setLocation}

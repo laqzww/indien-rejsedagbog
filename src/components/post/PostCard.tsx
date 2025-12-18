@@ -21,11 +21,27 @@ interface PostCardData {
     id: string;
     type: string;
     storage_path: string;
+    width: number | null;
+    height: number | null;
   }>;
   profile: {
     display_name: string | null;
     avatar_url: string | null;
   } | null;
+}
+
+// Helper to determine aspect ratio class based on image dimensions
+function getAspectRatioStyle(width: number | null, height: number | null) {
+  if (!width || !height) {
+    // Fallback to 4:3 if dimensions unknown
+    return { aspectRatio: "4/3" };
+  }
+  
+  const ratio = width / height;
+  
+  // Portrait (taller than wide) - e.g. iPhone portrait is roughly 3:4
+  // Landscape (wider than tall) - e.g. iPhone landscape is roughly 4:3 or 16:9
+  return { aspectRatio: `${width}/${height}` };
 }
 
 interface PostCardProps {
@@ -47,7 +63,10 @@ export function PostCard({ post, index = 0 }: PostCardProps) {
       >
         {/* Media preview */}
         {firstMedia && (
-          <div className="relative aspect-video bg-muted overflow-hidden">
+          <div 
+            className="relative bg-muted overflow-hidden"
+            style={getAspectRatioStyle(firstMedia.width, firstMedia.height)}
+          >
             {firstMedia.type === "image" ? (
               <Image
                 src={getMediaUrl(firstMedia.storage_path)}

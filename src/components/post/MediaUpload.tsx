@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { cn } from "@/lib/utils";
-import { Camera, X, Film, Loader2, ImageIcon } from "lucide-react";
+import { Camera, X, Film, Loader2, ImageIcon, MapPinOff } from "lucide-react";
 import { isHeicFile, convertHeicToJpeg } from "@/lib/heic";
 import { extractExifData, type ExifData } from "@/lib/exif";
 
@@ -14,6 +14,7 @@ export interface MediaFile {
   exif?: ExifData;
   isConverting?: boolean;
   displayBlob?: Blob; // JPEG version for display if HEIC
+  hasGps?: boolean; // Explicit GPS status
 }
 
 interface MediaUploadProps {
@@ -72,8 +73,10 @@ export function MediaUpload({
         try {
           const exif = await extractExifData(file);
           mediaFile.exif = exif;
+          mediaFile.hasGps = !!(exif.lat && exif.lng);
         } catch (error) {
           console.error("EXIF extraction failed:", error);
+          mediaFile.hasGps = false;
         }
       }
 
@@ -236,10 +239,16 @@ export function MediaUpload({
               </div>
 
               {/* EXIF GPS indicator */}
-              {file.exif?.lat && file.exif?.lng && (
-                <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-india-green text-white text-xs">
-                  GPS
-                </div>
+              {file.type === "image" && (
+                file.hasGps ? (
+                  <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-india-green text-white text-xs">
+                    GPS
+                  </div>
+                ) : (
+                  <div className="absolute bottom-2 right-2 p-1 rounded bg-amber-500 text-white" title="Ingen GPS-data fundet">
+                    <MapPinOff className="h-3 w-3" />
+                  </div>
+                )
               )}
             </div>
           ))}
