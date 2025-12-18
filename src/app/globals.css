@@ -127,3 +127,17 @@
     min-height: 40px;
   }
 }
+
+/* Mobile map container - handles browser chrome properly with fallback */
+.map-container-mobile {
+  /* Fallback for older browsers */
+  height: calc(100vh - 4rem);
+  /* Modern browsers with dynamic viewport height support */
+  height: calc(100dvh - 4rem);
+}
+
+@media (min-width: 1024px) {
+  .map-container-mobile {
+    height: auto;
+  }
+}
