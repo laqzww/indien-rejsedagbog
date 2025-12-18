@@ -128,7 +128,7 @@
   }
 }
 
-/* Mobile map container - handles browser chrome properly with fallback */
+/* Map container - handles different viewport sizes */
 .map-container-mobile {
   /* Fallback for older browsers */
   height: calc(100vh - 4rem);
@@ -138,6 +138,9 @@
 
 @media (min-width: 1024px) {
   .map-container-mobile {
-    height: auto;
+    /* On desktop, fill the remaining height of the flex container.
+       Use calc with dvh to ensure the map always has height,
+       accounting for header (4rem) */
+    height: calc(100dvh - 4rem);
   }
 }
