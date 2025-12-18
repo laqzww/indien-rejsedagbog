@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Outfit, Geist_Mono } from "next/font/google";
+import { Outfit, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -8,7 +8,7 @@ const outfit = Outfit({
   weight: ["300", "400", "500", "600", "700"],
 });
 
-const geistMono = Geist_Mono({
+const jetbrainsMono = JetBrains_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
@@ -39,7 +39,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${outfit.variable} ${geistMono.variable} antialiased min-h-screen`}
+        className={`${outfit.variable} ${jetbrainsMono.variable} antialiased min-h-screen`}
       >
         {children}
       </body>
