@@ -1,12 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { Header } from "@/components/Header";
-import { PostCard } from "@/components/post/PostCard";
+import { PostFeed } from "@/components/post/PostFeed";
 import { EmptyFeed } from "@/components/post/EmptyFeed";
 import { Button } from "@/components/ui/button";
 import { Map, ArrowRight } from "lucide-react";
 import Link from "next/link";
-import type { PostWithMedia } from "@/types/database";
 import { getIsAuthor } from "@/lib/author";
+import { groupPostsByMilestoneAndDay } from "@/lib/journey";
 
 export const revalidate = 60; // Revalidate every minute
 
@@ -17,19 +17,36 @@ export default async function HomePage() {
   const { data: { user } } = await supabase.auth.getUser();
   const isAuthor = await getIsAuthor(supabase, user);
 
-  // Fetch posts with media and profile
+  // Fetch posts with media and profile (using captured_at for ordering)
   const { data: postsRaw } = await supabase
     .from("posts")
     .select(`
-      *,
-      media (*),
-      profile:profiles (*)
+      id,
+      body,
+      location_name,
+      captured_at,
+      created_at,
+      tags,
+      lat,
+      lng,
+      media (id, type, storage_path, width, height),
+      profile:profiles (display_name, avatar_url)
     `)
+    .order("captured_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false })
-    .limit(20);
+    .limit(100);
 
   // Serialize to clean JSON (removes Supabase metadata)
-  const posts: PostWithMedia[] | null = postsRaw ? JSON.parse(JSON.stringify(postsRaw)) : null;
+  const posts = postsRaw ? JSON.parse(JSON.stringify(postsRaw)) : [];
+
+  // Fetch milestones for grouping
+  const { data: milestones } = await supabase
+    .from("milestones")
+    .select("*")
+    .order("display_order", { ascending: true });
+
+  // Group posts by milestone and day
+  const groupedPosts = groupPostsByMilestoneAndDay(posts, milestones || []);
 
   // Fetch next milestone (upcoming or current)
   const today = new Date().toISOString().split("T")[0];
@@ -41,80 +58,64 @@ export default async function HomePage() {
     .limit(1)
     .single();
 
+  const hasPosts = posts && posts.length > 0;
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white to-orange-50/30">
+    <div className="min-h-screen bg-white">
       <Header isAuthor={isAuthor} />
 
-      <main className="container mx-auto px-4 py-8 max-w-6xl">
-        {/* Hero section */}
-        <section className="mb-12 text-center">
-          <h1 className="text-4xl md:text-5xl font-bold text-navy mb-4">
-            Tommy og Amalies Indien Rejsedagbog
-          </h1>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-6">
-            Følg med på vores eventyr gennem det utrolige Indien. 
-            Fra de fredelige backwaters i Kerala til de majestætiske forter i Rajasthan.
-          </p>
+      {/* Mobile-first hero - compact on mobile */}
+      <section className="bg-gradient-to-b from-saffron/5 to-white px-4 py-6 sm:py-10 text-center border-b border-border">
+        <h1 className="text-2xl sm:text-4xl font-bold text-navy mb-2 sm:mb-4">
+          Tommy & Amalies Indien 🇮🇳
+        </h1>
+        <p className="text-sm sm:text-base text-muted-foreground max-w-xl mx-auto mb-4">
+          Følg med på vores eventyr gennem det utrolige Indien
+        </p>
 
+        <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
           {/* Next destination teaser */}
           {nextMilestone && (
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-saffron/10 rounded-full text-saffron text-sm font-medium">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-saffron/10 rounded-full text-saffron text-xs sm:text-sm font-medium">
               <span className="animate-pulse">📍</span>
-              Næste stop: {nextMilestone.name}
+              Næste: {nextMilestone.name}
             </div>
           )}
 
           {/* Journey link */}
-          <div className="mt-6">
-            <Link href="/journey">
-              <Button variant="outline" className="gap-2">
-                <Map className="h-4 w-4" />
-                Se hele rejseruten
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
-          </div>
-        </section>
+          <Link href="/journey">
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs sm:text-sm h-8">
+              <Map className="h-3.5 w-3.5" />
+              Se kort
+              <ArrowRight className="h-3 w-3" />
+            </Button>
+          </Link>
+        </div>
+      </section>
 
-        {/* Posts feed */}
-        {posts && posts.length > 0 ? (
-          <section>
-            <h2 className="text-2xl font-bold text-navy mb-6">
-              Seneste opslag
-            </h2>
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {posts.map((post, index) => (
-                <PostCard 
-                  key={post.id} 
-                  post={post}
-                  index={index}
-                />
-              ))}
-            </div>
-          </section>
+      {/* Posts feed - full width on mobile */}
+      <main className="max-w-2xl mx-auto">
+        {hasPosts ? (
+          <PostFeed groups={groupedPosts} />
         ) : (
-          <EmptyFeed />
+          <div className="px-4 py-8">
+            <EmptyFeed />
+          </div>
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-border bg-white mt-16">
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <p className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} T&A Indien Rejsedagbog
-            </p>
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-              <Link href="/journey" className="hover:text-saffron transition-colors">
-                Rejserute
-              </Link>
-              {isAuthor && (
-                <Link href="/admin" className="hover:text-saffron transition-colors">
-                  Admin
-                </Link>
-              )}
-            </div>
-          </div>
+      {/* Minimal footer */}
+      <footer className="border-t border-border bg-white py-4">
+        <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
+          <span>© {new Date().getFullYear()} T&A</span>
+          <Link href="/journey" className="hover:text-saffron transition-colors">
+            Rejserute
+          </Link>
+          {isAuthor && (
+            <Link href="/admin" className="hover:text-saffron transition-colors">
+              Admin
+            </Link>
+          )}
         </div>
       </footer>
     </div>
