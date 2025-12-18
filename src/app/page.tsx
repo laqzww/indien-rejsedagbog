@@ -26,7 +26,7 @@ export default async function HomePage() {
   }
 
   // Fetch posts with media and profile
-  const { data: posts } = await supabase
+  const { data: postsRaw } = await supabase
     .from("posts")
     .select(`
       *,
@@ -35,6 +35,9 @@ export default async function HomePage() {
     `)
     .order("created_at", { ascending: false })
     .limit(20);
+
+  // Serialize to clean JSON (removes Supabase metadata)
+  const posts = postsRaw ? JSON.parse(JSON.stringify(postsRaw)) : null;
 
   // Fetch next milestone (upcoming or current)
   const today = new Date().toISOString().split("T")[0];
