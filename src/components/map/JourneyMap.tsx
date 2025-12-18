@@ -218,7 +218,7 @@ export function JourneyMap({
   }, [isLoaded, milestones, posts, onMilestoneClick, onPostClick]);
 
   return (
-    <div ref={mapContainer} className="w-full h-full rounded-xl overflow-hidden" />
+    <div ref={mapContainer} className="absolute inset-0 rounded-xl overflow-hidden" />
   );
 }
 

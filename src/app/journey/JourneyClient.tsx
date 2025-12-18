@@ -27,7 +27,7 @@ const JourneyMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="w-full h-full bg-muted animate-pulse flex items-center justify-center">
+      <div className="absolute inset-0 bg-muted animate-pulse flex items-center justify-center">
         <MapIcon className="h-12 w-12 text-muted-foreground/20" />
       </div>
     ),
@@ -71,8 +71,8 @@ export function JourneyClient({ milestones, posts }: JourneyClientProps) {
         </div>
       </aside>
 
-      {/* Map - explicit height for mobile */}
-      <div className="flex-1 relative min-h-[calc(100vh-4rem)] lg:min-h-0">
+      {/* Map - explicit height for mobile using dvh for proper mobile browser support */}
+      <div className="flex-1 relative map-container-mobile">
         <JourneyMap
           milestones={milestones}
           posts={posts}
