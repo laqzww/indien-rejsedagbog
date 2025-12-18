@@ -91,13 +91,12 @@ export default async function HomePage() {
               Seneste opslag
             </h2>
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {posts.map((post) => (
-                <div key={post.id} className="p-4 border rounded-lg bg-white shadow">
-                  <p className="text-sm text-foreground">{post.body}</p>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    {post.location_name || "Ingen lokation"}
-                  </p>
-                </div>
+              {posts.map((post, index) => (
+                <PostCard 
+                  key={post.id} 
+                  post={post}
+                  index={index}
+                />
               ))}
             </div>
           </section>

@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
 import { Card, CardContent } from "@/components/ui/card";
@@ -6,10 +8,28 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MapPin, Calendar, ImageIcon, Film } from "lucide-react";
 import { formatRelativeDate } from "@/lib/utils";
 import { getMediaUrl } from "@/lib/upload";
-import type { PostWithMedia } from "@/types/database";
+
+// Simplified type for serializable post data
+interface PostCardData {
+  id: string;
+  body: string;
+  location_name: string | null;
+  captured_at: string | null;
+  created_at: string;
+  tags: string[] | null;
+  media: Array<{
+    id: string;
+    type: string;
+    storage_path: string;
+  }>;
+  profile: {
+    display_name: string | null;
+    avatar_url: string | null;
+  } | null;
+}
 
 interface PostCardProps {
-  post: PostWithMedia;
+  post: PostCardData;
   index?: number;
 }
 
