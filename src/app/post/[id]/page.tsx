@@ -6,7 +6,7 @@ import { MediaGallery } from "@/components/post/MediaGallery";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, MapPin, Calendar, Share2 } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar, Share2, Pencil } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import type { Metadata } from "next";
 import { getIsAuthor } from "@/lib/author";
@@ -42,6 +42,8 @@ export default async function PostPage({ params }: PageProps) {
   // Check if current user is author
   const { data: { user } } = await supabase.auth.getUser();
   const isAuthor = await getIsAuthor(supabase, user);
+  
+  // We'll check if the user is the post author after fetching the post
 
   // Fetch post with relations
   const { data: post } = await supabase
@@ -58,6 +60,9 @@ export default async function PostPage({ params }: PageProps) {
   if (!post) {
     notFound();
   }
+
+  // Check if current user is the author of this specific post
+  const isPostAuthor = user && post.author_id === user.id;
 
   // Sort media by display_order
   const sortedMedia = [...(post.media || [])].sort(
@@ -110,10 +115,22 @@ export default async function PostPage({ params }: PageProps) {
               </div>
             </div>
 
-            {/* Share button */}
-            <Button variant="ghost" size="icon" className="text-muted-foreground">
-              <Share2 className="h-5 w-5" />
-            </Button>
+            {/* Action buttons */}
+            <div className="flex items-center gap-1">
+              {/* Edit button - only for post author */}
+              {isPostAuthor && (
+                <Link href={`/admin/edit/${post.id}`}>
+                  <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-saffron">
+                    <Pencil className="h-5 w-5" />
+                  </Button>
+                </Link>
+              )}
+              
+              {/* Share button */}
+              <Button variant="ghost" size="icon" className="text-muted-foreground">
+                <Share2 className="h-5 w-5" />
+              </Button>
+            </div>
           </div>
 
           {/* Location */}
