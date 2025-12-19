@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PlusCircle, FileText, MapPin, LogOut, Settings, Pencil } from "lucide-react";
+import { PlusCircle, FileText, MapPin, LogOut, Settings, Pencil, Route } from "lucide-react";
 import { formatRelativeDate } from "@/lib/utils";
 
 export default async function AdminPage() {
@@ -71,9 +71,26 @@ export default async function AdminPage() {
           </Card>
         </Link>
 
+        <Link href="/admin/timeline" className="block">
+          <Card className="h-full hover:border-india-green hover:shadow-md transition-all cursor-pointer group">
+            <CardContent className="flex items-center gap-4 p-6">
+              <div className="p-3 rounded-full bg-india-green/10 text-india-green group-hover:bg-india-green group-hover:text-white transition-colors">
+                <Route className="h-8 w-8" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-navy">Rediger rejserute</h2>
+                <p className="text-muted-foreground">Tilføj og rediger destinationer</p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
+
+      {/* Stats */}
+      <div className="grid gap-4 md:grid-cols-2 mb-8">
         <Card>
           <CardContent className="flex items-center gap-4 p-6">
-            <div className="p-3 rounded-full bg-india-green/10 text-india-green">
+            <div className="p-3 rounded-full bg-saffron/10 text-saffron">
               <FileText className="h-8 w-8" />
             </div>
             <div>
