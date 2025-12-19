@@ -37,70 +37,83 @@ export function JourneyMap({
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string>("");
 
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
+
+    // Debug: Check container dimensions
+    const container = mapContainer.current;
+    const rect = container.getBoundingClientRect();
+    const debugMessage = `Container: ${rect.width}x${rect.height}, Token: ${mapboxgl.accessToken ? 'present' : 'missing'}`;
+    setDebugInfo(debugMessage);
+    console.log('[JourneyMap] Init:', debugMessage);
+
+    // If container has no dimensions, this is likely the issue
+    if (rect.width === 0 || rect.height === 0) {
+      setMapError(`Container has no dimensions: ${rect.width}x${rect.height}`);
+      console.error('[JourneyMap] Container has no dimensions!');
+      return;
+    }
 
     // Calculate center from milestones if not provided
     const center = initialCenter || calculateCenter(milestones);
 
     // Detect mobile device
     const isMobile = window.innerWidth < 768;
+    console.log('[JourneyMap] isMobile:', isMobile);
 
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: {
-        version: 8,
-        name: "India Journey",
-        sources: {
-          "carto-light": {
-            type: "raster",
-            tiles: [
-              "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
-              "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
-              "https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
-            ],
-            tileSize: 256,
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
-          },
-        },
-        layers: [
-          {
-            id: "carto-light-layer",
-            type: "raster",
-            source: "carto-light",
-            minzoom: 0,
-            maxzoom: 22,
-          },
-        ],
-      },
-      center: center as [number, number],
-      zoom: isMobile ? Math.max(initialZoom - 1, 3) : initialZoom,
-      attributionControl: false,
-      // Mobile optimizations
-      dragRotate: false, // Disable rotation on mobile for simpler UX
-      touchZoomRotate: true, // Enable pinch-to-zoom
-      touchPitch: false, // Disable pitch changes on mobile
-    });
+    try {
+      map.current = new mapboxgl.Map({
+        container: mapContainer.current,
+        // Use standard Mapbox style instead of custom CARTO tiles
+        // This is more reliable on mobile devices
+        style: "mapbox://styles/mapbox/light-v11",
+        center: center as [number, number],
+        zoom: isMobile ? Math.max(initialZoom - 1, 3) : initialZoom,
+        attributionControl: false,
+        // Mobile optimizations
+        dragRotate: false, // Disable rotation on mobile for simpler UX
+        touchZoomRotate: true, // Enable pinch-to-zoom
+        touchPitch: false, // Disable pitch changes on mobile
+        // Prevent WebGL context loss on mobile
+        preserveDrawingBuffer: true,
+        antialias: false, // Disable antialiasing for better performance on mobile
+        fadeDuration: 0, // Disable fade animations for better performance
+      });
 
-    // Add navigation controls - compact on mobile
-    map.current.addControl(
-      new mapboxgl.NavigationControl({ showCompass: !isMobile }),
-      "top-right"
-    );
-    map.current.addControl(
-      new mapboxgl.AttributionControl({ compact: true }),
-      "bottom-right"
-    );
+      // Handle map errors
+      map.current.on("error", (e) => {
+        console.error("[JourneyMap] Map error:", e.error);
+        setMapError(`Map error: ${e.error?.message || 'Unknown error'}`);
+      });
 
-    // Enable cooperative gestures on mobile to prevent accidental panning
-    if (isMobile) {
-      map.current.touchZoomRotate.disableRotation();
+      // Add navigation controls - compact on mobile
+      map.current.addControl(
+        new mapboxgl.NavigationControl({ showCompass: !isMobile }),
+        "top-right"
+      );
+      map.current.addControl(
+        new mapboxgl.AttributionControl({ compact: true }),
+        "bottom-right"
+      );
+
+      // Enable cooperative gestures on mobile to prevent accidental panning
+      if (isMobile) {
+        map.current.touchZoomRotate.disableRotation();
+      }
+
+      map.current.on("load", () => {
+        console.log('[JourneyMap] Map loaded successfully');
+        setIsLoaded(true);
+        setMapError(null);
+      });
+
+    } catch (error) {
+      console.error('[JourneyMap] Failed to initialize map:', error);
+      setMapError(`Failed to initialize: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-
-    map.current.on("load", () => {
-      setIsLoaded(true);
-    });
 
     return () => {
       map.current?.remove();
@@ -216,6 +229,17 @@ export function JourneyMap({
       });
     });
   }, [isLoaded, milestones, posts, onMilestoneClick, onPostClick]);
+
+  // Show error state if map failed to initialize
+  if (mapError) {
+    return (
+      <div className="absolute inset-0 rounded-xl overflow-hidden bg-red-50 flex flex-col items-center justify-center p-4">
+        <p className="text-red-600 text-sm font-medium mb-2">Kortet kunne ikke indlæses</p>
+        <p className="text-red-500 text-xs text-center">{mapError}</p>
+        <p className="text-gray-500 text-xs mt-2">{debugInfo}</p>
+      </div>
+    );
+  }
 
   return (
     <div ref={mapContainer} className="absolute inset-0 rounded-xl overflow-hidden" />
