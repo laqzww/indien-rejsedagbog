@@ -9,7 +9,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "NODE_OPTIONS='--max-old-space-size=384' next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "optimize-media": "tsx scripts/optimize-existing-media.ts",
+    "optimize-media:dry-run": "tsx scripts/optimize-existing-media.ts --dry-run"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
@@ -39,6 +41,8 @@
     "eslint-config-next": "14.2.21",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
+    "sharp": "^0.34.5",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }
