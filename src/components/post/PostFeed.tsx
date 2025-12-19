@@ -29,6 +29,7 @@ function MilestoneSection({ group, index }: MilestoneSectionProps) {
   const [isExpanded, setIsExpanded] = useState(index === 0); // First milestone expanded by default
 
   const totalPosts = group.days.reduce((sum, day) => sum + day.posts.length, 0);
+  const isTravelDay = group.milestone === null;
 
   return (
     <section className="border-b border-border last:border-b-0">
@@ -36,20 +37,28 @@ function MilestoneSection({ group, index }: MilestoneSectionProps) {
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
-          "w-full sticky top-0 z-20 bg-gradient-to-r from-saffron/5 to-india-green/5 backdrop-blur-sm",
+          "w-full sticky top-0 z-20 backdrop-blur-sm",
           "flex items-center justify-between px-4 py-3",
-          "hover:from-saffron/10 hover:to-india-green/10 transition-colors",
-          "border-b border-border/50"
+          "border-b border-border/50 transition-colors",
+          isTravelDay 
+            ? "bg-gradient-to-r from-blue-50 to-sky-50 hover:from-blue-100 hover:to-sky-100"
+            : "bg-gradient-to-r from-saffron/5 to-india-green/5 hover:from-saffron/10 hover:to-india-green/10"
         )}
       >
         <div className="flex items-center gap-3">
-          {/* Milestone number badge */}
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-saffron to-saffron-dark text-white flex items-center justify-center text-sm font-bold shadow-sm">
-            {index + 1}
-          </div>
+          {/* Milestone number badge or travel icon */}
+          {isTravelDay ? (
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-sky-500 text-white flex items-center justify-center text-base shadow-sm">
+              ✈️
+            </div>
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-saffron to-saffron-dark text-white flex items-center justify-center text-sm font-bold shadow-sm">
+              {group.milestone?.display_order || index}
+            </div>
+          )}
           <div className="text-left">
             <h2 className="font-bold text-foreground text-base leading-tight">
-              {group.milestoneName}
+              {isTravelDay ? "Flyvedag (CPH)" : group.milestoneName}
             </h2>
             <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
               <Calendar className="h-3 w-3" />

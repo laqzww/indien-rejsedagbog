@@ -1,7 +1,7 @@
 import type { Milestone } from "@/types/database";
 
-// Journey start date - Dag 0
-const JOURNEY_START_DATE = new Date("2024-12-18T00:00:00");
+// Journey start date - Dag 0 = 18. december 2025
+const JOURNEY_START_DATE = new Date("2025-12-18T00:00:00");
 
 /**
  * Calculate which day of the journey a date falls on
@@ -45,6 +45,7 @@ export function formatDayWithDate(dayNumber: number): string {
 /**
  * Find which milestone a post belongs to based on its date
  * Posts are assigned to the milestone whose date range they fall within
+ * Returns null for posts before first milestone arrival (travel day)
  */
 export function findMilestoneForDate(
   date: Date | string,
@@ -56,6 +57,17 @@ export function findMilestoneForDate(
   const sortedMilestones = [...milestones].sort(
     (a, b) => a.display_order - b.display_order
   );
+  
+  // Check if date is before first milestone
+  const firstMilestone = sortedMilestones[0];
+  if (firstMilestone?.arrival_date) {
+    const firstArrival = new Date(firstMilestone.arrival_date);
+    firstArrival.setHours(0, 0, 0, 0);
+    if (d < firstArrival) {
+      // This is a travel day - before arriving at first destination
+      return null;
+    }
+  }
   
   for (let i = 0; i < sortedMilestones.length; i++) {
     const milestone = sortedMilestones[i];
@@ -88,11 +100,6 @@ export function findMilestoneForDate(
         return milestone;
       }
     }
-  }
-  
-  // If date is before first milestone, assign to first milestone
-  if (sortedMilestones.length > 0) {
-    return sortedMilestones[0];
   }
   
   return null;
@@ -222,7 +229,7 @@ export function groupPostsByMilestoneAndDay<T extends {
     });
   }
   
-  // Add unknown posts if any
+  // Add travel day posts (before first milestone) at the beginning
   if (unknownPosts.length > 0) {
     const dayMap = new Map<number, PostWithDayInfo[]>();
     for (const post of unknownPosts) {
@@ -232,11 +239,11 @@ export function groupPostsByMilestoneAndDay<T extends {
       dayMap.get(post.dayNumber)!.push(post);
     }
     
-    const sortedDays = Array.from(dayMap.entries()).sort((a, b) => b[0] - a[0]);
+    const sortedDays = Array.from(dayMap.entries()).sort((a, b) => a[0] - b[0]); // Oldest day first for travel
     
     result.unshift({
       milestone: null,
-      milestoneName: "Før afrejse",
+      milestoneName: "✈️ Flyvedag (CPH)",
       days: sortedDays.map(([dayNumber, dayPosts]) => ({
         dayNumber,
         label: formatDayWithDate(dayNumber),
