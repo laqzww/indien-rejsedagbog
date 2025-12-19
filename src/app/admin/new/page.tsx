@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { uploadMedia, generateFilename, getFileType } from "@/lib/upload";
+import { uploadMedia, getFileType } from "@/lib/upload";
 import { isHeicFile, convertHeicToJpeg } from "@/lib/heic";
 import { MediaUpload, type MediaFile } from "@/components/post/MediaUpload";
 import { LocationPicker } from "@/components/post/LocationPicker";
@@ -26,6 +26,7 @@ export default function NewPostPage() {
   } | null>(null);
   const [files, setFiles] = useState<MediaFile[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Check if any uploaded images are missing GPS data
@@ -92,47 +93,48 @@ export default function NewPostPage() {
       if (postError) throw postError;
       if (!post) throw new Error("Kunne ikke oprette opslaget");
 
-      // Upload media files
+      // Upload media files (using optimized versions when available)
+      const totalFiles = files.length;
       for (let i = 0; i < files.length; i++) {
+        setUploadProgress({ current: i + 1, total: totalFiles });
         const mediaFile = files[i];
-        const filename = generateFilename(mediaFile.file.name, i);
         const type = getFileType(mediaFile.file);
-
-        // For HEIC files, also upload JPEG version
-        let storagePath: string;
         
-        if (isHeicFile(mediaFile.file)) {
-          // Upload original HEIC
-          await uploadMedia(mediaFile.file, user.id, post.id, filename);
-          
-          // Upload JPEG display version
-          if (mediaFile.displayBlob) {
-            const jpegFilename = filename.replace(/\.(heic|heif)$/i, ".jpg");
-            const result = await uploadMedia(
-              mediaFile.displayBlob,
-              user.id,
-              post.id,
-              jpegFilename
-            );
-            storagePath = result.path;
-          } else {
-            // Convert now if we don't have it
-            const jpegBlob = await convertHeicToJpeg(mediaFile.file);
-            const jpegFilename = filename.replace(/\.(heic|heif)$/i, ".jpg");
-            const result = await uploadMedia(jpegBlob, user.id, post.id, jpegFilename);
-            storagePath = result.path;
-          }
+        // Determine the file to upload and its extension
+        let fileToUpload: File | Blob;
+        let extension: string;
+        
+        if (type === "video") {
+          // Videos are not optimized
+          fileToUpload = mediaFile.file;
+          extension = mediaFile.file.name.split(".").pop()?.toLowerCase() || "mp4";
+        } else if (mediaFile.optimizedBlob) {
+          // Use optimized version (WebP or JPEG)
+          fileToUpload = mediaFile.optimizedBlob;
+          extension = mediaFile.optimizedBlob.type === "image/webp" ? "webp" : "jpg";
+        } else if (isHeicFile(mediaFile.file) && mediaFile.displayBlob) {
+          // Fallback: HEIC converted to JPEG
+          fileToUpload = mediaFile.displayBlob;
+          extension = "jpg";
+        } else if (isHeicFile(mediaFile.file)) {
+          // Fallback: Convert HEIC now
+          fileToUpload = await convertHeicToJpeg(mediaFile.file);
+          extension = "jpg";
         } else {
-          const result = await uploadMedia(mediaFile.file, user.id, post.id, filename);
-          storagePath = result.path;
+          // Fallback: Original file
+          fileToUpload = mediaFile.file;
+          extension = mediaFile.file.name.split(".").pop()?.toLowerCase() || "jpg";
         }
 
-        // Insert media record
+        const filename = `${Date.now()}-${i}.${extension}`;
+        const result = await uploadMedia(fileToUpload, user.id, post.id, filename);
+
+        // Insert media record (EXIF data from original file is preserved)
         await supabase.from("media").insert({
           post_id: post.id,
-          storage_path: storagePath,
+          storage_path: result.path,
           type,
-          mime_type: mediaFile.file.type || null,
+          mime_type: fileToUpload instanceof Blob ? fileToUpload.type : mediaFile.file.type || null,
           width: mediaFile.exif?.width ?? null,
           height: mediaFile.exif?.height ?? null,
           exif_data: mediaFile.exif?.raw ?? null,
@@ -151,6 +153,7 @@ export default function NewPostPage() {
       setError(err instanceof Error ? err.message : "Noget gik galt");
     } finally {
       setIsSubmitting(false);
+      setUploadProgress(null);
     }
   };
 
@@ -271,7 +274,9 @@ export default function NewPostPage() {
           {isSubmitting ? (
             <>
               <Loader2 className="h-5 w-5 animate-spin" />
-              Sender...
+              {uploadProgress 
+                ? `Uploader ${uploadProgress.current}/${uploadProgress.total}...` 
+                : "Sender..."}
             </>
           ) : (
             <>

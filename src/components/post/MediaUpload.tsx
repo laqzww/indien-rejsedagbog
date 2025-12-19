@@ -2,9 +2,10 @@
 
 import { useCallback, useState } from "react";
 import { cn } from "@/lib/utils";
-import { Camera, X, Film, Loader2, ImageIcon, MapPinOff } from "lucide-react";
+import { Camera, X, Film, Loader2, ImageIcon, MapPinOff, Zap } from "lucide-react";
 import { isHeicFile, convertHeicToJpeg } from "@/lib/heic";
 import { extractExifData, type ExifData } from "@/lib/exif";
+import { optimizeImage, formatFileSize, type OptimizationResult } from "@/lib/image-optimization";
 
 export interface MediaFile {
   id: string;
@@ -13,7 +14,10 @@ export interface MediaFile {
   type: "image" | "video";
   exif?: ExifData;
   isConverting?: boolean;
+  isOptimizing?: boolean;
   displayBlob?: Blob; // JPEG version for display if HEIC
+  optimizedBlob?: Blob; // Optimized version for upload
+  optimizationInfo?: OptimizationResult; // Stats about compression
   hasGps?: boolean; // Explicit GPS status
 }
 
@@ -46,29 +50,11 @@ export function MediaUpload({
         preview: "",
         type,
         isConverting: isHeicFile(file),
+        isOptimizing: type === "image",
       };
 
-      // Handle HEIC files
-      if (isHeicFile(file)) {
-        try {
-          const jpegBlob = await convertHeicToJpeg(file);
-          mediaFile.displayBlob = jpegBlob;
-          mediaFile.preview = URL.createObjectURL(jpegBlob);
-          mediaFile.isConverting = false;
-        } catch (error) {
-          console.error("HEIC conversion failed:", error);
-          // Fallback to original
-          mediaFile.preview = URL.createObjectURL(file);
-          mediaFile.isConverting = false;
-        }
-      } else if (type === "image") {
-        mediaFile.preview = URL.createObjectURL(file);
-      } else {
-        // Video thumbnail - just use a placeholder or first frame
-        mediaFile.preview = URL.createObjectURL(file);
-      }
-
-      // Extract EXIF data for images
+      // For images: Extract EXIF FIRST (before any conversion/optimization)
+      // This is critical because compression strips EXIF data
       if (type === "image") {
         try {
           const exif = await extractExifData(file);
@@ -77,6 +63,59 @@ export function MediaUpload({
         } catch (error) {
           console.error("EXIF extraction failed:", error);
           mediaFile.hasGps = false;
+        }
+      }
+
+      // Handle HEIC files - convert to JPEG first
+      let imageToOptimize: File | Blob = file;
+      if (isHeicFile(file)) {
+        try {
+          const jpegBlob = await convertHeicToJpeg(file);
+          mediaFile.displayBlob = jpegBlob;
+          mediaFile.preview = URL.createObjectURL(jpegBlob);
+          mediaFile.isConverting = false;
+          imageToOptimize = jpegBlob;
+        } catch (error) {
+          console.error("HEIC conversion failed:", error);
+          mediaFile.preview = URL.createObjectURL(file);
+          mediaFile.isConverting = false;
+        }
+      } else if (type === "image") {
+        mediaFile.preview = URL.createObjectURL(file);
+      } else {
+        // Video - just use preview, no optimization
+        mediaFile.preview = URL.createObjectURL(file);
+        mediaFile.isOptimizing = false;
+      }
+
+      // Optimize images for web upload
+      if (type === "image") {
+        try {
+          // Convert Blob to File if needed (for HEIC converted files)
+          const fileToOptimize = imageToOptimize instanceof File 
+            ? imageToOptimize 
+            : new File([imageToOptimize], file.name, { type: imageToOptimize.type });
+
+          const optimizationResult = await optimizeImage(fileToOptimize, {
+            maxDimension: 2048,
+            maxSizeMB: 1,
+            quality: 0.85,
+            useWebP: true,
+          });
+
+          mediaFile.optimizedBlob = optimizationResult.blob;
+          mediaFile.optimizationInfo = optimizationResult;
+          mediaFile.isOptimizing = false;
+
+          // Use optimized version for preview if significantly smaller
+          if (optimizationResult.compressionRatio > 1.5) {
+            URL.revokeObjectURL(mediaFile.preview);
+            mediaFile.preview = URL.createObjectURL(optimizationResult.blob);
+          }
+        } catch (error) {
+          console.error("Image optimization failed:", error);
+          mediaFile.isOptimizing = false;
+          // Fall back to original/converted file for upload
         }
       }
 
@@ -237,6 +276,23 @@ export function MediaUpload({
                   <ImageIcon className="h-3 w-3 text-white" />
                 )}
               </div>
+
+              {/* Optimization indicator */}
+              {file.type === "image" && file.isOptimizing && (
+                <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-saffron/90 text-white text-xs flex items-center gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Optimerer...
+                </div>
+              )}
+              {file.type === "image" && file.optimizationInfo && file.optimizationInfo.compressionRatio > 1.2 && (
+                <div 
+                  className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-india-green/90 text-white text-xs flex items-center gap-1"
+                  title={`${formatFileSize(file.optimizationInfo.originalSize)} → ${formatFileSize(file.optimizationInfo.optimizedSize)}`}
+                >
+                  <Zap className="h-3 w-3" />
+                  {Math.round((1 - 1/file.optimizationInfo.compressionRatio) * 100)}% mindre
+                </div>
+              )}
 
               {/* EXIF GPS indicator */}
               {file.type === "image" && (
