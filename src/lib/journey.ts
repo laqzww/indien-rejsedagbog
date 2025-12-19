@@ -1,11 +1,11 @@
 import type { Milestone } from "@/types/database";
 
 // Journey start date - Dag 0
-const JOURNEY_START_DATE = new Date("2024-12-18T00:00:00");
+const JOURNEY_START_DATE = new Date("2025-12-18T00:00:00");
 
 /**
  * Calculate which day of the journey a date falls on
- * Day 0 = December 18, 2024
+ * Day 0 = December 18, 2025
  */
 export function getDayNumber(date: Date | string): number {
   const d = typeof date === "string" ? new Date(date) : date;

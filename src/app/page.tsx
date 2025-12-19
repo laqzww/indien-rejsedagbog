@@ -48,15 +48,22 @@ export default async function HomePage() {
   // Group posts by milestone and day
   const groupedPosts = groupPostsByMilestoneAndDay(posts, milestones || []);
 
-  // Fetch next milestone (upcoming or current)
+  // Find the next milestone (the one AFTER the current location)
+  // First find the current milestone (where today falls within its date range)
   const today = new Date().toISOString().split("T")[0];
-  const { data: nextMilestone } = await supabase
+  
+  // Get all milestones sorted by arrival date to find current and next
+  const { data: allMilestones } = await supabase
     .from("milestones")
-    .select("name, arrival_date")
-    .gte("arrival_date", today)
-    .order("arrival_date", { ascending: true })
-    .limit(1)
-    .single();
+    .select("name, arrival_date, departure_date, display_order")
+    .order("display_order", { ascending: true });
+  
+  // Find the next milestone (first one where arrival_date > today)
+  // This will skip the current location and show the upcoming one
+  const nextMilestone = allMilestones?.find(m => {
+    if (!m.arrival_date) return false;
+    return m.arrival_date > today;
+  }) || null;
 
   const hasPosts = posts && posts.length > 0;
 
