@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { Camera, X, Film, Loader2, ImageIcon, MapPinOff } from "lucide-react";
+import { Camera, X, Loader2, MapPinOff } from "lucide-react";
 import { isHeicFile, convertHeicToJpeg } from "@/lib/heic";
 import { extractExifData, type ExifData } from "@/lib/exif";
 import { compressImage, shouldCompress, formatFileSize } from "@/lib/image-compression";
@@ -11,6 +11,7 @@ import {
   shouldCompressVideo, 
   type CompressionProgress as VideoCompressionProgress 
 } from "@/lib/video-compression";
+import { MediaSortable, type SortableMediaItem } from "./MediaSortable";
 
 export interface MediaFile {
   id: string;
@@ -49,6 +50,28 @@ export function MediaUpload({
 }: MediaUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [processingVideos, setProcessingVideos] = useState<Set<string>>(new Set());
+
+  // Convert files to sortable items format
+  const sortableItems: SortableMediaItem[] = useMemo(() => {
+    return files.map((file) => ({
+      id: file.id,
+      type: file.type,
+      preview: file.preview,
+      isProcessing: file.isConverting,
+    }));
+  }, [files]);
+
+  // Handle reordering from drag-and-drop
+  const handleReorder = useCallback(
+    (reorderedItems: SortableMediaItem[]) => {
+      // Map back to MediaFile objects in the new order
+      const reorderedFiles = reorderedItems
+        .map((item) => files.find((f) => f.id === item.id))
+        .filter((f): f is MediaFile => f !== undefined);
+      onFilesChange(reorderedFiles);
+    },
+    [files, onFilesChange]
+  );
 
   const processFile = useCallback(
     async (file: File, updateProgress?: (mediaFile: MediaFile) => void): Promise<MediaFile> => {
@@ -328,102 +351,83 @@ export function MediaUpload({
         </div>
       </div>
 
-      {/* Preview grid */}
+      {/* Sortable preview grid */}
       {files.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-          {files.map((file, index) => (
-            <div
-              key={file.id}
-              className="relative aspect-square rounded-lg overflow-hidden bg-muted group animate-fade-in"
-              style={{ animationDelay: `${index * 50}ms` }}
-            >
-              {file.isConverting ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted">
-                  <Loader2 className="h-6 w-6 text-saffron animate-spin" />
-                  {file.type === "video" && file.videoCompressionProgress && (
-                    <div className="mt-2 text-xs text-center px-2">
-                      <div className="text-saffron font-medium">
-                        {file.videoCompressionProgress.stage === "loading" && "Indlæser..."}
-                        {file.videoCompressionProgress.stage === "analyzing" && "Analyserer..."}
-                        {file.videoCompressionProgress.stage === "compressing" && `${file.videoCompressionProgress.progress}%`}
-                        {file.videoCompressionProgress.stage === "finalizing" && "Færdiggør..."}
-                      </div>
-                      {file.videoCompressionProgress.stage === "compressing" && (
-                        <div className="w-full bg-muted-foreground/20 rounded-full h-1 mt-1">
-                          <div 
-                            className="bg-saffron h-1 rounded-full transition-all duration-300"
-                            style={{ width: `${file.videoCompressionProgress.progress}%` }}
-                          />
+        <MediaSortable
+          items={sortableItems}
+          onReorder={handleReorder}
+          disabled={disabled}
+          renderExtraOverlay={(item, index) => {
+            const file = files.find((f) => f.id === item.id);
+            if (!file) return null;
+            
+            return (
+              <>
+                {/* Processing overlay */}
+                {file.isConverting && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/90 rounded-lg z-10">
+                    <Loader2 className="h-6 w-6 text-saffron animate-spin" />
+                    {file.type === "video" && file.videoCompressionProgress && (
+                      <div className="mt-2 text-xs text-center px-2">
+                        <div className="text-saffron font-medium">
+                          {file.videoCompressionProgress.stage === "loading" && "Indlæser..."}
+                          {file.videoCompressionProgress.stage === "analyzing" && "Analyserer..."}
+                          {file.videoCompressionProgress.stage === "compressing" && `${file.videoCompressionProgress.progress}%`}
+                          {file.videoCompressionProgress.stage === "finalizing" && "Færdiggør..."}
                         </div>
-                      )}
-                    </div>
-                  )}
-                  {file.type === "video" && !file.videoCompressionProgress && (
-                    <div className="mt-2 text-xs text-muted-foreground">
-                      Forbereder video...
-                    </div>
-                  )}
-                </div>
-              ) : file.type === "video" ? (
-                <div className="relative w-full h-full bg-navy/10 flex items-center justify-center">
-                  <Film className="h-12 w-12 text-navy/40" />
-                  <video
-                    src={file.preview}
-                    className="absolute inset-0 w-full h-full object-cover opacity-80"
-                  />
-                </div>
-              ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={file.preview}
-                  alt={`Upload ${index + 1}`}
-                  className="w-full h-full object-cover"
-                />
-              )}
-
-              {/* Remove button */}
-              <button
-                onClick={() => removeFile(file.id)}
-                className="absolute top-2 right-2 p-1.5 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 hover:bg-black/70 transition-opacity"
-                type="button"
-              >
-                <X className="h-4 w-4" />
-              </button>
-
-              {/* Type indicator */}
-              <div className="absolute bottom-2 left-2 p-1 rounded bg-black/50">
-                {file.type === "video" ? (
-                  <Film className="h-3 w-3 text-white" />
-                ) : (
-                  <ImageIcon className="h-3 w-3 text-white" />
+                        {file.videoCompressionProgress.stage === "compressing" && (
+                          <div className="w-full bg-muted-foreground/20 rounded-full h-1 mt-1">
+                            <div 
+                              className="bg-saffron h-1 rounded-full transition-all duration-300"
+                              style={{ width: `${file.videoCompressionProgress.progress}%` }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {file.type === "video" && !file.videoCompressionProgress && (
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        Forbereder video...
+                      </div>
+                    )}
+                  </div>
                 )}
-              </div>
 
-              {/* EXIF GPS indicator */}
-              {file.type === "image" && (
-                file.hasGps ? (
-                  <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-india-green text-white text-xs">
-                    GPS
-                  </div>
-                ) : (
-                  <div className="absolute bottom-2 right-2 p-1 rounded bg-amber-500 text-white" title="Ingen GPS-data fundet">
-                    <MapPinOff className="h-3 w-3" />
-                  </div>
-                )
-              )}
-
-              {/* Compression indicator */}
-              {file.compressedSize && file.originalSize && file.compressedSize < file.originalSize && (
-                <div 
-                  className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-india-green/90 text-white text-xs"
-                  title={`Komprimeret: ${formatFileSize(file.originalSize)} → ${formatFileSize(file.compressedSize)}`}
+                {/* Remove button */}
+                <button
+                  onClick={() => removeFile(file.id)}
+                  className="absolute top-2 right-2 p-1.5 rounded-full bg-black/50 text-white opacity-60 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-red-600 transition-all z-20"
+                  type="button"
                 >
-                  -{Math.round((1 - file.compressedSize / file.originalSize) * 100)}%
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+                  <X className="h-4 w-4" />
+                </button>
+
+                {/* EXIF GPS indicator */}
+                {file.type === "image" && !file.isConverting && (
+                  file.hasGps ? (
+                    <div className="absolute top-10 right-2 px-1.5 py-0.5 rounded bg-india-green text-white text-xs z-10">
+                      GPS
+                    </div>
+                  ) : (
+                    <div className="absolute top-10 right-2 p-1 rounded bg-amber-500 text-white z-10" title="Ingen GPS-data fundet">
+                      <MapPinOff className="h-3 w-3" />
+                    </div>
+                  )
+                )}
+
+                {/* Compression indicator */}
+                {file.compressedSize && file.originalSize && file.compressedSize < file.originalSize && index !== 0 && (
+                  <div 
+                    className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-india-green/90 text-white text-xs z-10"
+                    title={`Komprimeret: ${formatFileSize(file.originalSize)} → ${formatFileSize(file.compressedSize)}`}
+                  >
+                    -{Math.round((1 - file.compressedSize / file.originalSize) * 100)}%
+                  </div>
+                )}
+              </>
+            );
+          }}
+        />
       )}
     </div>
   );
