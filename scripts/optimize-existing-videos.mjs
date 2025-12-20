@@ -146,6 +146,17 @@ function compressVideo(inputPath, outputPath, onProgress) {
       targetHeight = Math.floor(metadata.height / 2) * 2;
     }
     
+    // Use scale filter that preserves aspect ratio
+    // force_original_aspect_ratio=decrease ensures we fit within max dimensions
+    // The second scale ensures even dimensions (required by H.264)
+    const needsResize = metadata.width > CONFIG.maxWidth || metadata.height > CONFIG.maxHeight;
+    let videoFilter;
+    if (needsResize) {
+      videoFilter = `scale='min(${CONFIG.maxWidth},iw)':'min(${CONFIG.maxHeight},ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2`;
+    } else {
+      videoFilter = `scale=trunc(iw/2)*2:trunc(ih/2)*2`;
+    }
+    
     const ffmpegArgs = [
       '-y', // Overwrite output
       '-i', inputPath,
@@ -154,7 +165,7 @@ function compressVideo(inputPath, outputPath, onProgress) {
       '-crf', CONFIG.crf.toString(),
       '-maxrate', CONFIG.videoBitrate,
       '-bufsize', `${parseInt(CONFIG.videoBitrate) * 2}M`,
-      '-vf', `scale=${targetWidth}:${targetHeight}`,
+      '-vf', videoFilter,
       '-r', CONFIG.fps.toString(),
       '-c:a', 'aac',
       '-b:a', CONFIG.audioBitrate,
