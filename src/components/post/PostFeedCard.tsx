@@ -149,9 +149,10 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
                 />
               ) : (
                 <video
-                  src={getMediaUrl(media.storage_path)}
+                  src={`${getMediaUrl(media.storage_path)}#t=0.001`}
                   controls
                   playsInline
+                  preload="metadata"
                   className="w-full h-full object-cover"
                 />
               )}

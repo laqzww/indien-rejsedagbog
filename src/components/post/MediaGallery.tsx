@@ -47,8 +47,9 @@ export function MediaGallery({ media }: MediaGalleryProps) {
             />
           ) : (
             <video
-              src={getMediaUrl(activeMedia.storage_path)}
+              src={`${getMediaUrl(activeMedia.storage_path)}#t=0.001`}
               controls
+              preload="metadata"
               className="w-full h-full object-contain bg-black"
               onClick={(e) => e.stopPropagation()}
             />
