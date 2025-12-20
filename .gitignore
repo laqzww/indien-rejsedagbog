@@ -33,6 +33,10 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# video optimization script temp files
+scripts/.temp-video-optimization/
+scripts/.optimization-progress.json
+
 # vercel
 .vercel
 

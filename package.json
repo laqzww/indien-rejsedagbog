@@ -9,7 +9,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "NODE_OPTIONS='--max-old-space-size=384' next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "optimize-videos": "node scripts/optimize-existing-videos.mjs",
+    "optimize-videos:dry-run": "node scripts/optimize-existing-videos.mjs --dry-run"
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.15",

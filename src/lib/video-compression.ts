@@ -205,6 +205,22 @@ export async function compressVideo(
 
   // Build FFmpeg command
   // Using H.264 codec with good compression settings
+  // Use scale filter that preserves aspect ratio and ensures even dimensions
+  // The -2 means "calculate this dimension to maintain aspect ratio, rounded to even"
+  const needsResize = metadata.width > opts.maxWidth || metadata.height > opts.maxHeight;
+  
+  // Build video filter: always ensure even dimensions, optionally scale down
+  let videoFilter: string;
+  if (needsResize) {
+    // Scale to fit within max dimensions while preserving aspect ratio
+    // force_original_aspect_ratio=decrease ensures we don't exceed limits
+    // The pad filter isn't needed since we use decrease, and the final scale ensures even dims
+    videoFilter = `scale='min(${opts.maxWidth},iw)':'min(${opts.maxHeight},ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2`;
+  } else {
+    // Just ensure even dimensions without resizing
+    videoFilter = `scale=trunc(iw/2)*2:trunc(ih/2)*2`;
+  }
+  
   const ffmpegArgs = [
     "-i", inputName,
     // Video settings
@@ -213,8 +229,8 @@ export async function compressVideo(
     "-crf", opts.crf.toString(),
     "-maxrate", opts.videoBitrate,
     "-bufsize", `${parseInt(opts.videoBitrate) * 2}M`,
-    // Scale if needed
-    "-vf", `scale=${targetDimensions.width}:${targetDimensions.height}`,
+    // Scale filter that preserves aspect ratio
+    "-vf", videoFilter,
     // Frame rate
     "-r", opts.fps.toString(),
     // Audio settings
