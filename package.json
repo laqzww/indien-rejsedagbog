@@ -9,13 +9,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "NODE_OPTIONS='--max-old-space-size=384' next start",
-    "lint": "eslint",
-    "optimize-videos": "node scripts/optimize-existing-videos.mjs",
-    "optimize-videos:dry-run": "node scripts/optimize-existing-videos.mjs --dry-run"
+    "lint": "eslint"
   },
   "dependencies": {
-    "@ffmpeg/ffmpeg": "^0.12.15",
-    "@ffmpeg/util": "^0.12.2",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.88.0",
     "autoprefixer": "^10.4.20",
