@@ -302,13 +302,13 @@ export function JourneyMap({
       });
     });
 
-    // Fit bounds to show all markers if we have milestones
+    // Fit bounds to show all milestones (not posts, to avoid zooming out too far
+    // when there are posts in distant locations like Denmark "dag 0" posts)
     if (milestones.length > 0) {
       const bounds = new mapboxgl.LngLatBounds();
       milestones.forEach((m) => bounds.extend([m.lng, m.lat]));
-      posts.forEach((p) => {
-        if (p.lat && p.lng) bounds.extend([p.lng, p.lat]);
-      });
+      // Note: Posts are intentionally excluded from bounds calculation
+      // so the map focuses on the main journey route in India
 
       mapInstance.fitBounds(bounds, {
         padding: { top: 50, bottom: 100, left: 50, right: 50 },
