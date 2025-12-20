@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Timeline } from "@/components/map/Timeline";
 import { Button } from "@/components/ui/button";
-import { List, Map as MapIcon, X } from "lucide-react";
+import { List, Map as MapIcon, X, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Milestone } from "@/types/database";
 
@@ -27,7 +27,7 @@ const JourneyMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="absolute inset-0 bg-muted animate-pulse flex items-center justify-center">
+      <div className="w-full h-full bg-muted animate-pulse flex items-center justify-center">
         <MapIcon className="h-12 w-12 text-muted-foreground/20" />
       </div>
     ),
@@ -39,10 +39,43 @@ interface JourneyClientProps {
   posts: JourneyPost[];
 }
 
+// Hook to get actual viewport height, accounting for mobile browser chrome
+function useViewportHeight() {
+  const [height, setHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    function updateHeight() {
+      // Use visualViewport if available (more accurate on mobile)
+      const vh = window.visualViewport?.height ?? window.innerHeight;
+      setHeight(vh);
+    }
+
+    updateHeight();
+
+    // Listen to both resize and visualViewport changes
+    window.addEventListener("resize", updateHeight);
+    window.visualViewport?.addEventListener("resize", updateHeight);
+
+    return () => {
+      window.removeEventListener("resize", updateHeight);
+      window.visualViewport?.removeEventListener("resize", updateHeight);
+    };
+  }, []);
+
+  return height;
+}
+
 export function JourneyClient({ milestones, posts }: JourneyClientProps) {
   const router = useRouter();
   const [activeMilestone, setActiveMilestone] = useState<Milestone | null>(null);
   const [showTimeline, setShowTimeline] = useState(false);
+  const [mapKey, setMapKey] = useState(0);
+  const [mapError, setMapError] = useState(false);
+  const viewportHeight = useViewportHeight();
+
+  // Header height is 4rem (64px)
+  const headerHeight = 64;
+  const mapHeight = viewportHeight ? viewportHeight - headerHeight : null;
 
   const handleMilestoneClick = (milestone: Milestone) => {
     setActiveMilestone(milestone);
@@ -52,10 +85,19 @@ export function JourneyClient({ milestones, posts }: JourneyClientProps) {
     router.push(`/post/${post.id}`);
   };
 
+  const handleMapError = useCallback(() => {
+    setMapError(true);
+  }, []);
+
+  const handleRetryMap = useCallback(() => {
+    setMapError(false);
+    setMapKey((k) => k + 1);
+  }, []);
+
   return (
-    <main className="flex-1 flex flex-col lg:flex-row min-h-0">
+    <main className="flex-1 flex flex-col lg:flex-row overflow-hidden">
       {/* Desktop Timeline Sidebar */}
-      <aside className="hidden lg:block w-80 border-r border-border overflow-y-auto bg-white">
+      <aside className="hidden lg:block w-80 border-r border-border overflow-y-auto bg-white flex-shrink-0">
         <div className="p-4 border-b border-border">
           <h2 className="text-lg font-bold text-navy">Rejserute</h2>
           <p className="text-sm text-muted-foreground">
@@ -71,20 +113,42 @@ export function JourneyClient({ milestones, posts }: JourneyClientProps) {
         </div>
       </aside>
 
-      {/* Map - explicit height for mobile using dvh for proper mobile browser support */}
-      <div className="flex-1 relative map-container-mobile">
-        <JourneyMap
-          milestones={milestones}
-          posts={posts}
-          onMilestoneClick={handleMilestoneClick}
-          onPostClick={handlePostClick}
-        />
+      {/* Map Container with explicit height calculation */}
+      <div
+        className="flex-1 relative bg-muted"
+        style={{
+          // On mobile/tablet, use calculated height. On desktop (lg:), use full height
+          height: mapHeight ? `${mapHeight}px` : "calc(100vh - 4rem)",
+          minHeight: "300px",
+        }}
+      >
+        {mapError ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-muted">
+            <MapIcon className="h-16 w-16 text-muted-foreground/30 mb-4" />
+            <p className="text-muted-foreground text-center mb-4">
+              Kortet kunne ikke indlæses
+            </p>
+            <Button onClick={handleRetryMap} variant="outline" className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Prøv igen
+            </Button>
+          </div>
+        ) : (
+          <JourneyMap
+            key={mapKey}
+            milestones={milestones}
+            posts={posts}
+            onMilestoneClick={handleMilestoneClick}
+            onPostClick={handlePostClick}
+            onError={handleMapError}
+          />
+        )}
 
         {/* Mobile Timeline Toggle */}
-        <div className="lg:hidden absolute bottom-4 left-4 right-4 flex justify-center">
+        <div className="lg:hidden absolute bottom-4 left-4 right-4 flex justify-center pointer-events-none">
           <Button
             onClick={() => setShowTimeline(true)}
-            className="gap-2 shadow-lg"
+            className="gap-2 shadow-lg pointer-events-auto"
             size="lg"
           >
             <List className="h-5 w-5" />
