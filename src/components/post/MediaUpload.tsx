@@ -6,11 +6,6 @@ import { Camera, X, Film, Loader2, ImageIcon, MapPinOff } from "lucide-react";
 import { isHeicFile, convertHeicToJpeg } from "@/lib/heic";
 import { extractExifData, type ExifData } from "@/lib/exif";
 import { compressImage, shouldCompress, formatFileSize } from "@/lib/image-compression";
-import { 
-  compressVideo, 
-  shouldCompressVideo, 
-  type CompressionProgress as VideoCompressionProgress 
-} from "@/lib/video-compression";
 
 export interface MediaFile {
   id: string;
@@ -26,15 +21,12 @@ export interface MediaFile {
   hasGps?: boolean; // Explicit GPS status
   originalSize?: number; // Original file size
   compressedSize?: number; // Compressed file size
-  videoDuration?: number; // Video duration in seconds
-  videoCompressionProgress?: VideoCompressionProgress; // Video compression progress
 }
 
 interface MediaUploadProps {
   files: MediaFile[];
   onFilesChange: (files: MediaFile[]) => void;
   onExifExtracted?: (exif: ExifData) => void;
-  onVideoCompressionProgress?: (fileId: string, progress: VideoCompressionProgress) => void;
   disabled?: boolean;
   maxFiles?: number;
 }
@@ -43,21 +35,16 @@ export function MediaUpload({
   files,
   onFilesChange,
   onExifExtracted,
-  onVideoCompressionProgress,
   disabled = false,
   maxFiles = 10,
 }: MediaUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
-  const [processingVideos, setProcessingVideos] = useState<Set<string>>(new Set());
 
   const processFile = useCallback(
-    async (file: File, updateProgress?: (mediaFile: MediaFile) => void): Promise<MediaFile> => {
+    async (file: File): Promise<MediaFile> => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const type = file.type.startsWith("video/") ? "video" : "image";
       const isHeic = isHeicFile(file);
-
-      // Check if video needs compression (async check)
-      const needsVideoCompression = type === "video" ? await shouldCompressVideo(file) : false;
 
       // Create initial entry
       const mediaFile: MediaFile = {
@@ -65,7 +52,7 @@ export function MediaUpload({
         file,
         preview: "",
         type,
-        isConverting: isHeic || (type === "image" && shouldCompress(file)) || needsVideoCompression,
+        isConverting: isHeic || (type === "image" && shouldCompress(file)),
         originalSize: file.size,
       };
 
@@ -125,60 +112,15 @@ export function MediaUpload({
           mediaFile.preview = URL.createObjectURL(blobToCompress);
         }
       } else {
-        // Video handling with compression
-        // Set initial preview from original file
+        // Video - no compression, use original file as-is
         mediaFile.preview = URL.createObjectURL(file);
-        
-        if (needsVideoCompression) {
-          try {
-            console.log(`[Video] Starting compression for ${file.name} (${formatFileSize(file.size)})`);
-            
-            const compressed = await compressVideo(
-              file,
-              {
-                maxWidth: 1920,
-                maxHeight: 1080,
-                crf: 28, // Good quality/size balance
-              },
-              (progress) => {
-                mediaFile.videoCompressionProgress = progress;
-                onVideoCompressionProgress?.(id, progress);
-                updateProgress?.(mediaFile);
-              }
-            );
-            
-            mediaFile.uploadBlob = compressed.blob;
-            mediaFile.compressedWidth = compressed.width;
-            mediaFile.compressedHeight = compressed.height;
-            mediaFile.compressedSize = compressed.compressedSize;
-            mediaFile.videoDuration = compressed.duration;
-            
-            // Update preview with compressed video
-            URL.revokeObjectURL(mediaFile.preview);
-            mediaFile.preview = URL.createObjectURL(compressed.blob);
-            
-            // Log compression stats
-            const savings = Math.round((1 - compressed.compressedSize / compressed.originalSize) * 100);
-            console.log(
-              `[Video] Compressed ${file.name}: ${formatFileSize(compressed.originalSize)} → ${formatFileSize(compressed.compressedSize)} (${savings}% savings)`
-            );
-          } catch (error) {
-            console.error("[Video] Compression failed:", error);
-            // Fallback to original file
-            mediaFile.uploadBlob = file;
-          }
-        } else {
-          // Small video, no compression needed
-          console.log(`[Video] ${file.name} is small enough (${formatFileSize(file.size)}), skipping compression`);
-          mediaFile.uploadBlob = file;
-        }
+        mediaFile.uploadBlob = file;
       }
 
       mediaFile.isConverting = false;
-      mediaFile.videoCompressionProgress = undefined;
       return mediaFile;
     },
-    [onVideoCompressionProgress]
+    []
   );
 
   const handleFiles = useCallback(
@@ -189,59 +131,19 @@ export function MediaUpload({
 
       if (filesToProcess.length === 0) return;
 
-      // Process files - videos may take longer due to compression
-      // Process images in parallel, videos sequentially to avoid memory issues
-      const imageFiles = filesToProcess.filter((f) => !f.type.startsWith("video/"));
-      const videoFiles = filesToProcess.filter((f) => f.type.startsWith("video/"));
-
-      // Process images in parallel first (fast)
-      const processedImages = await Promise.all(
-        imageFiles.map((f) => processFile(f))
+      // Process all files in parallel (now that videos don't need heavy processing)
+      const processedFiles = await Promise.all(
+        filesToProcess.map((f) => processFile(f))
       );
 
-      // Update with processed images immediately
-      let currentFiles = [...files, ...processedImages];
-      if (processedImages.length > 0) {
-        onFilesChange(currentFiles);
-      }
-
-      // Process videos sequentially to avoid memory issues with FFmpeg
-      for (const videoFile of videoFiles) {
-        // Create a placeholder for this video
-        const placeholderId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        const placeholder: MediaFile = {
-          id: placeholderId,
-          file: videoFile,
-          preview: URL.createObjectURL(videoFile),
-          type: "video",
-          isConverting: true,
-          originalSize: videoFile.size,
-        };
-        
-        // Add placeholder
-        currentFiles = [...currentFiles, placeholder];
-        onFilesChange(currentFiles);
-        setProcessingVideos((prev) => new Set([...prev, placeholderId]));
-
-        // Process the video
-        const processed = await processFile(videoFile);
-        
-        // Replace placeholder with processed video
-        currentFiles = currentFiles.map((f) => 
-          f.id === placeholderId ? processed : f
-        );
-        onFilesChange(currentFiles);
-        setProcessingVideos((prev) => {
-          const next = new Set(prev);
-          next.delete(placeholderId);
-          return next;
-        });
-      }
+      // Update with processed files
+      const newFileList = [...files, ...processedFiles];
+      onFilesChange(newFileList);
 
       // Notify about first file's EXIF data (for auto-filling location)
-      const allProcessed = [...processedImages];
-      if (allProcessed.length > 0 && allProcessed[0].exif && onExifExtracted) {
-        onExifExtracted(allProcessed[0].exif);
+      const firstImageWithExif = processedFiles.find(f => f.exif);
+      if (firstImageWithExif?.exif && onExifExtracted) {
+        onExifExtracted(firstImageWithExif.exif);
       }
     },
     [files, maxFiles, onFilesChange, onExifExtracted, processFile]
@@ -340,29 +242,9 @@ export function MediaUpload({
               {file.isConverting ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted">
                   <Loader2 className="h-6 w-6 text-saffron animate-spin" />
-                  {file.type === "video" && file.videoCompressionProgress && (
-                    <div className="mt-2 text-xs text-center px-2">
-                      <div className="text-saffron font-medium">
-                        {file.videoCompressionProgress.stage === "loading" && "Indlæser..."}
-                        {file.videoCompressionProgress.stage === "analyzing" && "Analyserer..."}
-                        {file.videoCompressionProgress.stage === "compressing" && `${file.videoCompressionProgress.progress}%`}
-                        {file.videoCompressionProgress.stage === "finalizing" && "Færdiggør..."}
-                      </div>
-                      {file.videoCompressionProgress.stage === "compressing" && (
-                        <div className="w-full bg-muted-foreground/20 rounded-full h-1 mt-1">
-                          <div 
-                            className="bg-saffron h-1 rounded-full transition-all duration-300"
-                            style={{ width: `${file.videoCompressionProgress.progress}%` }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {file.type === "video" && !file.videoCompressionProgress && (
-                    <div className="mt-2 text-xs text-muted-foreground">
-                      Forbereder video...
-                    </div>
-                  )}
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    Forbereder...
+                  </div>
                 </div>
               ) : file.type === "video" ? (
                 <div className="relative w-full h-full bg-navy/10 flex items-center justify-center">
@@ -415,8 +297,8 @@ export function MediaUpload({
                 )
               )}
 
-              {/* Compression indicator */}
-              {file.compressedSize && file.originalSize && file.compressedSize < file.originalSize && (
+              {/* Compression indicator (only for images) */}
+              {file.type === "image" && file.compressedSize && file.originalSize && file.compressedSize < file.originalSize && (
                 <div 
                   className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-india-green/90 text-white text-xs"
                   title={`Komprimeret: ${formatFileSize(file.originalSize)} → ${formatFileSize(file.compressedSize)}`}
@@ -431,4 +313,3 @@ export function MediaUpload({
     </div>
   );
 }
-
