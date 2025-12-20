@@ -247,15 +247,20 @@ export default function EditPostPage() {
           const type = getFileType(mediaFile.file);
           
           // Use .jpg extension for compressed images (not videos)
-          const finalFilename = type === "image" && mediaFile.uploadBlob !== mediaFile.file 
-            ? filename.replace(/\.[^.]+$/, ".jpg")
-            : filename;
+          // Use .mp4 extension for compressed videos
+          let finalFilename = filename;
+          if (type === "image" && mediaFile.uploadBlob !== mediaFile.file) {
+            finalFilename = filename.replace(/\.[^.]+$/, ".jpg");
+          } else if (type === "video" && mediaFile.compressedSize) {
+            finalFilename = filename.replace(/\.[^.]+$/, ".mp4");
+          }
           const path = `${user.id}/${postId}/${finalFilename}`;
           
           return {
             id: mediaFile.id,
             file: mediaFile.uploadBlob || mediaFile.file,
             path,
+            isVideo: type === "video", // Enable resumable upload for videos
           };
         });
 

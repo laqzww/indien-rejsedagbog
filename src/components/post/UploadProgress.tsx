@@ -1,11 +1,11 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { CheckCircle2, AlertCircle, Loader2, Upload, ImageIcon, Film } from "lucide-react";
+import { CheckCircle2, AlertCircle, Loader2, Upload, ImageIcon, Film, Zap } from "lucide-react";
 import type { UploadProgress as UploadProgressType } from "@/lib/parallel-upload";
 
 export interface UploadStage {
-  stage: "preparing" | "compressing" | "uploading" | "saving" | "complete" | "error";
+  stage: "preparing" | "compressing" | "compressing_video" | "uploading" | "saving" | "complete" | "error";
   message: string;
   detail?: string;
 }
@@ -24,6 +24,7 @@ interface UploadProgressProps {
 const stageLabels: Record<UploadStage["stage"], string> = {
   preparing: "Forbereder...",
   compressing: "Komprimerer billeder...",
+  compressing_video: "Komprimerer video...",
   uploading: "Uploader filer...",
   saving: "Gemmer opslag...",
   complete: "Færdig!",
@@ -33,11 +34,22 @@ const stageLabels: Record<UploadStage["stage"], string> = {
 const stageIcons: Record<UploadStage["stage"], React.ReactNode> = {
   preparing: <Loader2 className="h-5 w-5 animate-spin" />,
   compressing: <Loader2 className="h-5 w-5 animate-spin" />,
+  compressing_video: <Film className="h-5 w-5 animate-pulse" />,
   uploading: <Upload className="h-5 w-5 animate-pulse" />,
   saving: <Loader2 className="h-5 w-5 animate-spin" />,
   complete: <CheckCircle2 className="h-5 w-5 text-india-green" />,
   error: <AlertCircle className="h-5 w-5 text-destructive" />,
 };
+
+/**
+ * Format bytes to human readable string
+ */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
 
 export function UploadProgressDisplay({
   stage,
@@ -124,6 +136,15 @@ export function UploadProgressDisplay({
                       {progress.progress}%
                     </span>
                   </div>
+                  {/* Show byte progress for videos */}
+                  {fileType === "video" && progress.bytesTotal && progress.bytesTotal > 0 && (
+                    <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                      <Zap className="h-3 w-3" />
+                      <span>
+                        {formatBytes(progress.bytesUploaded || 0)} / {formatBytes(progress.bytesTotal)}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Status icon */}

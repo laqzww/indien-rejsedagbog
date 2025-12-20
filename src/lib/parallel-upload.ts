@@ -1,11 +1,13 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
+import { uploadResumable, shouldUseResumableUpload } from "@/lib/resumable-upload";
 
 export interface UploadItem {
   id: string;
   file: Blob;
   path: string;
+  isVideo?: boolean; // Hint for using resumable upload
 }
 
 export interface UploadProgress {
@@ -13,6 +15,8 @@ export interface UploadProgress {
   status: "pending" | "uploading" | "completed" | "error";
   progress: number; // 0-100
   error?: string;
+  bytesUploaded?: number;
+  bytesTotal?: number;
 }
 
 export interface ParallelUploadOptions {
@@ -24,6 +28,7 @@ const DEFAULT_CONCURRENCY = 3;
 
 /**
  * Upload multiple files in parallel with concurrency limit
+ * Automatically uses resumable upload for large files (videos)
  * Returns a map of item id -> upload result path
  */
 export async function uploadFilesInParallel(
@@ -40,6 +45,8 @@ export async function uploadFilesInParallel(
       id: item.id,
       status: "pending",
       progress: 0,
+      bytesTotal: item.file.size,
+      bytesUploaded: 0,
     });
   }
 
@@ -54,50 +61,92 @@ export async function uploadFilesInParallel(
   const inFlight = new Set<Promise<void>>();
 
   const processItem = async (item: UploadItem) => {
+    // Determine if we should use resumable upload
+    const useResumable = item.isVideo || shouldUseResumableUpload(item.file);
+
     // Update status to uploading
     progressMap.set(item.id, {
       id: item.id,
       status: "uploading",
-      progress: 10, // Started
+      progress: useResumable ? 0 : 10, // Resumable starts at 0, regular at 10
+      bytesTotal: item.file.size,
+      bytesUploaded: 0,
     });
     onProgress?.(new Map(progressMap));
 
     try {
-      // Simulate progress updates during upload
-      // (Supabase JS doesn't expose upload progress, so we simulate it)
-      const progressInterval = setInterval(() => {
-        const current = progressMap.get(item.id);
-        if (current && current.status === "uploading" && current.progress < 90) {
-          progressMap.set(item.id, {
-            ...current,
-            progress: Math.min(current.progress + 15, 90),
-          });
-          onProgress?.(new Map(progressMap));
-        }
-      }, 200);
-
-      const { error } = await supabase.storage
-        .from("media")
-        .upload(item.path, item.file, {
-          cacheControl: "3600",
-          upsert: false,
+      if (useResumable) {
+        // Use resumable upload for large files (videos)
+        console.log(`[Upload] Using resumable upload for ${item.path} (${(item.file.size / 1024 / 1024).toFixed(1)} MB)`);
+        
+        await uploadResumable(item.file, item.path, {
+          onProgress: (progress) => {
+            progressMap.set(item.id, {
+              id: item.id,
+              status: progress.status === "completed" ? "completed" : "uploading",
+              progress: progress.percentage,
+              bytesUploaded: progress.bytesUploaded,
+              bytesTotal: progress.bytesTotal,
+            });
+            onProgress?.(new Map(progressMap));
+          },
+          onError: (error) => {
+            console.error(`[Upload] Resumable upload error for ${item.path}:`, error);
+          },
         });
 
-      clearInterval(progressInterval);
+        // Mark as completed
+        progressMap.set(item.id, {
+          id: item.id,
+          status: "completed",
+          progress: 100,
+          bytesUploaded: item.file.size,
+          bytesTotal: item.file.size,
+        });
+        onProgress?.(new Map(progressMap));
+        results.set(item.id, item.path);
+      } else {
+        // Use regular upload for smaller files (images)
+        // Simulate progress updates during upload
+        // (Supabase JS doesn't expose upload progress, so we simulate it)
+        const progressInterval = setInterval(() => {
+          const current = progressMap.get(item.id);
+          if (current && current.status === "uploading" && current.progress < 90) {
+            const newProgress = Math.min(current.progress + 15, 90);
+            progressMap.set(item.id, {
+              ...current,
+              progress: newProgress,
+              bytesUploaded: Math.floor((newProgress / 100) * item.file.size),
+            });
+            onProgress?.(new Map(progressMap));
+          }
+        }, 200);
 
-      if (error) {
-        throw error;
+        const { error } = await supabase.storage
+          .from("media")
+          .upload(item.path, item.file, {
+            cacheControl: "3600",
+            upsert: false,
+          });
+
+        clearInterval(progressInterval);
+
+        if (error) {
+          throw error;
+        }
+
+        // Mark as completed
+        progressMap.set(item.id, {
+          id: item.id,
+          status: "completed",
+          progress: 100,
+          bytesUploaded: item.file.size,
+          bytesTotal: item.file.size,
+        });
+        onProgress?.(new Map(progressMap));
+
+        results.set(item.id, item.path);
       }
-
-      // Mark as completed
-      progressMap.set(item.id, {
-        id: item.id,
-        status: "completed",
-        progress: 100,
-      });
-      onProgress?.(new Map(progressMap));
-
-      results.set(item.id, item.path);
     } catch (err) {
       // Mark as error
       progressMap.set(item.id, {
@@ -105,6 +154,8 @@ export async function uploadFilesInParallel(
         status: "error",
         progress: 0,
         error: err instanceof Error ? err.message : "Upload failed",
+        bytesTotal: item.file.size,
+        bytesUploaded: 0,
       });
       onProgress?.(new Map(progressMap));
       throw err;
