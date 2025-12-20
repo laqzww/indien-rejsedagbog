@@ -366,10 +366,13 @@ export function MediaUpload({
                 </div>
               ) : file.type === "video" ? (
                 <div className="relative w-full h-full bg-navy/10 flex items-center justify-center">
-                  <Film className="h-12 w-12 text-navy/40" />
+                  <Film className="h-12 w-12 text-navy/40 absolute z-10" />
                   <video
-                    src={file.preview}
-                    className="absolute inset-0 w-full h-full object-cover opacity-80"
+                    src={`${file.preview}#t=0.001`}
+                    preload="metadata"
+                    muted
+                    playsInline
+                    className="absolute inset-0 w-full h-full object-cover"
                   />
                 </div>
               ) : (

@@ -76,9 +76,21 @@ export function PostCard({ post, index = 0 }: PostCardProps) {
                 sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-navy/5">
-                <Film className="h-12 w-12 text-navy/30" />
-              </div>
+              <>
+                <video
+                  src={`${getMediaUrl(firstMedia.storage_path)}#t=0.001`}
+                  preload="metadata"
+                  muted
+                  playsInline
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+                {/* Video indicator overlay */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="p-3 bg-black/50 rounded-full">
+                    <Film className="h-8 w-8 text-white" />
+                  </div>
+                </div>
+              </>
             )}
 
             {/* Media count badge */}
