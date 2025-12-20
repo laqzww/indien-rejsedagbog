@@ -37,9 +37,10 @@ const JourneyMap = dynamic(
 interface JourneyClientProps {
   milestones: Milestone[];
   posts: JourneyPost[];
+  initialCenter?: [number, number];
 }
 
-export function JourneyClient({ milestones, posts }: JourneyClientProps) {
+export function JourneyClient({ milestones, posts, initialCenter }: JourneyClientProps) {
   const router = useRouter();
   const [activeMilestone, setActiveMilestone] = useState<Milestone | null>(null);
   const [showTimeline, setShowTimeline] = useState(false);
@@ -76,6 +77,7 @@ export function JourneyClient({ milestones, posts }: JourneyClientProps) {
         <JourneyMap
           milestones={milestones}
           posts={posts}
+          initialCenter={initialCenter}
           onMilestoneClick={handleMilestoneClick}
           onPostClick={handlePostClick}
         />

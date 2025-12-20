@@ -9,7 +9,11 @@ export const metadata: Metadata = {
   description: "Se hele rejseruten gennem Indien på kortet",
 };
 
-export default async function JourneyPage() {
+export default async function JourneyPage({
+  searchParams,
+}: {
+  searchParams?: { lat?: string; lng?: string };
+}) {
   const supabase = await createClient();
 
   // Check if current user is author
@@ -38,12 +42,22 @@ export default async function JourneyPage() {
     .not("lat", "is", null)
     .order("created_at", { ascending: false });
 
+  const initialCenter = (() => {
+    const lat = Number(searchParams?.lat);
+    const lng = Number(searchParams?.lng);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return [lng, lat] as [number, number];
+    }
+    return undefined;
+  })();
+
   return (
     <div className="min-h-screen bg-white flex flex-col">
       <Header isAuthor={isAuthor} />
       <JourneyClient
         milestones={milestones || []}
         posts={posts || []}
+        initialCenter={initialCenter}
       />
     </div>
   );
