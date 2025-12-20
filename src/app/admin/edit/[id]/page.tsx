@@ -6,13 +6,14 @@ import { createClient } from "@/lib/supabase/client";
 import { generateFilename, getFileType, deleteMedia, getMediaUrl } from "@/lib/upload";
 import { uploadFilesInParallel, calculateOverallProgress, type UploadProgress, type UploadItem } from "@/lib/parallel-upload";
 import { MediaUpload, type MediaFile } from "@/components/post/MediaUpload";
+import { MediaSortable, type SortableMediaItem } from "@/components/post/MediaSortable";
 import { LocationPicker } from "@/components/post/LocationPicker";
 import { TagInput } from "@/components/post/TagInput";
 import { UploadProgressDisplay, type UploadStage } from "@/components/post/UploadProgress";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Save, Loader2, MapPin, Tag, MessageSquare, AlertTriangle, X, ImageIcon, Film } from "lucide-react";
+import { ArrowLeft, Save, Loader2, MapPin, Tag, MessageSquare, AlertTriangle, X } from "lucide-react";
 import Link from "next/link";
 import type { ExifData } from "@/lib/exif";
 
@@ -23,6 +24,7 @@ interface ExistingMediaItem {
   type: string;
   width: number | null;
   height: number | null;
+  display_order: number;
 }
 
 export default function EditPostPage() {
@@ -42,9 +44,31 @@ export default function EditPostPage() {
   // Existing media from the database
   const [existingMedia, setExistingMedia] = useState<ExistingMediaItem[]>([]);
   const [mediaToDelete, setMediaToDelete] = useState<ExistingMediaItem[]>([]);
+  const [mediaOrderChanged, setMediaOrderChanged] = useState(false);
   
   // New files to upload
   const [newFiles, setNewFiles] = useState<MediaFile[]>([]);
+  
+  // Convert existing media to sortable items format
+  const existingSortableItems: SortableMediaItem[] = useMemo(() => {
+    return existingMedia.map((media) => ({
+      id: media.id,
+      type: media.type as "image" | "video",
+      preview: getMediaUrl(media.storage_path),
+    }));
+  }, [existingMedia]);
+
+  // Handle reordering of existing media
+  const handleExistingMediaReorder = useCallback(
+    (reorderedItems: SortableMediaItem[]) => {
+      const reorderedMedia = reorderedItems
+        .map((item) => existingMedia.find((m) => m.id === item.id))
+        .filter((m): m is ExistingMediaItem => m !== undefined);
+      setExistingMedia(reorderedMedia);
+      setMediaOrderChanged(true);
+    },
+    [existingMedia]
+  );
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -159,6 +183,7 @@ export default function EditPostPage() {
   const handleRemoveExisting = (media: ExistingMediaItem) => {
     setExistingMedia(prev => prev.filter(m => m.id !== media.id));
     setMediaToDelete(prev => [...prev, media]);
+    setMediaOrderChanged(true); // Order changes when we remove items
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -227,6 +252,28 @@ export default function EditPostPage() {
             // Continue anyway - the file might already be deleted
           }
           await supabase.from("media").delete().eq("id", media.id);
+        }
+      }
+
+      // Update display_order for existing media if order changed
+      if (mediaOrderChanged && existingMedia.length > 0) {
+        setUploadStage({
+          stage: "preparing",
+          message: "Opdaterer medie-rækkefølge...",
+          detail: `${existingMedia.length} ${existingMedia.length === 1 ? "fil" : "filer"}`,
+        });
+
+        // Update each media item with its new display_order
+        for (let i = 0; i < existingMedia.length; i++) {
+          const media = existingMedia[i];
+          const { error: orderError } = await supabase
+            .from("media")
+            .update({ display_order: i })
+            .eq("id", media.id);
+          
+          if (orderError) {
+            console.error("Failed to update media order:", orderError);
+          }
         }
       }
 
@@ -398,7 +445,7 @@ export default function EditPostPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Existing media */}
+        {/* Existing media with sortable */}
         {existingMedia.length > 0 && (
           <Card>
             <CardHeader className="pb-3">
@@ -407,46 +454,26 @@ export default function EditPostPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {existingMedia.map((media) => (
-                  <div
-                    key={media.id}
-                    className="relative aspect-square rounded-lg overflow-hidden bg-muted group"
-                  >
-                    {media.type === "image" ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={getMediaUrl(media.storage_path)}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="relative w-full h-full bg-navy/10 flex items-center justify-center">
-                        <Film className="h-12 w-12 text-navy/40" />
-                      </div>
-                    )}
-
-                    {/* Remove button */}
+              <MediaSortable
+                items={existingSortableItems}
+                onReorder={handleExistingMediaReorder}
+                disabled={isSubmitting}
+                renderExtraOverlay={(item) => {
+                  const media = existingMedia.find((m) => m.id === item.id);
+                  if (!media) return null;
+                  
+                  return (
                     <button
                       onClick={() => handleRemoveExisting(media)}
-                      className="absolute top-2 right-2 p-1.5 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-all"
+                      className="absolute top-2 right-2 p-1.5 rounded-full bg-black/50 text-white opacity-60 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-red-600 transition-all z-20"
                       type="button"
                       disabled={isSubmitting}
                     >
                       <X className="h-4 w-4" />
                     </button>
-
-                    {/* Type indicator */}
-                    <div className="absolute bottom-2 left-2 p-1 rounded bg-black/50">
-                      {media.type === "video" ? (
-                        <Film className="h-3 w-3 text-white" />
-                      ) : (
-                        <ImageIcon className="h-3 w-3 text-white" />
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  );
+                }}
+              />
             </CardContent>
           </Card>
         )}
