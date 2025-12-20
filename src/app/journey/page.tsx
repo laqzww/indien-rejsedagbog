@@ -39,7 +39,7 @@ export default async function JourneyPage() {
     .order("created_at", { ascending: false });
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="h-screen bg-white flex flex-col overflow-hidden">
       <Header isAuthor={isAuthor} />
       <JourneyClient
         milestones={milestones || []}

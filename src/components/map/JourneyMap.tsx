@@ -1,11 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import mapboxgl from "mapbox-gl";
 import type { Milestone } from "@/types/database";
-
-// Set access token
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN!;
 
 // Simplified post type for map
 interface MapPost {
@@ -22,6 +19,7 @@ interface JourneyMapProps {
   posts: MapPost[];
   onMilestoneClick?: (milestone: Milestone) => void;
   onPostClick?: (post: MapPost) => void;
+  onError?: () => void;
   initialCenter?: [number, number];
   initialZoom?: number;
 }
@@ -31,95 +29,151 @@ export function JourneyMap({
   posts,
   onMilestoneClick,
   onPostClick,
+  onError,
   initialCenter,
   initialZoom = 5,
 }: JourneyMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
+  const markersRef = useRef<mapboxgl.Marker[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
-  const [debugInfo, setDebugInfo] = useState<string>("");
+  const initAttempted = useRef(false);
 
+  // Cleanup function to remove all markers
+  const cleanupMarkers = useCallback(() => {
+    markersRef.current.forEach((marker) => marker.remove());
+    markersRef.current = [];
+  }, []);
+
+  // Initialize map
   useEffect(() => {
-    if (!mapContainer.current || map.current) return;
+    // Prevent double initialization
+    if (initAttempted.current) return;
+    initAttempted.current = true;
 
-    // Debug: Check container dimensions
     const container = mapContainer.current;
-    const rect = container.getBoundingClientRect();
-    const debugMessage = `Container: ${rect.width}x${rect.height}, Token: ${mapboxgl.accessToken ? 'present' : 'missing'}`;
-    setDebugInfo(debugMessage);
-    console.log('[JourneyMap] Init:', debugMessage);
-
-    // If container has no dimensions, this is likely the issue
-    if (rect.width === 0 || rect.height === 0) {
-      setMapError(`Container has no dimensions: ${rect.width}x${rect.height}`);
-      console.error('[JourneyMap] Container has no dimensions!');
+    if (!container) {
+      console.error("[JourneyMap] No container ref");
       return;
     }
 
-    // Calculate center from milestones if not provided
-    const center = initialCenter || calculateCenter(milestones);
+    // Check for Mapbox token
+    const token = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
+    if (!token) {
+      console.error("[JourneyMap] Missing Mapbox access token");
+      setMapError("Mapbox access token mangler");
+      onError?.();
+      return;
+    }
 
-    // Detect mobile device
-    const isMobile = window.innerWidth < 768;
-    console.log('[JourneyMap] isMobile:', isMobile);
+    // Set access token
+    mapboxgl.accessToken = token;
 
-    try {
-      map.current = new mapboxgl.Map({
-        container: mapContainer.current,
-        // Use standard Mapbox style instead of custom CARTO tiles
-        // This is more reliable on mobile devices
-        style: "mapbox://styles/mapbox/light-v11",
-        center: center as [number, number],
-        zoom: isMobile ? Math.max(initialZoom - 1, 3) : initialZoom,
-        attributionControl: false,
-        // Mobile optimizations
-        dragRotate: false, // Disable rotation on mobile for simpler UX
-        touchZoomRotate: true, // Enable pinch-to-zoom
-        touchPitch: false, // Disable pitch changes on mobile
-        // Prevent WebGL context loss on mobile
-        preserveDrawingBuffer: true,
-        antialias: false, // Disable antialiasing for better performance on mobile
-        fadeDuration: 0, // Disable fade animations for better performance
-      });
+    // Wait for container to have dimensions
+    const initMap = () => {
+      const rect = container.getBoundingClientRect();
+      console.log("[JourneyMap] Container dimensions:", rect.width, "x", rect.height);
 
-      // Handle map errors
-      map.current.on("error", (e) => {
-        console.error("[JourneyMap] Map error:", e.error);
-        setMapError(`Map error: ${e.error?.message || 'Unknown error'}`);
-      });
-
-      // Add navigation controls - compact on mobile
-      map.current.addControl(
-        new mapboxgl.NavigationControl({ showCompass: !isMobile }),
-        "top-right"
-      );
-      map.current.addControl(
-        new mapboxgl.AttributionControl({ compact: true }),
-        "bottom-right"
-      );
-
-      // Enable cooperative gestures on mobile to prevent accidental panning
-      if (isMobile) {
-        map.current.touchZoomRotate.disableRotation();
+      if (rect.width === 0 || rect.height === 0) {
+        console.warn("[JourneyMap] Container has no dimensions, retrying...");
+        return false;
       }
 
-      map.current.on("load", () => {
-        console.log('[JourneyMap] Map loaded successfully');
-        setIsLoaded(true);
-        setMapError(null);
-      });
+      // Calculate center from milestones if not provided
+      const center = initialCenter || calculateCenter(milestones);
 
-    } catch (error) {
-      console.error('[JourneyMap] Failed to initialize map:', error);
-      setMapError(`Failed to initialize: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Detect mobile device
+      const isMobile = window.innerWidth < 768;
+
+      try {
+        const mapInstance = new mapboxgl.Map({
+          container: container,
+          style: "mapbox://styles/mapbox/streets-v12",
+          center: center,
+          zoom: isMobile ? Math.max(initialZoom - 1, 3) : initialZoom,
+          attributionControl: false,
+          // Mobile optimizations
+          dragRotate: false,
+          touchZoomRotate: true,
+          touchPitch: false,
+          // Performance settings
+          antialias: false,
+          fadeDuration: 0,
+          // Don't fail silently
+          failIfMajorPerformanceCaveat: false,
+        });
+
+        map.current = mapInstance;
+
+        // Handle errors
+        mapInstance.on("error", (e) => {
+          console.error("[JourneyMap] Map error:", e);
+          const errorMsg = e.error?.message || "Unknown error";
+          setMapError(errorMsg);
+          onError?.();
+        });
+
+        // Add controls
+        mapInstance.addControl(
+          new mapboxgl.NavigationControl({ showCompass: false }),
+          "top-right"
+        );
+        mapInstance.addControl(
+          new mapboxgl.AttributionControl({ compact: true }),
+          "bottom-right"
+        );
+
+        // Disable rotation on mobile
+        if (isMobile) {
+          mapInstance.touchZoomRotate.disableRotation();
+        }
+
+        // Map loaded successfully
+        mapInstance.on("load", () => {
+          console.log("[JourneyMap] Map loaded successfully");
+          setIsLoaded(true);
+          setMapError(null);
+        });
+
+        return true;
+      } catch (error) {
+        console.error("[JourneyMap] Failed to initialize map:", error);
+        setMapError(error instanceof Error ? error.message : "Failed to initialize map");
+        onError?.();
+        return true; // Don't retry on exception
+      }
+    };
+
+    // Try to initialize immediately
+    if (!initMap()) {
+      // If container has no dimensions, wait and retry
+      const retryTimeouts = [50, 100, 200, 500, 1000];
+      let retryIndex = 0;
+
+      const retry = () => {
+        if (retryIndex >= retryTimeouts.length || map.current) return;
+        
+        setTimeout(() => {
+          if (!map.current && initMap()) {
+            return;
+          }
+          retryIndex++;
+          retry();
+        }, retryTimeouts[retryIndex]);
+      };
+
+      retry();
     }
 
     return () => {
-      map.current?.remove();
-      map.current = null;
+      cleanupMarkers();
+      if (map.current) {
+        map.current.remove();
+        map.current = null;
+      }
     };
-  }, [initialCenter, initialZoom, milestones]);
+  }, [initialCenter, initialZoom, milestones, onError, cleanupMarkers]);
 
   // Add route line and markers when loaded
   useEffect(() => {
@@ -127,72 +181,86 @@ export function JourneyMap({
 
     const mapInstance = map.current;
 
+    // Clean up existing markers first
+    cleanupMarkers();
+
     // Add route line source
     if (milestones.length > 1) {
       const routeCoords = milestones.map((m) => [m.lng, m.lat]);
 
-      if (!mapInstance.getSource("route")) {
-        mapInstance.addSource("route", {
-          type: "geojson",
-          data: {
-            type: "Feature",
-            properties: {},
-            geometry: {
-              type: "LineString",
-              coordinates: routeCoords,
-            },
-          },
-        });
-
-        mapInstance.addLayer({
-          id: "route-line",
-          type: "line",
-          source: "route",
-          layout: {
-            "line-join": "round",
-            "line-cap": "round",
-          },
-          paint: {
-            "line-color": "#FF9933",
-            "line-width": 3,
-            "line-dasharray": [2, 2],
-          },
-        });
+      // Remove existing source/layer if present
+      if (mapInstance.getLayer("route-line")) {
+        mapInstance.removeLayer("route-line");
       }
+      if (mapInstance.getSource("route")) {
+        mapInstance.removeSource("route");
+      }
+
+      mapInstance.addSource("route", {
+        type: "geojson",
+        data: {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "LineString",
+            coordinates: routeCoords,
+          },
+        },
+      });
+
+      mapInstance.addLayer({
+        id: "route-line",
+        type: "line",
+        source: "route",
+        layout: {
+          "line-join": "round",
+          "line-cap": "round",
+        },
+        paint: {
+          "line-color": "#FF9933",
+          "line-width": 3,
+          "line-dasharray": [2, 2],
+        },
+      });
     }
 
     // Detect mobile for larger touch targets
     const isMobileDevice = window.innerWidth < 768;
-    const markerSize = isMobileDevice ? 'w-10 h-10 text-base' : 'w-8 h-8 text-sm';
-    const postMarkerSize = isMobileDevice ? 'w-8 h-8 text-base' : 'w-6 h-6 text-sm';
+    const markerSize = isMobileDevice ? "w-10 h-10 text-base" : "w-8 h-8 text-sm";
+    const postMarkerSize = isMobileDevice ? "w-8 h-8 text-base" : "w-6 h-6 text-sm";
 
     // Add milestone markers
     milestones.forEach((milestone, index) => {
       const el = document.createElement("div");
       el.className = "milestone-marker";
+      el.style.cursor = "pointer";
       el.innerHTML = `
-        <div class="${markerSize} rounded-full bg-saffron text-white flex items-center justify-center font-bold shadow-lg border-2 border-white cursor-pointer hover:scale-110 transition-transform">
+        <div class="${markerSize} rounded-full bg-saffron text-white flex items-center justify-center font-bold shadow-lg border-2 border-white cursor-pointer hover:scale-110 transition-transform" style="background-color: #FF9933;">
           ${index + 1}
         </div>
       `;
 
       const popup = new mapboxgl.Popup({
         offset: 25,
-        closeButton: false,
+        closeButton: true,
+        closeOnClick: true,
       }).setHTML(`
         <div class="p-2">
-          <p class="font-bold text-navy">${milestone.name}</p>
+          <p class="font-bold" style="color: #000080;">${milestone.name}</p>
           ${milestone.description ? `<p class="text-sm text-gray-600 mt-1">${milestone.description}</p>` : ""}
           ${milestone.arrival_date ? `<p class="text-xs text-gray-500 mt-1">📅 ${formatDateShort(milestone.arrival_date)}</p>` : ""}
         </div>
       `);
 
-      const marker = new mapboxgl.Marker(el)
+      const marker = new mapboxgl.Marker({ element: el })
         .setLngLat([milestone.lng, milestone.lat])
         .setPopup(popup)
         .addTo(mapInstance);
 
-      el.addEventListener("click", () => {
+      markersRef.current.push(marker);
+
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
         onMilestoneClick?.(milestone);
       });
     });
@@ -203,46 +271,62 @@ export function JourneyMap({
 
       const el = document.createElement("div");
       el.className = "post-marker";
+      el.style.cursor = "pointer";
       el.innerHTML = `
-        <div class="${postMarkerSize} rounded-full bg-india-green text-white flex items-center justify-center shadow-lg border-2 border-white cursor-pointer hover:scale-110 transition-transform">
+        <div class="${postMarkerSize} rounded-full bg-india-green text-white flex items-center justify-center shadow-lg border-2 border-white cursor-pointer hover:scale-110 transition-transform" style="background-color: #138808;">
           📍
         </div>
       `;
 
       const popup = new mapboxgl.Popup({
         offset: 20,
-        closeButton: false,
+        closeButton: true,
+        closeOnClick: true,
       }).setHTML(`
         <div class="p-2 max-w-[200px]">
-          <p class="text-sm line-clamp-2">${post.body.slice(0, 80)}...</p>
+          <p class="text-sm">${post.body.slice(0, 80)}${post.body.length > 80 ? "..." : ""}</p>
           ${post.location_name ? `<p class="text-xs text-gray-500 mt-1">📍 ${post.location_name}</p>` : ""}
         </div>
       `);
 
-      new mapboxgl.Marker(el)
+      const marker = new mapboxgl.Marker({ element: el })
         .setLngLat([post.lng, post.lat])
         .setPopup(popup)
         .addTo(mapInstance);
 
-      el.addEventListener("click", () => {
+      markersRef.current.push(marker);
+
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
         onPostClick?.(post);
       });
     });
-  }, [isLoaded, milestones, posts, onMilestoneClick, onPostClick]);
 
-  // Show error state if map failed to initialize
-  if (mapError) {
-    return (
-      <div className="absolute inset-0 rounded-xl overflow-hidden bg-red-50 flex flex-col items-center justify-center p-4">
-        <p className="text-red-600 text-sm font-medium mb-2">Kortet kunne ikke indlæses</p>
-        <p className="text-red-500 text-xs text-center">{mapError}</p>
-        <p className="text-gray-500 text-xs mt-2">{debugInfo}</p>
-      </div>
-    );
-  }
+    // Fit bounds to show all markers if we have milestones
+    if (milestones.length > 0) {
+      const bounds = new mapboxgl.LngLatBounds();
+      milestones.forEach((m) => bounds.extend([m.lng, m.lat]));
+      posts.forEach((p) => {
+        if (p.lat && p.lng) bounds.extend([p.lng, p.lat]);
+      });
+
+      mapInstance.fitBounds(bounds, {
+        padding: { top: 50, bottom: 100, left: 50, right: 50 },
+        maxZoom: 10,
+        duration: 0,
+      });
+    }
+  }, [isLoaded, milestones, posts, onMilestoneClick, onPostClick, cleanupMarkers]);
+
+  // Don't render error here - parent handles it via onError callback
+  // This allows for a cleaner retry mechanism
 
   return (
-    <div ref={mapContainer} className="absolute inset-0 rounded-xl overflow-hidden" />
+    <div
+      ref={mapContainer}
+      className="w-full h-full"
+      style={{ minHeight: "300px" }}
+    />
   );
 }
 
