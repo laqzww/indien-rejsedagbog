@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Timeline } from "@/components/map/Timeline";
 import { Button } from "@/components/ui/button";
@@ -41,8 +41,20 @@ interface JourneyClientProps {
 
 export function JourneyClient({ milestones, posts }: JourneyClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [activeMilestone, setActiveMilestone] = useState<Milestone | null>(null);
   const [showTimeline, setShowTimeline] = useState(false);
+
+  const initialCenter = useMemo<[number, number] | undefined>(() => {
+    const latStr = searchParams.get("lat");
+    const lngStr = searchParams.get("lng");
+    if (!latStr || !lngStr) return undefined;
+    const lat = Number(latStr);
+    const lng = Number(lngStr);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return undefined;
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return undefined;
+    return [lng, lat];
+  }, [searchParams]);
 
   const handleMilestoneClick = (milestone: Milestone) => {
     setActiveMilestone(milestone);
@@ -78,6 +90,7 @@ export function JourneyClient({ milestones, posts }: JourneyClientProps) {
           posts={posts}
           onMilestoneClick={handleMilestoneClick}
           onPostClick={handlePostClick}
+          initialCenter={initialCenter}
         />
 
         {/* Mobile Timeline Toggle */}
