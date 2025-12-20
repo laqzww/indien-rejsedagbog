@@ -3,11 +3,12 @@
 import { useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { uploadMedia, generateFilename, getFileType } from "@/lib/upload";
-import { isHeicFile, convertHeicToJpeg } from "@/lib/heic";
+import { generateFilename, getFileType } from "@/lib/upload";
+import { uploadFilesInParallel, calculateOverallProgress, type UploadProgress, type UploadItem } from "@/lib/parallel-upload";
 import { MediaUpload, type MediaFile } from "@/components/post/MediaUpload";
 import { LocationPicker } from "@/components/post/LocationPicker";
 import { TagInput } from "@/components/post/TagInput";
+import { UploadProgressDisplay, type UploadStage } from "@/components/post/UploadProgress";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +28,25 @@ export default function NewPostPage() {
   const [files, setFiles] = useState<MediaFile[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Upload progress state
+  const [uploadStage, setUploadStage] = useState<UploadStage>({
+    stage: "preparing",
+    message: "Forbereder...",
+  });
+  const [fileProgress, setFileProgress] = useState<Map<string, UploadProgress>>(new Map());
+  const [overallProgress, setOverallProgress] = useState<{
+    completed: number;
+    total: number;
+    percentage: number;
+  } | undefined>();
+  
+  // Create a map of file types for the progress display
+  const fileTypes = useMemo(() => {
+    const map = new Map<string, "image" | "video">();
+    files.forEach((f) => map.set(f.id, f.type));
+    return map;
+  }, [files]);
 
   // Check if any uploaded images are missing GPS data
   const hasImagesWithoutGps = useMemo(() => {
@@ -58,9 +78,18 @@ export default function NewPostPage() {
 
     setIsSubmitting(true);
     setError(null);
+    setFileProgress(new Map());
+    setOverallProgress(undefined);
 
     try {
       const supabase = createClient();
+      
+      // STAGE 1: Preparing
+      setUploadStage({
+        stage: "preparing",
+        message: "Forbereder opslag...",
+        detail: "Henter brugeroplysninger",
+      });
       
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
@@ -74,7 +103,12 @@ export default function NewPostPage() {
         .filter(Boolean)
         .sort((a, b) => a!.getTime() - b!.getTime())[0];
 
-      // Create the post
+      // Create the post first
+      setUploadStage({
+        stage: "preparing",
+        message: "Opretter opslag...",
+      });
+
       const { data: post, error: postError } = await supabase
         .from("posts")
         .insert({
@@ -92,62 +126,109 @@ export default function NewPostPage() {
       if (postError) throw postError;
       if (!post) throw new Error("Kunne ikke oprette opslaget");
 
-      // Upload media files
-      for (let i = 0; i < files.length; i++) {
-        const mediaFile = files[i];
-        const filename = generateFilename(mediaFile.file.name, i);
-        const type = getFileType(mediaFile.file);
-
-        // For HEIC files, also upload JPEG version
-        let storagePath: string;
-        
-        if (isHeicFile(mediaFile.file)) {
-          // Upload original HEIC
-          await uploadMedia(mediaFile.file, user.id, post.id, filename);
-          
-          // Upload JPEG display version
-          if (mediaFile.displayBlob) {
-            const jpegFilename = filename.replace(/\.(heic|heif)$/i, ".jpg");
-            const result = await uploadMedia(
-              mediaFile.displayBlob,
-              user.id,
-              post.id,
-              jpegFilename
-            );
-            storagePath = result.path;
-          } else {
-            // Convert now if we don't have it
-            const jpegBlob = await convertHeicToJpeg(mediaFile.file);
-            const jpegFilename = filename.replace(/\.(heic|heif)$/i, ".jpg");
-            const result = await uploadMedia(jpegBlob, user.id, post.id, jpegFilename);
-            storagePath = result.path;
-          }
-        } else {
-          const result = await uploadMedia(mediaFile.file, user.id, post.id, filename);
-          storagePath = result.path;
-        }
-
-        // Insert media record
-        await supabase.from("media").insert({
-          post_id: post.id,
-          storage_path: storagePath,
-          type,
-          mime_type: mediaFile.file.type || null,
-          width: mediaFile.exif?.width ?? null,
-          height: mediaFile.exif?.height ?? null,
-          exif_data: mediaFile.exif?.raw ?? null,
-          lat: mediaFile.exif?.lat ?? null,
-          lng: mediaFile.exif?.lng ?? null,
-          captured_at: mediaFile.exif?.capturedAt?.toISOString() ?? null,
-          display_order: i,
+      // STAGE 2: Upload media files in parallel
+      if (files.length > 0) {
+        setUploadStage({
+          stage: "uploading",
+          message: `Uploader ${files.length} ${files.length === 1 ? "fil" : "filer"}...`,
+          detail: "Bruger parallel upload for hurtigere overførsel",
         });
+
+        // Prepare upload items - use uploadBlob (compressed) when available
+        const uploadItems: UploadItem[] = files.map((mediaFile, i) => {
+          const filename = generateFilename(mediaFile.file.name, i);
+          const type = getFileType(mediaFile.file);
+          
+          // Use .jpg extension for compressed images (not videos)
+          const finalFilename = type === "image" && mediaFile.uploadBlob !== mediaFile.file 
+            ? filename.replace(/\.[^.]+$/, ".jpg")
+            : filename;
+          const path = `${user.id}/${post.id}/${finalFilename}`;
+          
+          return {
+            id: mediaFile.id,
+            file: mediaFile.uploadBlob || mediaFile.file,
+            path,
+          };
+        });
+
+        // Upload all files in parallel with progress tracking
+        const uploadResults = await uploadFilesInParallel(uploadItems, {
+          concurrency: 3,
+          onProgress: (progress) => {
+            setFileProgress(progress);
+            setOverallProgress(calculateOverallProgress(progress));
+          },
+        });
+
+        // STAGE 3: Save media records (batch insert)
+        setUploadStage({
+          stage: "saving",
+          message: "Gemmer medieoplysninger...",
+          detail: `Registrerer ${files.length} filer i databasen`,
+        });
+
+        // Prepare all media records for batch insert
+        const mediaRecords = files.map((mediaFile, i) => {
+          const storagePath = uploadResults.get(mediaFile.id);
+          if (!storagePath) {
+            throw new Error(`Upload failed for file ${i + 1}`);
+          }
+
+          const type = getFileType(mediaFile.file);
+          
+          // Use compressed dimensions if available, otherwise fall back to EXIF
+          const width = mediaFile.compressedWidth ?? mediaFile.exif?.width ?? null;
+          const height = mediaFile.compressedHeight ?? mediaFile.exif?.height ?? null;
+
+          // Determine mime_type: JPEG for compressed images, original for videos
+          const mimeType = type === "video" 
+            ? mediaFile.file.type 
+            : "image/jpeg";
+
+          return {
+            post_id: post.id,
+            storage_path: storagePath,
+            type,
+            mime_type: mimeType,
+            width,
+            height,
+            exif_data: mediaFile.exif?.raw ?? null,
+            lat: mediaFile.exif?.lat ?? null,
+            lng: mediaFile.exif?.lng ?? null,
+            captured_at: mediaFile.exif?.capturedAt?.toISOString() ?? null,
+            display_order: i,
+          };
+        });
+
+        // Batch insert all media records at once
+        const { error: mediaError } = await supabase
+          .from("media")
+          .insert(mediaRecords);
+
+        if (mediaError) throw mediaError;
       }
+
+      // STAGE 4: Complete
+      setUploadStage({
+        stage: "complete",
+        message: "Opslag delt! 🎉",
+        detail: "Sender dig til opslaget...",
+      });
+
+      // Small delay so user can see the success message
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Success! Navigate to the new post
       router.push(`/post/${post.id}`);
       router.refresh();
     } catch (err) {
       console.error("Failed to create post:", err);
+      setUploadStage({
+        stage: "error",
+        message: "Noget gik galt",
+        detail: err instanceof Error ? err.message : "Ukendt fejl",
+      });
       setError(err instanceof Error ? err.message : "Noget gik galt");
     } finally {
       setIsSubmitting(false);
@@ -254,8 +335,18 @@ export default function NewPostPage() {
           </CardContent>
         </Card>
 
+        {/* Upload progress */}
+        {isSubmitting && (
+          <UploadProgressDisplay
+            stage={uploadStage}
+            fileProgress={fileProgress}
+            overallProgress={overallProgress}
+            fileTypes={fileTypes}
+          />
+        )}
+
         {/* Error message */}
-        {error && (
+        {error && !isSubmitting && (
           <div className="p-4 bg-destructive/10 text-destructive rounded-lg text-sm">
             {error}
           </div>
@@ -271,7 +362,9 @@ export default function NewPostPage() {
           {isSubmitting ? (
             <>
               <Loader2 className="h-5 w-5 animate-spin" />
-              Sender...
+              {uploadStage.stage === "uploading" && overallProgress
+                ? `Uploader... ${overallProgress.percentage}%`
+                : uploadStage.message}
             </>
           ) : (
             <>

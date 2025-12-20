@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Camera, X, Film, Loader2, ImageIcon, MapPinOff } from "lucide-react";
 import { isHeicFile, convertHeicToJpeg } from "@/lib/heic";
 import { extractExifData, type ExifData } from "@/lib/exif";
+import { compressImage, shouldCompress, formatFileSize } from "@/lib/image-compression";
 
 export interface MediaFile {
   id: string;
@@ -14,7 +15,12 @@ export interface MediaFile {
   exif?: ExifData;
   isConverting?: boolean;
   displayBlob?: Blob; // JPEG version for display if HEIC
+  uploadBlob?: Blob; // Compressed/converted version for upload
+  compressedWidth?: number; // Dimensions after compression
+  compressedHeight?: number;
   hasGps?: boolean; // Explicit GPS status
+  originalSize?: number; // Original file size
+  compressedSize?: number; // Compressed file size
 }
 
 interface MediaUploadProps {
@@ -38,6 +44,7 @@ export function MediaUpload({
     async (file: File): Promise<MediaFile> => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const type = file.type.startsWith("video/") ? "video" : "image";
+      const isHeic = isHeicFile(file);
 
       // Create initial entry
       const mediaFile: MediaFile = {
@@ -45,30 +52,12 @@ export function MediaUpload({
         file,
         preview: "",
         type,
-        isConverting: isHeicFile(file),
+        isConverting: isHeic || (type === "image" && shouldCompress(file)),
+        originalSize: file.size,
       };
 
-      // Handle HEIC files
-      if (isHeicFile(file)) {
-        try {
-          const jpegBlob = await convertHeicToJpeg(file);
-          mediaFile.displayBlob = jpegBlob;
-          mediaFile.preview = URL.createObjectURL(jpegBlob);
-          mediaFile.isConverting = false;
-        } catch (error) {
-          console.error("HEIC conversion failed:", error);
-          // Fallback to original
-          mediaFile.preview = URL.createObjectURL(file);
-          mediaFile.isConverting = false;
-        }
-      } else if (type === "image") {
-        mediaFile.preview = URL.createObjectURL(file);
-      } else {
-        // Video thumbnail - just use a placeholder or first frame
-        mediaFile.preview = URL.createObjectURL(file);
-      }
-
-      // Extract EXIF data for images
+      // STEP 1: Extract EXIF data from ORIGINAL file BEFORE any processing
+      // This ensures we preserve GPS, capture date, and other metadata
       if (type === "image") {
         try {
           const exif = await extractExifData(file);
@@ -80,6 +69,55 @@ export function MediaUpload({
         }
       }
 
+      // STEP 2: Handle HEIC files - convert to JPEG first
+      let blobToCompress: Blob = file;
+      if (isHeic) {
+        try {
+          const jpegBlob = await convertHeicToJpeg(file);
+          blobToCompress = jpegBlob;
+          mediaFile.displayBlob = jpegBlob;
+        } catch (error) {
+          console.error("HEIC conversion failed:", error);
+          // Fallback to original
+          blobToCompress = file;
+        }
+      }
+
+      // STEP 3: Compress images (including converted HEIC)
+      if (type === "image") {
+        try {
+          // Compress if needed (large files or already a blob from HEIC conversion)
+          if (shouldCompress(file) || isHeic) {
+            const compressed = await compressImage(blobToCompress);
+            mediaFile.uploadBlob = compressed.blob;
+            mediaFile.compressedWidth = compressed.width;
+            mediaFile.compressedHeight = compressed.height;
+            mediaFile.compressedSize = compressed.blob.size;
+            mediaFile.preview = URL.createObjectURL(compressed.blob);
+            
+            // Log compression stats for debugging
+            const savings = Math.round((1 - compressed.blob.size / file.size) * 100);
+            console.log(
+              `Compressed ${file.name}: ${formatFileSize(file.size)} → ${formatFileSize(compressed.blob.size)} (${savings}% savings)`
+            );
+          } else {
+            // Small file, no compression needed
+            mediaFile.uploadBlob = file;
+            mediaFile.preview = URL.createObjectURL(file);
+          }
+        } catch (error) {
+          console.error("Compression failed:", error);
+          // Fallback to original/converted blob
+          mediaFile.uploadBlob = blobToCompress;
+          mediaFile.preview = URL.createObjectURL(blobToCompress);
+        }
+      } else {
+        // Video - just use original
+        mediaFile.uploadBlob = file;
+        mediaFile.preview = URL.createObjectURL(file);
+      }
+
+      mediaFile.isConverting = false;
       return mediaFile;
     },
     []
@@ -249,6 +287,16 @@ export function MediaUpload({
                     <MapPinOff className="h-3 w-3" />
                   </div>
                 )
+              )}
+
+              {/* Compression indicator */}
+              {file.compressedSize && file.originalSize && file.compressedSize < file.originalSize && (
+                <div 
+                  className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-india-green/90 text-white text-xs"
+                  title={`Komprimeret: ${formatFileSize(file.originalSize)} → ${formatFileSize(file.compressedSize)}`}
+                >
+                  -{Math.round((1 - file.compressedSize / file.originalSize) * 100)}%
+                </div>
               )}
             </div>
           ))}
