@@ -7,6 +7,7 @@ import { isHeicFile, convertHeicToJpeg } from "@/lib/heic";
 import { extractExifData, type ExifData } from "@/lib/exif";
 import { compressImage, shouldCompress, formatFileSize } from "@/lib/image-compression";
 import { MediaSortable, type SortableMediaItem } from "./MediaSortable";
+import { MAX_FILE_SIZE_MB, MAX_FILE_SIZE_BYTES, formatBytes } from "@/lib/resumable-upload";
 
 export interface MediaFile {
   id: string;
@@ -154,6 +155,30 @@ export function MediaUpload({
 
       if (filesToProcess.length === 0) return;
 
+      // Check for files that are too large
+      const tooLargeFiles = filesToProcess.filter(f => f.size > MAX_FILE_SIZE_BYTES);
+      if (tooLargeFiles.length > 0) {
+        const fileNames = tooLargeFiles.map(f => `${f.name} (${formatBytes(f.size)})`).join(", ");
+        alert(`Følgende filer er for store (maks ${MAX_FILE_SIZE_MB}MB):\n${fileNames}\n\nPrøv at komprimere videoerne før upload.`);
+        // Filter out the too-large files and continue with the rest
+        const validFiles = filesToProcess.filter(f => f.size <= MAX_FILE_SIZE_BYTES);
+        if (validFiles.length === 0) return;
+        
+        // Process only valid files
+        const processedFiles = await Promise.all(
+          validFiles.map((f) => processFile(f))
+        );
+
+        const newFileList = [...files, ...processedFiles];
+        onFilesChange(newFileList);
+
+        const firstImageWithExif = processedFiles.find(f => f.exif);
+        if (firstImageWithExif?.exif && onExifExtracted) {
+          onExifExtracted(firstImageWithExif.exif);
+        }
+        return;
+      }
+
       // Process all files in parallel (now that videos don't need heavy processing)
       const processedFiles = await Promise.all(
         filesToProcess.map((f) => processFile(f))
@@ -248,7 +273,7 @@ export function MediaUpload({
             </p>
           </div>
           <p className="text-xs text-muted-foreground">
-            JPG, PNG, HEIC, MP4, MOV • Maks 50MB per fil
+            JPG, PNG, HEIC, MP4, MOV • Maks {MAX_FILE_SIZE_MB}MB per fil
           </p>
         </div>
       </div>

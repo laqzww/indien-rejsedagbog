@@ -1,7 +1,7 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import { uploadResumable, shouldUseResumableUpload } from "@/lib/resumable-upload";
+import { uploadResumable, shouldUseResumableUpload, validateFileSize } from "@/lib/resumable-upload";
 
 export interface UploadItem {
   id: string;
@@ -63,6 +63,21 @@ export async function uploadFilesInParallel(
   const processItem = async (item: UploadItem) => {
     // Determine if we should use resumable upload
     const useResumable = item.isVideo || shouldUseResumableUpload(item.file);
+
+    // Validate file size before attempting upload
+    const sizeError = validateFileSize(item.file);
+    if (sizeError) {
+      progressMap.set(item.id, {
+        id: item.id,
+        status: "error",
+        progress: 0,
+        error: sizeError,
+        bytesTotal: item.file.size,
+        bytesUploaded: 0,
+      });
+      onProgress?.(new Map(progressMap));
+      throw new Error(sizeError);
+    }
 
     // Update status to uploading
     progressMap.set(item.id, {
