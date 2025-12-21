@@ -20,7 +20,11 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const mediaCount = post.media.length;
+  // Sort media by display_order to ensure correct order
+  const sortedMedia = [...post.media].sort(
+    (a, b) => a.display_order - b.display_order
+  );
+  const mediaCount = sortedMedia.length;
   const hasMedia = mediaCount > 0;
 
   // Swipe handlers for touch devices
@@ -59,7 +63,7 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
 
   // Get aspect ratio from first media
   const getAspectRatio = () => {
-    const firstMedia = post.media[0];
+    const firstMedia = sortedMedia[0];
     if (firstMedia?.width && firstMedia?.height) {
       const ratio = firstMedia.width / firstMedia.height;
       // For very tall images, cap at 4:5 (Instagram portrait max)
@@ -130,7 +134,7 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         >
-          {post.media.map((media, index) => (
+          {sortedMedia.map((media, index) => (
             <div
               key={media.id}
               className={cn(
@@ -182,7 +186,7 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
           )}
 
           {/* Media type indicator */}
-          {post.media[activeIndex]?.type === "video" && (
+          {sortedMedia[activeIndex]?.type === "video" && (
             <div className="absolute top-3 right-3 p-1.5 bg-black/60 rounded-lg">
               <Film className="h-4 w-4 text-white" />
             </div>
@@ -191,7 +195,7 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
           {/* Dots indicator */}
           {mediaCount > 1 && (
             <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1">
-              {post.media.map((_, index) => (
+              {sortedMedia.map((_, index) => (
                 <button
                   key={index}
                   onClick={() => setActiveIndex(index)}

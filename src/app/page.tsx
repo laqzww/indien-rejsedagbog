@@ -43,7 +43,7 @@ export default async function HomePage({ searchParams }: PageProps) {
       tags,
       lat,
       lng,
-      media (id, type, storage_path, width, height),
+      media (id, type, storage_path, width, height, display_order),
       profile:profiles (display_name, avatar_url)
     `)
     .order("captured_at", { ascending: false, nullsFirst: false })
