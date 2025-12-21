@@ -23,7 +23,7 @@ export default async function AdminLayout({
 
   return (
     <div className="min-h-screen bg-muted/30">
-      <Header isAuthor={true} showNavigation={false} />
+      <Header isAuthor={true} activeView="admin" useLinks={true} />
       <main>{children}</main>
     </div>
   );
