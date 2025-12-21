@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, useCallback, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Header } from "./Header";
 import { PostFeed } from "./post/PostFeed";
@@ -60,6 +60,8 @@ export function HomeClient({
   focusLng: initialFocusLng,
   focusZoom: initialFocusZoom,
 }: HomeClientProps) {
+  const router = useRouter();
+  
   // Read search params dynamically to support client-side navigation
   const searchParams = useSearchParams();
   
@@ -69,30 +71,33 @@ export function HomeClient({
   const urlLng = searchParams.get("lng");
   const urlZoom = searchParams.get("zoom");
   
-  // Memoize parsed values to prevent unnecessary re-renders
-  const { currentView, focusLat, focusLng, focusZoom } = useMemo(() => {
-    const parsedLat = urlLat ? parseFloat(urlLat) : initialFocusLat;
-    const parsedLng = urlLng ? parseFloat(urlLng) : initialFocusLng;
-    const parsedZoom = urlZoom ? parseFloat(urlZoom) : initialFocusZoom;
-    
-    return {
-      currentView: urlView === "map" ? "map" : (urlView === "feed" ? "feed" : initialView),
-      focusLat: parsedLat,
-      focusLng: parsedLng,
-      focusZoom: parsedZoom,
-    };
-  }, [urlView, urlLat, urlLng, urlZoom, initialView, initialFocusLat, initialFocusLng, initialFocusZoom]);
+  // Compute active view from URL - URL is the single source of truth
+  // This ensures "Se på kort" links always switch the view correctly
+  const activeView: "feed" | "map" = urlView === "map" ? "map" : (urlView === "feed" ? "feed" : initialView);
   
-  const [activeView, setActiveView] = useState<"feed" | "map">(currentView as "feed" | "map");
+  // Parse focus coordinates
+  const focusLat = urlLat ? parseFloat(urlLat) : initialFocusLat;
+  const focusLng = urlLng ? parseFloat(urlLng) : initialFocusLng;
+  const focusZoom = urlZoom ? parseFloat(urlZoom) : initialFocusZoom;
+  
   const [activeMilestone, setActiveMilestone] = useState<Milestone | null>(null);
   const [showTimeline, setShowTimeline] = useState(false);
   const [mapKey, setMapKey] = useState(0);
   const [mapError, setMapError] = useState(false);
   
-  // Sync activeView with URL changes (for client-side navigation)
-  useEffect(() => {
-    setActiveView(currentView as "feed" | "map");
-  }, [currentView]);
+  // Handler for view changes - updates URL instead of local state
+  // This ensures URL stays in sync and enables browser back/forward navigation
+  const handleViewChange = useCallback((view: "feed" | "map") => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("view", view);
+    // Clear focus coordinates when manually switching views (not from "Se på kort")
+    if (view === "feed") {
+      params.delete("lat");
+      params.delete("lng");
+      params.delete("zoom");
+    }
+    router.replace(`/?${params.toString()}`, { scroll: false });
+  }, [router, searchParams]);
   
   // Reset map error when focus coordinates change (new POI navigation)
   useEffect(() => {
@@ -123,7 +128,7 @@ export function HomeClient({
       <Header
         isAuthor={isAuthor}
         activeView={activeView}
-        onViewChange={setActiveView}
+        onViewChange={handleViewChange}
         showNavigation={true}
       />
 
