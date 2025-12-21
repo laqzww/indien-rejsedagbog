@@ -165,12 +165,17 @@ export default function EditPostPage() {
           });
         }
         
-        // Sort media by display_order
+        // Sort media by display_order (handle null/undefined for legacy data)
         const sortedMedia = [...(post.media || [])].sort(
-          (a, b) => a.display_order - b.display_order
+          (a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)
         );
-        setExistingMedia(sortedMedia);
-        existingMediaRef.current = sortedMedia; // Also update ref immediately
+        // Ensure all media have a display_order value for later comparison
+        const mediaWithOrder = sortedMedia.map((m, idx) => ({
+          ...m,
+          display_order: m.display_order ?? idx,
+        }));
+        setExistingMedia(mediaWithOrder);
+        existingMediaRef.current = mediaWithOrder; // Also update ref immediately
         
         setIsLoading(false);
       } catch (err) {
@@ -299,28 +304,58 @@ export default function EditPostPage() {
           detail: `${currentExistingMedia.length} ${currentExistingMedia.length === 1 ? "fil" : "filer"}`,
         });
 
-        // Update display_order in parallel for all media items.
-        // We use individual updates instead of upsert to avoid RLS/policy issues.
-        const updatePromises = currentExistingMedia.map((media, index) =>
-          supabase
+        // Update each media item's display_order sequentially.
+        // We verify each update by selecting the updated row.
+        let updateCount = 0;
+        for (let i = 0; i < currentExistingMedia.length; i++) {
+          const media = currentExistingMedia[i];
+          const newOrder = i;
+
+          // Skip if order is already correct
+          if (media.display_order === newOrder) {
+            updateCount++; // Count as success - no change needed
+            continue;
+          }
+
+          // Update the display_order
+          const { data: updated, error: updateError } = await supabase
             .from("media")
-            .update({ display_order: index })
+            .update({ display_order: newOrder })
             .eq("id", media.id)
-            .eq("post_id", postId) // Extra safety: ensure media belongs to this post
-        );
+            .select("id, display_order");
 
-        const updateResults = await Promise.all(updatePromises);
+          if (updateError) {
+            console.error(`Failed to update media ${media.id} order:`, updateError);
+            throw new Error(
+              `Kunne ikke opdatere medie-rækkefølge: ${updateError.message}`
+            );
+          }
 
-        // Check if any update failed - log but don't throw
-        const failedUpdates = updateResults.filter((result) => result.error);
-        if (failedUpdates.length > 0) {
-          console.error(
-            "Some media order updates failed:",
-            failedUpdates.map((r) => r.error)
-          );
-          // Don't throw - the post itself was saved successfully.
-          // Media order is a secondary concern; we'll try again on next edit.
+          // Check if update affected any rows (empty array means RLS blocked it)
+          if (!updated || updated.length === 0) {
+            console.error(
+              `Media order update returned no rows for ${media.id}. RLS policy likely blocking UPDATE.`
+            );
+            throw new Error(
+              "Kunne ikke opdatere medie-rækkefølge. Databasen tillader ikke opdatering af medie. Kontakt administrator."
+            );
+          }
+
+          // Verify the update actually set the correct value
+          if (updated[0].display_order !== newOrder) {
+            console.error(
+              `Media order update verification failed for ${media.id}:`,
+              { expected: newOrder, got: updated[0].display_order }
+            );
+            throw new Error(
+              "Medie-rækkefølgen blev ikke gemt korrekt. Uventet database-adfærd."
+            );
+          }
+
+          updateCount++;
         }
+
+        console.log(`Successfully updated display_order for ${updateCount}/${currentExistingMedia.length} media items`);
       }
 
       // Get current highest display_order
