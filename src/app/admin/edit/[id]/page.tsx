@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateFilename, getFileType, deleteMedia, getMediaUrl } from "@/lib/upload";
@@ -46,6 +46,15 @@ export default function EditPostPage() {
   const [mediaToDelete, setMediaToDelete] = useState<ExistingMediaItem[]>([]);
   const [mediaOrderChanged, setMediaOrderChanged] = useState(false);
   
+  // Ref to always have access to the latest existingMedia value
+  // This avoids stale closure issues in handleSubmit
+  const existingMediaRef = useRef<ExistingMediaItem[]>([]);
+  
+  // Keep the ref in sync with the state
+  useEffect(() => {
+    existingMediaRef.current = existingMedia;
+  }, [existingMedia]);
+  
   // New files to upload
   const [newFiles, setNewFiles] = useState<MediaFile[]>([]);
   
@@ -59,13 +68,16 @@ export default function EditPostPage() {
   }, [existingMedia]);
 
   // Handle reordering of existing media
-  // Using functional update to avoid stale closure issues with existingMedia
+  // Using functional update AND updating the ref immediately to avoid stale closure issues
   const handleExistingMediaReorder = useCallback(
     (reorderedItems: SortableMediaItem[]) => {
       setExistingMedia((currentMedia) => {
-        return reorderedItems
+        const reorderedMedia = reorderedItems
           .map((item) => currentMedia.find((m) => m.id === item.id))
           .filter((m): m is ExistingMediaItem => m !== undefined);
+        // Update ref immediately so handleSubmit always has the latest value
+        existingMediaRef.current = reorderedMedia;
+        return reorderedMedia;
       });
       setMediaOrderChanged(true);
     },
@@ -149,6 +161,7 @@ export default function EditPostPage() {
           (a, b) => a.display_order - b.display_order
         );
         setExistingMedia(sortedMedia);
+        existingMediaRef.current = sortedMedia; // Also update ref immediately
         
         setIsLoading(false);
       } catch (err) {
@@ -183,7 +196,12 @@ export default function EditPostPage() {
 
   // Remove existing media
   const handleRemoveExisting = (media: ExistingMediaItem) => {
-    setExistingMedia(prev => prev.filter(m => m.id !== media.id));
+    setExistingMedia(prev => {
+      const filtered = prev.filter(m => m.id !== media.id);
+      // Update ref immediately so handleSubmit always has the latest value
+      existingMediaRef.current = filtered;
+      return filtered;
+    });
     setMediaToDelete(prev => [...prev, media]);
     setMediaOrderChanged(true); // Order changes when we remove items
   };
@@ -258,16 +276,18 @@ export default function EditPostPage() {
       }
 
       // Update display_order for existing media if order changed
-      if (mediaOrderChanged && existingMedia.length > 0) {
+      // Use ref to ensure we have the latest order (avoids stale closure issues)
+      const currentExistingMedia = existingMediaRef.current;
+      if (mediaOrderChanged && currentExistingMedia.length > 0) {
         setUploadStage({
           stage: "preparing",
           message: "Opdaterer medie-rækkefølge...",
-          detail: `${existingMedia.length} ${existingMedia.length === 1 ? "fil" : "filer"}`,
+          detail: `${currentExistingMedia.length} ${currentExistingMedia.length === 1 ? "fil" : "filer"}`,
         });
 
         // Update each media item with its new display_order
-        for (let i = 0; i < existingMedia.length; i++) {
-          const media = existingMedia[i];
+        for (let i = 0; i < currentExistingMedia.length; i++) {
+          const media = currentExistingMedia[i];
           const { error: orderError } = await supabase
             .from("media")
             .update({ display_order: i })
@@ -280,7 +300,7 @@ export default function EditPostPage() {
       }
 
       // Get current highest display_order
-      const startOrder = existingMedia.length;
+      const startOrder = currentExistingMedia.length;
 
       // STAGE 2: Upload new media files in parallel
       if (newFiles.length > 0) {
