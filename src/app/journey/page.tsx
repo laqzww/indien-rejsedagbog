@@ -1,51 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
-import { Header } from "@/components/Header";
 import { JourneyClient } from "./JourneyClient";
 import type { Metadata } from "next";
 import { getIsAuthor } from "@/lib/author";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
   title: "Rejserute",
   description: "Se hele rejseruten gennem Indien på kortet",
 };
 
+// Redirect to home page - map is now integrated there
 export default async function JourneyPage() {
-  const supabase = await createClient();
-
-  // Check if current user is author
-  const { data: { user } } = await supabase.auth.getUser();
-  const isAuthor = await getIsAuthor(supabase, user);
-
-  // Fetch milestones
-  const { data: milestones } = await supabase
-    .from("milestones")
-    .select("*")
-    .order("display_order", { ascending: true });
-
-  // Fetch posts with location
-  const { data: posts } = await supabase
-    .from("posts")
-    .select(`
-      id,
-      body,
-      lat,
-      lng,
-      location_name,
-      created_at,
-      captured_at,
-      media (storage_path)
-    `)
-    .not("lat", "is", null)
-    .order("created_at", { ascending: false });
-
-  return (
-    <div className="h-screen bg-white flex flex-col overflow-hidden">
-      <Header isAuthor={isAuthor} />
-      <JourneyClient
-        milestones={milestones || []}
-        posts={posts || []}
-      />
-    </div>
-  );
+  redirect("/?view=map");
 }
-
