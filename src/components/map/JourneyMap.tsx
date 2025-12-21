@@ -87,8 +87,16 @@ export function JourneyMap({
         return false;
       }
 
-      // Calculate center from milestones if not provided
-      const center = initialCenter || calculateCenter(milestones);
+      // If we have focus coordinates, start directly at that location for instant display
+      const hasFocusPoint = focusLat !== undefined && focusLng !== undefined && !isNaN(focusLat) && !isNaN(focusLng);
+      
+      // Calculate center - prioritize focus point for immediate display
+      const center: [number, number] = hasFocusPoint 
+        ? [focusLng, focusLat]
+        : (initialCenter || calculateCenter(milestones));
+      
+      // Use focus zoom when available, otherwise default
+      const zoom = hasFocusPoint ? focusZoom : initialZoom;
 
       // Detect mobile device
       const isMobile = window.innerWidth < 768;
@@ -98,7 +106,7 @@ export function JourneyMap({
           container: container,
           style: "mapbox://styles/mapbox/streets-v12",
           center: center,
-          zoom: isMobile ? Math.max(initialZoom - 1, 3) : initialZoom,
+          zoom: isMobile ? Math.max(zoom - 1, 3) : zoom,
           attributionControl: false,
           // Mobile optimizations
           dragRotate: false,
@@ -180,7 +188,7 @@ export function JourneyMap({
         map.current = null;
       }
     };
-  }, [initialCenter, initialZoom, milestones, onError, cleanupMarkers]);
+  }, [initialCenter, initialZoom, milestones, onError, cleanupMarkers, focusLat, focusLng, focusZoom]);
 
   // Add route line and markers when loaded
   useEffect(() => {
@@ -313,20 +321,14 @@ export function JourneyMap({
     const hasFocusPoint = focusLat !== undefined && focusLng !== undefined && !isNaN(focusLat) && !isNaN(focusLng);
     
     if (hasFocusPoint) {
-      // Focus on the specific POI with animation
-      mapInstance.flyTo({
-        center: [focusLng, focusLat],
-        zoom: focusZoom,
-        duration: 1000, // Smooth 1 second animation
-        essential: true, // This animation is essential for the user experience
-      });
-      
-      // Try to find and open the popup for a post at this location
+      // Map already starts at focus point (set during initialization)
+      // Just open the popup for the matching post immediately
       const matchingPost = posts.find(
         (p) => p.lat === focusLat && p.lng === focusLng
       );
       if (matchingPost) {
-        // Find the marker for this post and open its popup after animation
+        // Find the marker for this post and open its popup
+        // Use a small delay to ensure markers are fully rendered
         setTimeout(() => {
           const postMarkers = markersRef.current.filter((marker) => {
             const lngLat = marker.getLngLat();
@@ -335,7 +337,7 @@ export function JourneyMap({
           if (postMarkers.length > 0) {
             postMarkers[0].togglePopup();
           }
-        }, 1100); // Wait for flyTo animation to complete
+        }, 100);
       }
     } else if (milestones.length > 0) {
       // Fit bounds to show all milestones (not posts, to avoid zooming out too far
