@@ -7,7 +7,7 @@ export interface ResumableUploadOptions {
   bucket?: string;
   onProgress?: (progress: ResumableUploadProgress) => void;
   onError?: (error: Error) => void;
-  chunkSize?: number; // in bytes, default 6MB
+  chunkSize?: number; // in bytes, default 5MB
   retryDelays?: number[]; // delays between retries in ms
 }
 
@@ -23,8 +23,17 @@ export interface ResumableUploadResult {
   publicUrl: string;
 }
 
-const DEFAULT_CHUNK_SIZE = 6 * 1024 * 1024; // 6MB chunks (Supabase recommended)
-const DEFAULT_RETRY_DELAYS = [0, 1000, 3000, 5000]; // Retry delays
+// Supabase Storage limits - adjust based on your plan:
+// Free tier: 50MB max file size
+// Pro tier: 5GB max file size
+// Configure this based on your Supabase project settings
+export const MAX_FILE_SIZE_MB = 500; // 500MB - adjust if needed
+export const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
+// Use 5MB chunks for better compatibility with Supabase's limits
+// Smaller chunks are more reliable for slower connections
+const DEFAULT_CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+const DEFAULT_RETRY_DELAYS = [0, 1000, 3000, 5000, 10000]; // Retry delays with longer final delay
 
 /**
  * Get a fresh access token, refreshing if needed
@@ -62,6 +71,53 @@ async function getFreshAccessToken(): Promise<string> {
 }
 
 /**
+ * Validate file size before upload
+ * Returns an error message if validation fails, null if OK
+ */
+export function validateFileSize(file: Blob): string | null {
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    return `Filen er for stor (${formatBytes(file.size)}). Maksimal størrelse er ${MAX_FILE_SIZE_MB}MB. Prøv at komprimere videoen først.`;
+  }
+  return null;
+}
+
+/**
+ * Parse TUS error to get a user-friendly message
+ */
+function parseTusError(error: Error | unknown): { isFileTooLarge: boolean; message: string } {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  
+  // Check for 413 errors (file too large)
+  if (errorMessage.includes("413") || errorMessage.toLowerCase().includes("maximum size exceeded")) {
+    return {
+      isFileTooLarge: true,
+      message: "Filen overstiger Supabase's filstørrelsesbegrænsning. Kontrollér dine Supabase Storage indstillinger eller komprimer videoen."
+    };
+  }
+  
+  // Check for auth errors
+  if (errorMessage.includes("401") || errorMessage.toLowerCase().includes("unauthorized")) {
+    return {
+      isFileTooLarge: false,
+      message: "Autentificeringsfejl. Prøv at logge ind igen."
+    };
+  }
+  
+  // Check for network errors
+  if (errorMessage.includes("XMLHttpRequestProgressEvent") || errorMessage.includes("network")) {
+    return {
+      isFileTooLarge: false,
+      message: "Netværksfejl under upload. Prøv igen."
+    };
+  }
+  
+  return {
+    isFileTooLarge: false,
+    message: errorMessage
+  };
+}
+
+/**
  * Upload a file using the tus resumable upload protocol
  * Supports pause/resume and automatic retries on network failures
  */
@@ -80,13 +136,21 @@ export async function uploadResumable(
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 
+  // Validate file size before starting
+  const sizeError = validateFileSize(file);
+  if (sizeError) {
+    const error = new Error(sizeError);
+    onError?.(error);
+    throw error;
+  }
+
   // Get a fresh access token
   const accessToken = await getFreshAccessToken();
   
   // Ensure we have a valid content type for the file
   const contentType = file.type || getMimeTypeFromPath(path) || "application/octet-stream";
   
-  console.log(`[Resumable Upload] Starting upload for ${path} (${formatBytes(file.size)}, type: ${contentType})`);
+  console.log(`[Resumable Upload] Starting upload for ${path} (${formatBytes(file.size)}, type: ${contentType}, chunk size: ${formatBytes(chunkSize)})`);
 
   return new Promise((resolve, reject) => {
     let hasStarted = false;
@@ -112,6 +176,24 @@ export async function uploadResumable(
       onError: async (error) => {
         const errorMessage = error?.message || String(error);
         console.error("[Resumable Upload] Error:", errorMessage);
+        
+        // Parse the error for better handling
+        const parsedError = parseTusError(error);
+        
+        // If file is too large, don't retry - it won't help
+        if (parsedError.isFileTooLarge) {
+          console.error("[Resumable Upload] File too large for Supabase, not retrying");
+          onProgress?.({
+            bytesUploaded: 0,
+            bytesTotal: file.size,
+            percentage: 0,
+            status: "error",
+          });
+          const friendlyError = new Error(parsedError.message);
+          onError?.(friendlyError);
+          reject(friendlyError);
+          return;
+        }
         
         // Check if this is a token/auth error and retry once with fresh token
         if (!hasStarted && (
@@ -159,8 +241,9 @@ export async function uploadResumable(
           percentage: 0,
           status: "error",
         });
-        onError?.(error);
-        reject(error);
+        const friendlyError = new Error(parsedError.message);
+        onError?.(friendlyError);
+        reject(friendlyError);
       },
       onProgress: (bytesUploaded, bytesTotal) => {
         hasStarted = true;
@@ -245,6 +328,16 @@ export function createResumableUpload(
   } = options;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  
+  // Validate file size
+  const sizeError = validateFileSize(file);
+  if (sizeError) {
+    throw new Error(sizeError);
+  }
+  
+  // Ensure we have a valid content type for the file
+  const contentType = file.type || getMimeTypeFromPath(path) || "application/octet-stream";
+  
   let upload: tus.Upload | null = null;
   let resolvePromise: ((result: ResumableUploadResult) => void) | null = null;
   let rejectPromise: ((error: Error) => void) | null = null;
@@ -265,24 +358,27 @@ export function createResumableUpload(
             authorization: `Bearer ${session.access_token}`,
             "x-upsert": "false",
           },
-          uploadDataDuringCreation: true,
+          // Disable uploadDataDuringCreation to prevent 413 errors on initial request
+          uploadDataDuringCreation: false,
           removeFingerprintOnSuccess: true,
           metadata: {
             bucketName: bucket,
             objectName: path,
-            contentType: file.type || "application/octet-stream",
+            contentType: contentType,
             cacheControl: "3600",
           },
           onError: (error) => {
             console.error("[Resumable Upload] Error:", error);
+            const parsedError = parseTusError(error);
             onProgress?.({
               bytesUploaded: 0,
               bytesTotal: file.size,
               percentage: 0,
               status: "error",
             });
-            onError?.(error);
-            rejectPromise?.(error);
+            const friendlyError = new Error(parsedError.message);
+            onError?.(friendlyError);
+            rejectPromise?.(friendlyError);
           },
           onProgress: (bytesUploaded, bytesTotal) => {
             const percentage = Math.round((bytesUploaded / bytesTotal) * 100);
