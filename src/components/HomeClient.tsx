@@ -3,7 +3,6 @@
 import { useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { Header } from "./Header";
-import { SwipeableViews } from "./SwipeableViews";
 import { PostFeed } from "./post/PostFeed";
 import { EmptyFeed } from "./post/EmptyFeed";
 import { Timeline } from "./map/Timeline";
@@ -54,17 +53,11 @@ export function HomeClient({
   mapPosts,
   initialView = "feed",
 }: HomeClientProps) {
-  const [activeIndex, setActiveIndex] = useState(initialView === "map" ? 1 : 0);
+  const [activeView, setActiveView] = useState<"feed" | "map">(initialView);
   const [activeMilestone, setActiveMilestone] = useState<Milestone | null>(null);
   const [showTimeline, setShowTimeline] = useState(false);
   const [mapKey, setMapKey] = useState(0);
   const [mapError, setMapError] = useState(false);
-
-  const activeView = activeIndex === 0 ? "feed" : "map";
-
-  const handleViewChange = useCallback((view: "feed" | "map") => {
-    setActiveIndex(view === "feed" ? 0 : 1);
-  }, []);
 
   const handleMilestoneClick = useCallback((milestone: Milestone) => {
     setActiveMilestone(milestone);
@@ -88,17 +81,13 @@ export function HomeClient({
       <Header
         isAuthor={isAuthor}
         activeView={activeView}
-        onViewChange={handleViewChange}
+        onViewChange={setActiveView}
         showNavigation={true}
       />
 
-      <SwipeableViews
-        activeIndex={activeIndex}
-        onIndexChange={setActiveIndex}
-        className="flex-1"
-      >
-        {/* Feed View */}
-        <div className="h-full overflow-y-auto">
+      {/* Feed View */}
+      {activeView === "feed" && (
+        <div className="flex-1 overflow-y-auto">
           <main className="max-w-2xl mx-auto pb-8">
             {hasPosts ? (
               <PostFeed groups={groupedPosts} />
@@ -116,9 +105,11 @@ export function HomeClient({
             </div>
           </footer>
         </div>
+      )}
 
-        {/* Map View */}
-        <div className="h-full flex flex-col lg:flex-row overflow-hidden">
+      {/* Map View */}
+      {activeView === "map" && (
+        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
           {/* Desktop Timeline Sidebar */}
           <aside className="hidden lg:block w-80 border-r border-border overflow-y-auto bg-white flex-shrink-0">
             <div className="p-4 border-b border-border">
@@ -246,7 +237,7 @@ export function HomeClient({
             </div>
           )}
         </div>
-      </SwipeableViews>
+      )}
     </div>
   );
 }
