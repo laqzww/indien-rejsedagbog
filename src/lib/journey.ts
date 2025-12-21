@@ -115,6 +115,7 @@ export interface PostWithDayInfo {
     storage_path: string;
     width: number | null;
     height: number | null;
+    display_order: number;
   }>;
   profile: {
     display_name: string | null;
@@ -152,6 +153,7 @@ export function groupPostsByMilestoneAndDay<T extends {
     storage_path: string;
     width: number | null;
     height: number | null;
+    display_order: number;
   }>;
   profile: {
     display_name: string | null;
@@ -170,8 +172,14 @@ export function groupPostsByMilestoneAndDay<T extends {
     const dayNumber = getDayNumber(postDate);
     const milestone = findMilestoneForDate(postDate, milestones);
     
+    // Sort media by display_order to ensure correct order
+    const sortedMedia = [...post.media].sort(
+      (a, b) => a.display_order - b.display_order
+    );
+    
     const postWithDay: PostWithDayInfo = {
       ...post,
+      media: sortedMedia,
       dayNumber,
     };
     

@@ -23,6 +23,7 @@ interface PostCardData {
     storage_path: string;
     width: number | null;
     height: number | null;
+    display_order: number;
   }>;
   profile: {
     display_name: string | null;
@@ -50,10 +51,14 @@ interface PostCardProps {
 }
 
 export function PostCard({ post, index = 0 }: PostCardProps) {
-  const firstMedia = post.media[0];
-  const mediaCount = post.media.length;
-  const imageCount = post.media.filter((m) => m.type === "image").length;
-  const videoCount = post.media.filter((m) => m.type === "video").length;
+  // Sort media by display_order to ensure correct order
+  const sortedMedia = [...post.media].sort(
+    (a, b) => a.display_order - b.display_order
+  );
+  const firstMedia = sortedMedia[0];
+  const mediaCount = sortedMedia.length;
+  const imageCount = sortedMedia.filter((m) => m.type === "image").length;
+  const videoCount = sortedMedia.filter((m) => m.type === "video").length;
 
   return (
     <Link href={`/post/${post.id}`}>
