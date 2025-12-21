@@ -59,15 +59,17 @@ export default function EditPostPage() {
   }, [existingMedia]);
 
   // Handle reordering of existing media
+  // Using functional update to avoid stale closure issues with existingMedia
   const handleExistingMediaReorder = useCallback(
     (reorderedItems: SortableMediaItem[]) => {
-      const reorderedMedia = reorderedItems
-        .map((item) => existingMedia.find((m) => m.id === item.id))
-        .filter((m): m is ExistingMediaItem => m !== undefined);
-      setExistingMedia(reorderedMedia);
+      setExistingMedia((currentMedia) => {
+        return reorderedItems
+          .map((item) => currentMedia.find((m) => m.id === item.id))
+          .filter((m): m is ExistingMediaItem => m !== undefined);
+      });
       setMediaOrderChanged(true);
     },
-    [existingMedia]
+    []
   );
   
   const [isSubmitting, setIsSubmitting] = useState(false);
