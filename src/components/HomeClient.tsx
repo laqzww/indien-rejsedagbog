@@ -43,6 +43,9 @@ interface HomeClientProps {
   milestones: Milestone[];
   mapPosts: JourneyPost[];
   initialView?: "feed" | "map";
+  focusLat?: number;
+  focusLng?: number;
+  focusZoom?: number;
 }
 
 export function HomeClient({
@@ -52,6 +55,9 @@ export function HomeClient({
   milestones,
   mapPosts,
   initialView = "feed",
+  focusLat,
+  focusLng,
+  focusZoom,
 }: HomeClientProps) {
   const [activeView, setActiveView] = useState<"feed" | "map">(initialView);
   const [activeMilestone, setActiveMilestone] = useState<Milestone | null>(null);
@@ -148,6 +154,9 @@ export function HomeClient({
                 onMilestoneClick={handleMilestoneClick}
                 onPostClick={handlePostClick}
                 onError={handleMapError}
+                focusLat={focusLat}
+                focusLng={focusLng}
+                focusZoom={focusZoom}
               />
             )}
 

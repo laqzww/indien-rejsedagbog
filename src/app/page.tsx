@@ -6,12 +6,23 @@ import { HomeClient } from "@/components/HomeClient";
 export const revalidate = 60; // Revalidate every minute
 
 interface PageProps {
-  searchParams: Promise<{ view?: string }>;
+  searchParams: Promise<{ 
+    view?: string;
+    lat?: string;
+    lng?: string;
+    zoom?: string;
+  }>;
 }
 
 export default async function HomePage({ searchParams }: PageProps) {
   const params = await searchParams;
   const initialView = params.view === "map" ? "map" : "feed";
+  
+  // Parse POI focus coordinates (for "Se på kort" feature)
+  const focusLat = params.lat ? parseFloat(params.lat) : undefined;
+  const focusLng = params.lng ? parseFloat(params.lng) : undefined;
+  const focusZoom = params.zoom ? parseFloat(params.zoom) : undefined;
+  
   const supabase = await createClient();
 
   // Get current user to check if author
@@ -77,6 +88,9 @@ export default async function HomePage({ searchParams }: PageProps) {
       milestones={milestones || []}
       mapPosts={mapPosts}
       initialView={initialView}
+      focusLat={focusLat}
+      focusLng={focusLng}
+      focusZoom={focusZoom}
     />
   );
 }
