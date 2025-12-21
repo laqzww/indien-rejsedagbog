@@ -22,6 +22,10 @@ interface JourneyMapProps {
   onError?: () => void;
   initialCenter?: [number, number];
   initialZoom?: number;
+  // POI focus props - when provided, map will zoom to this location
+  focusLat?: number;
+  focusLng?: number;
+  focusZoom?: number; // defaults to 14 (neighborhood level)
 }
 
 export function JourneyMap({
@@ -32,6 +36,9 @@ export function JourneyMap({
   onError,
   initialCenter,
   initialZoom = 5,
+  focusLat,
+  focusLng,
+  focusZoom = 14, // Default to neighborhood level
 }: JourneyMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -302,9 +309,37 @@ export function JourneyMap({
       });
     });
 
-    // Fit bounds to show all milestones (not posts, to avoid zooming out too far
-    // when there are posts in distant locations like Denmark "dag 0" posts)
-    if (milestones.length > 0) {
+    // Check if we should focus on a specific POI
+    const hasFocusPoint = focusLat !== undefined && focusLng !== undefined && !isNaN(focusLat) && !isNaN(focusLng);
+    
+    if (hasFocusPoint) {
+      // Focus on the specific POI with animation
+      mapInstance.flyTo({
+        center: [focusLng, focusLat],
+        zoom: focusZoom,
+        duration: 1000, // Smooth 1 second animation
+        essential: true, // This animation is essential for the user experience
+      });
+      
+      // Try to find and open the popup for a post at this location
+      const matchingPost = posts.find(
+        (p) => p.lat === focusLat && p.lng === focusLng
+      );
+      if (matchingPost) {
+        // Find the marker for this post and open its popup after animation
+        setTimeout(() => {
+          const postMarkers = markersRef.current.filter((marker) => {
+            const lngLat = marker.getLngLat();
+            return lngLat.lat === focusLat && lngLat.lng === focusLng;
+          });
+          if (postMarkers.length > 0) {
+            postMarkers[0].togglePopup();
+          }
+        }, 1100); // Wait for flyTo animation to complete
+      }
+    } else if (milestones.length > 0) {
+      // Fit bounds to show all milestones (not posts, to avoid zooming out too far
+      // when there are posts in distant locations like Denmark "dag 0" posts)
       const bounds = new mapboxgl.LngLatBounds();
       milestones.forEach((m) => bounds.extend([m.lng, m.lat]));
       // Note: Posts are intentionally excluded from bounds calculation
@@ -327,7 +362,7 @@ export function JourneyMap({
         duration: 0,
       });
     }
-  }, [isLoaded, milestones, posts, onMilestoneClick, onPostClick, cleanupMarkers]);
+  }, [isLoaded, milestones, posts, onMilestoneClick, onPostClick, cleanupMarkers, focusLat, focusLng, focusZoom]);
 
   // Don't render error here - parent handles it via onError callback
   // This allows for a cleaner retry mechanism

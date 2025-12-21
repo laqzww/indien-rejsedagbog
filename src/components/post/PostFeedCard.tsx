@@ -249,7 +249,7 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
         {/* Location map preview */}
         {post.lat && post.lng && (
           <Link
-            href={`/journey?lat=${post.lat}&lng=${post.lng}`}
+            href={`/?view=map&lat=${post.lat}&lng=${post.lng}`}
             className="block mt-2 rounded-lg overflow-hidden border border-border hover:border-saffron transition-colors"
           >
             <div className="relative h-24 bg-muted">

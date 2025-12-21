@@ -214,7 +214,7 @@ export default async function PostPage({ params }: PageProps) {
                   className="w-full h-full object-cover"
                 />
               </div>
-              <Link href={`/journey?lat=${post.lat}&lng=${post.lng}`}>
+              <Link href={`/?view=map&lat=${post.lat}&lng=${post.lng}`}>
                 <Button variant="link" className="px-0 mt-2">
                   Se på rejsekortet →
                 </Button>
