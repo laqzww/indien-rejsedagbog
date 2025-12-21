@@ -79,32 +79,78 @@ export async function uploadFilesInParallel(
         // Use resumable upload for large files (videos)
         console.log(`[Upload] Using resumable upload for ${item.path} (${(item.file.size / 1024 / 1024).toFixed(1)} MB)`);
         
-        await uploadResumable(item.file, item.path, {
-          onProgress: (progress) => {
+        try {
+          await uploadResumable(item.file, item.path, {
+            onProgress: (progress) => {
+              progressMap.set(item.id, {
+                id: item.id,
+                status: progress.status === "completed" ? "completed" : "uploading",
+                progress: progress.percentage,
+                bytesUploaded: progress.bytesUploaded,
+                bytesTotal: progress.bytesTotal,
+              });
+              onProgress?.(new Map(progressMap));
+            },
+            onError: (error) => {
+              console.error(`[Upload] Resumable upload error for ${item.path}:`, error);
+            },
+          });
+
+          // Mark as completed
+          progressMap.set(item.id, {
+            id: item.id,
+            status: "completed",
+            progress: 100,
+            bytesUploaded: item.file.size,
+            bytesTotal: item.file.size,
+          });
+          onProgress?.(new Map(progressMap));
+          results.set(item.id, item.path);
+        } catch (resumableError) {
+          // If resumable upload fails, try fallback to regular upload for files under 50MB
+          const fileSizeMB = item.file.size / (1024 * 1024);
+          console.error(`[Upload] Resumable upload failed for ${item.path}:`, resumableError);
+          
+          if (fileSizeMB <= 50) {
+            console.log(`[Upload] Falling back to regular upload for ${item.path} (${fileSizeMB.toFixed(1)} MB)`);
+            
+            // Reset progress for retry
             progressMap.set(item.id, {
               id: item.id,
-              status: progress.status === "completed" ? "completed" : "uploading",
-              progress: progress.percentage,
-              bytesUploaded: progress.bytesUploaded,
-              bytesTotal: progress.bytesTotal,
+              status: "uploading",
+              progress: 5,
+              bytesTotal: item.file.size,
+              bytesUploaded: 0,
             });
             onProgress?.(new Map(progressMap));
-          },
-          onError: (error) => {
-            console.error(`[Upload] Resumable upload error for ${item.path}:`, error);
-          },
-        });
-
-        // Mark as completed
-        progressMap.set(item.id, {
-          id: item.id,
-          status: "completed",
-          progress: 100,
-          bytesUploaded: item.file.size,
-          bytesTotal: item.file.size,
-        });
-        onProgress?.(new Map(progressMap));
-        results.set(item.id, item.path);
+            
+            // Use regular upload as fallback
+            const { error } = await supabase.storage
+              .from("media")
+              .upload(item.path, item.file, {
+                cacheControl: "3600",
+                upsert: false,
+              });
+            
+            if (error) {
+              throw error;
+            }
+            
+            // Mark as completed
+            progressMap.set(item.id, {
+              id: item.id,
+              status: "completed",
+              progress: 100,
+              bytesUploaded: item.file.size,
+              bytesTotal: item.file.size,
+            });
+            onProgress?.(new Map(progressMap));
+            results.set(item.id, item.path);
+          } else {
+            // File too large for regular upload, throw the original error
+            throw resumableError;
+          }
+        }
       } else {
         // Use regular upload for smaller files (images)
         // Simulate progress updates during upload
