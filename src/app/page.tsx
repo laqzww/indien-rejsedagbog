@@ -1,7 +1,9 @@
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getIsAuthor } from "@/lib/author";
 import { groupPostsByMilestoneAndDay } from "@/lib/journey";
 import { HomeClient } from "@/components/HomeClient";
+import { Map as MapIcon } from "lucide-react";
 
 export const revalidate = 60; // Revalidate every minute
 
@@ -81,16 +83,23 @@ export default async function HomePage({ searchParams }: PageProps) {
   const hasPosts = posts && posts.length > 0;
 
   return (
-    <HomeClient
-      isAuthor={isAuthor}
-      groupedPosts={groupedPosts}
-      hasPosts={hasPosts}
-      milestones={milestones || []}
-      mapPosts={mapPosts}
-      initialView={initialView}
-      focusLat={focusLat}
-      focusLng={focusLng}
-      focusZoom={focusZoom}
-    />
+    <Suspense fallback={
+      <div className="h-screen bg-white flex flex-col items-center justify-center">
+        <MapIcon className="h-12 w-12 text-muted-foreground/20 animate-pulse" />
+        <p className="text-muted-foreground mt-4">Indlæser...</p>
+      </div>
+    }>
+      <HomeClient
+        isAuthor={isAuthor}
+        groupedPosts={groupedPosts}
+        hasPosts={hasPosts}
+        milestones={milestones || []}
+        mapPosts={mapPosts}
+        initialView={initialView}
+        focusLat={focusLat}
+        focusLng={focusLng}
+        focusZoom={focusZoom}
+      />
+    </Suspense>
   );
 }
