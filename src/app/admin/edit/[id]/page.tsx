@@ -44,16 +44,22 @@ export default function EditPostPage() {
   // Existing media from the database
   const [existingMedia, setExistingMedia] = useState<ExistingMediaItem[]>([]);
   const [mediaToDelete, setMediaToDelete] = useState<ExistingMediaItem[]>([]);
-  const [mediaOrderChanged, setMediaOrderChanged] = useState(false);
   
   // Ref to always have access to the latest existingMedia value
   // This avoids stale closure issues in handleSubmit
   const existingMediaRef = useRef<ExistingMediaItem[]>([]);
+
+  // Same idea for delete list: avoid missing “last click before save”
+  const mediaToDeleteRef = useRef<ExistingMediaItem[]>([]);
   
   // Keep the ref in sync with the state
   useEffect(() => {
     existingMediaRef.current = existingMedia;
   }, [existingMedia]);
+
+  useEffect(() => {
+    mediaToDeleteRef.current = mediaToDelete;
+  }, [mediaToDelete]);
   
   // New files to upload
   const [newFiles, setNewFiles] = useState<MediaFile[]>([]);
@@ -68,18 +74,21 @@ export default function EditPostPage() {
   }, [existingMedia]);
 
   // Handle reordering of existing media
-  // Using functional update AND updating the ref immediately to avoid stale closure issues
   const handleExistingMediaReorder = useCallback(
     (reorderedItems: SortableMediaItem[]) => {
-      setExistingMedia((currentMedia) => {
-        const reorderedMedia = reorderedItems
-          .map((item) => currentMedia.find((m) => m.id === item.id))
-          .filter((m): m is ExistingMediaItem => m !== undefined);
-        // Update ref immediately so handleSubmit always has the latest value
-        existingMediaRef.current = reorderedMedia;
-        return reorderedMedia;
-      });
-      setMediaOrderChanged(true);
+      /**
+       * IMPORTANT:
+       * We must update the ref synchronously (outside setState), otherwise a fast
+       * “reorder → click save” can submit the *previous* order because React
+       * hasn’t flushed the state update yet.
+       */
+      const currentMedia = existingMediaRef.current;
+      const reorderedMedia = reorderedItems
+        .map((item) => currentMedia.find((m) => m.id === item.id))
+        .filter((m): m is ExistingMediaItem => m !== undefined);
+
+      existingMediaRef.current = reorderedMedia;
+      setExistingMedia(reorderedMedia);
     },
     []
   );
@@ -196,14 +205,14 @@ export default function EditPostPage() {
 
   // Remove existing media
   const handleRemoveExisting = (media: ExistingMediaItem) => {
-    setExistingMedia(prev => {
-      const filtered = prev.filter(m => m.id !== media.id);
-      // Update ref immediately so handleSubmit always has the latest value
-      existingMediaRef.current = filtered;
-      return filtered;
-    });
-    setMediaToDelete(prev => [...prev, media]);
-    setMediaOrderChanged(true); // Order changes when we remove items
+    // Update refs synchronously to avoid “remove → save” races.
+    const filtered = existingMediaRef.current.filter((m) => m.id !== media.id);
+    existingMediaRef.current = filtered;
+    setExistingMedia(filtered);
+
+    const nextDelete = [...mediaToDeleteRef.current, media];
+    mediaToDeleteRef.current = nextDelete;
+    setMediaToDelete(nextDelete);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -257,14 +266,15 @@ export default function EditPostPage() {
       if (updateError) throw updateError;
 
       // Delete removed media from storage and database
-      if (mediaToDelete.length > 0) {
+      const currentMediaToDelete = mediaToDeleteRef.current;
+      if (currentMediaToDelete.length > 0) {
         setUploadStage({
           stage: "preparing",
           message: "Sletter fjernede billeder...",
-          detail: `${mediaToDelete.length} ${mediaToDelete.length === 1 ? "fil" : "filer"}`,
+          detail: `${currentMediaToDelete.length} ${currentMediaToDelete.length === 1 ? "fil" : "filer"}`,
         });
 
-        for (const media of mediaToDelete) {
+        for (const media of currentMediaToDelete) {
           try {
             await deleteMedia(media.storage_path);
           } catch (err) {
@@ -275,27 +285,42 @@ export default function EditPostPage() {
         }
       }
 
-      // Update display_order for existing media if order changed
-      // Use ref to ensure we have the latest order (avoids stale closure issues)
+      // Update display_order for existing media (if needed).
+      // Use ref to ensure we have the latest order.
       const currentExistingMedia = existingMediaRef.current;
-      if (mediaOrderChanged && currentExistingMedia.length > 0) {
+      const needsOrderUpdate =
+        currentExistingMedia.length > 0 &&
+        currentExistingMedia.some((m, idx) => m.display_order !== idx);
+
+      if (needsOrderUpdate) {
         setUploadStage({
           stage: "preparing",
           message: "Opdaterer medie-rækkefølge...",
           detail: `${currentExistingMedia.length} ${currentExistingMedia.length === 1 ? "fil" : "filer"}`,
         });
 
-        // Update each media item with its new display_order
-        for (let i = 0; i < currentExistingMedia.length; i++) {
-          const media = currentExistingMedia[i];
-          const { error: orderError } = await supabase
-            .from("media")
-            .update({ display_order: i })
-            .eq("id", media.id);
-          
-          if (orderError) {
-            console.error("Failed to update media order:", orderError);
-          }
+        // Batch upsert so we don't do N sequential updates, and so we can detect “0 rows changed”.
+        const updates = currentExistingMedia.map((m, i) => ({
+          // `upsert` is typed as Insert[] (not Update[]), so we include required columns.
+          id: m.id,
+          post_id: postId,
+          storage_path: m.storage_path,
+          type: m.type,
+          display_order: i,
+        }));
+
+        const { data: updatedRows, error: orderError } = await supabase
+          .from("media")
+          .upsert(updates, { onConflict: "id" })
+          .select("id");
+
+        if (orderError) throw orderError;
+
+        // With RLS missing UPDATE policy, PostgREST often returns 0 updated rows without an error.
+        if (!updatedRows || updatedRows.length !== updates.length) {
+          throw new Error(
+            "Kunne ikke gemme medie-rækkefølge. Det ligner at databasen afviser UPDATE på media (RLS/policy)."
+          );
         }
       }
 
