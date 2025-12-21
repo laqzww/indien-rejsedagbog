@@ -27,6 +27,41 @@ const DEFAULT_CHUNK_SIZE = 6 * 1024 * 1024; // 6MB chunks (Supabase recommended)
 const DEFAULT_RETRY_DELAYS = [0, 1000, 3000, 5000]; // Retry delays
 
 /**
+ * Get a fresh access token, refreshing if needed
+ */
+async function getFreshAccessToken(): Promise<string> {
+  const supabase = createClient();
+  
+  // First try to get current session
+  const { data: { session }, error } = await supabase.auth.getSession();
+  
+  if (error || !session) {
+    throw new Error("User must be authenticated to upload files");
+  }
+  
+  // Check if token is about to expire (within 60 seconds)
+  const expiresAt = session.expires_at ?? 0;
+  const now = Math.floor(Date.now() / 1000);
+  const isExpiringSoon = expiresAt - now < 60;
+  
+  if (isExpiringSoon) {
+    console.log("[Resumable Upload] Token expiring soon, refreshing...");
+    const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+    
+    if (refreshError || !refreshData.session) {
+      console.error("[Resumable Upload] Failed to refresh token:", refreshError);
+      // Return existing token as fallback
+      return session.access_token;
+    }
+    
+    console.log("[Resumable Upload] Token refreshed successfully");
+    return refreshData.session.access_token;
+  }
+  
+  return session.access_token;
+}
+
+/**
  * Upload a file using the tus resumable upload protocol
  * Supports pause/resume and automatic retries on network failures
  */
@@ -43,34 +78,81 @@ export async function uploadResumable(
     retryDelays = DEFAULT_RETRY_DELAYS,
   } = options;
 
-  const supabase = createClient();
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 
-  // Get the current session for authentication
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
-    throw new Error("User must be authenticated to upload files");
-  }
+  // Get a fresh access token
+  const accessToken = await getFreshAccessToken();
+  
+  // Ensure we have a valid content type for the file
+  const contentType = file.type || getMimeTypeFromPath(path) || "application/octet-stream";
+  
+  console.log(`[Resumable Upload] Starting upload for ${path} (${formatBytes(file.size)}, type: ${contentType})`);
 
   return new Promise((resolve, reject) => {
+    let hasStarted = false;
+    
     const upload = new tus.Upload(file, {
       endpoint: `${supabaseUrl}/storage/v1/upload/resumable`,
       retryDelays,
       chunkSize,
       headers: {
-        authorization: `Bearer ${session.access_token}`,
+        authorization: `Bearer ${accessToken}`,
         "x-upsert": "false", // Don't overwrite existing files
       },
-      uploadDataDuringCreation: true,
+      // Disable uploadDataDuringCreation to prevent issues with initial request
+      // This makes the creation request smaller and more reliable
+      uploadDataDuringCreation: false,
       removeFingerprintOnSuccess: true, // Remove from localStorage on success
       metadata: {
         bucketName: bucket,
         objectName: path,
-        contentType: file.type || "application/octet-stream",
+        contentType: contentType,
         cacheControl: "3600",
       },
-      onError: (error) => {
-        console.error("[Resumable Upload] Error:", error);
+      onError: async (error) => {
+        const errorMessage = error?.message || String(error);
+        console.error("[Resumable Upload] Error:", errorMessage);
+        
+        // Check if this is a token/auth error and retry once with fresh token
+        if (!hasStarted && (
+          errorMessage.includes("XMLHttpRequestProgressEvent") ||
+          errorMessage.includes("n/a") ||
+          errorMessage.includes("401") ||
+          errorMessage.includes("unauthorized")
+        )) {
+          console.log("[Resumable Upload] Retrying with fresh token...");
+          
+          try {
+            const freshToken = await getFreshAccessToken();
+            
+            // Update the headers with fresh token and retry
+            upload.options.headers = {
+              ...upload.options.headers,
+              authorization: `Bearer ${freshToken}`,
+            };
+            
+            // Clear any previous upload state that might be corrupted
+            const previousUploads = await upload.findPreviousUploads();
+            for (const prev of previousUploads) {
+              // Remove corrupted previous upload entries
+              if (typeof window !== 'undefined' && window.localStorage) {
+                try {
+                  const key = `tus::${prev.urlStorageKey}`;
+                  window.localStorage.removeItem(key);
+                } catch {
+                  // Ignore localStorage errors
+                }
+              }
+            }
+            
+            hasStarted = true;
+            upload.start();
+            return;
+          } catch (retryError) {
+            console.error("[Resumable Upload] Retry failed:", retryError);
+          }
+        }
+        
         onProgress?.({
           bytesUploaded: 0,
           bytesTotal: file.size,
@@ -81,6 +163,7 @@ export async function uploadResumable(
         reject(error);
       },
       onProgress: (bytesUploaded, bytesTotal) => {
+        hasStarted = true;
         const percentage = Math.round((bytesUploaded / bytesTotal) * 100);
         onProgress?.({
           bytesUploaded,
@@ -90,6 +173,7 @@ export async function uploadResumable(
         });
       },
       onSuccess: () => {
+        console.log(`[Resumable Upload] Completed: ${path}`);
         onProgress?.({
           bytesUploaded: file.size,
           bytesTotal: file.size,
@@ -109,8 +193,38 @@ export async function uploadResumable(
         upload.resumeFromPreviousUpload(previousUploads[0]);
       }
       upload.start();
+    }).catch((err) => {
+      console.error("[Resumable Upload] Error finding previous uploads:", err);
+      // Start fresh upload anyway
+      upload.start();
     });
   });
+}
+
+/**
+ * Get MIME type from file path extension
+ */
+function getMimeTypeFromPath(path: string): string | null {
+  const ext = path.split('.').pop()?.toLowerCase();
+  const mimeTypes: Record<string, string> = {
+    // Video
+    'mp4': 'video/mp4',
+    'mov': 'video/quicktime',
+    'avi': 'video/x-msvideo',
+    'webm': 'video/webm',
+    'mkv': 'video/x-matroska',
+    'm4v': 'video/x-m4v',
+    '3gp': 'video/3gpp',
+    // Image
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'webp': 'image/webp',
+    'heic': 'image/heic',
+    'heif': 'image/heif',
+  };
+  return ext ? mimeTypes[ext] || null : null;
 }
 
 /**
