@@ -163,6 +163,8 @@ export interface DayGroup {
 export interface MilestoneGroup {
   milestone: Milestone | null;
   milestoneName: string;
+  /** The display number for this group - matches timeline position, or "A"/"B" for før/efter rejsen */
+  milestoneNumber: string;
   days: DayGroup[];
 }
 
@@ -273,11 +275,21 @@ export function groupPostsByMilestoneAndDay<T extends {
   // Build the result, only including milestones that have posts
   const result: MilestoneGroup[] = [];
   
+  // Create a map from milestone ID to its chronological position (1-indexed)
+  const chronologicalMilestones = [...milestones].sort(
+    (a, b) => a.display_order - b.display_order
+  );
+  const milestonePositionMap = new Map<string, number>();
+  chronologicalMilestones.forEach((m, idx) => {
+    milestonePositionMap.set(m.id, idx + 1);
+  });
+  
   // Add "Efter rejsen" first (newest - at the top)
   if (afterJourneyPosts.length > 0) {
     result.push({
       milestone: null,
       milestoneName: "Efter rejsen",
+      milestoneNumber: "B",
       days: createDayGroups(afterJourneyPosts),
     });
   }
@@ -304,6 +316,7 @@ export function groupPostsByMilestoneAndDay<T extends {
     result.push({
       milestone,
       milestoneName: milestone.name,
+      milestoneNumber: String(milestonePositionMap.get(milestone.id) ?? "?"),
       days,
     });
   }
@@ -313,6 +326,7 @@ export function groupPostsByMilestoneAndDay<T extends {
     result.push({
       milestone: null,
       milestoneName: "Før afrejse",
+      milestoneNumber: "A",
       days: createDayGroups(beforeJourneyPosts),
     });
   }
@@ -322,6 +336,7 @@ export function groupPostsByMilestoneAndDay<T extends {
     result.push({
       milestone: null,
       milestoneName: "Opslag",
+      milestoneNumber: "?",
       days: createDayGroups(unknownPosts),
     });
   }
