@@ -4,7 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { getMediaUrl } from "@/lib/upload";
-import { ChevronLeft, ChevronRight, X, Film, ZoomIn } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Film, ZoomIn, Play, Loader2 } from "lucide-react";
 import type { Media } from "@/types/database";
 
 interface MediaGalleryProps {
@@ -14,6 +14,24 @@ interface MediaGalleryProps {
 export function MediaGallery({ media }: MediaGalleryProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  
+  // Track which videos are playing (by media id)
+  const [playingVideos, setPlayingVideos] = useState<Set<string>>(new Set());
+  const [loadingVideos, setLoadingVideos] = useState<Set<string>>(new Set());
+  
+  const handlePlayVideo = (mediaId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLoadingVideos(prev => new Set(prev).add(mediaId));
+    setPlayingVideos(prev => new Set(prev).add(mediaId));
+  };
+  
+  const handleVideoCanPlay = (mediaId: string) => {
+    setLoadingVideos(prev => {
+      const next = new Set(prev);
+      next.delete(mediaId);
+      return next;
+    });
+  };
 
   if (media.length === 0) return null;
 
@@ -34,7 +52,7 @@ export function MediaGallery({ media }: MediaGalleryProps) {
         {/* Active media */}
         <div
           className="relative aspect-[4/3] md:aspect-video cursor-pointer"
-          onClick={() => setIsFullscreen(true)}
+          onClick={() => activeMedia.type === "image" && setIsFullscreen(true)}
         >
           {activeMedia.type === "image" ? (
             <Image
@@ -45,14 +63,58 @@ export function MediaGallery({ media }: MediaGalleryProps) {
               sizes="(max-width: 768px) 100vw, 800px"
               priority
             />
+          ) : playingVideos.has(activeMedia.id) ? (
+            // Video is playing - show actual video
+            <div className="relative w-full h-full">
+              <video
+                src={getMediaUrl(activeMedia.storage_path)}
+                controls
+                playsInline
+                autoPlay
+                preload="auto"
+                onCanPlay={() => handleVideoCanPlay(activeMedia.id)}
+                className="w-full h-full object-contain bg-black"
+                onClick={(e) => e.stopPropagation()}
+              />
+              {/* Loading overlay */}
+              {loadingVideos.has(activeMedia.id) && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
+                  <Loader2 className="h-10 w-10 text-white animate-spin" />
+                </div>
+              )}
+            </div>
           ) : (
-            <video
-              src={`${getMediaUrl(activeMedia.storage_path)}#t=0.001`}
-              controls
-              preload="metadata"
-              className="w-full h-full object-contain bg-black"
-              onClick={(e) => e.stopPropagation()}
-            />
+            // Video thumbnail with play button
+            <div 
+              className="relative w-full h-full group"
+              onClick={(e) => handlePlayVideo(activeMedia.id, e)}
+            >
+              {/* Thumbnail image or video fallback */}
+              {activeMedia.thumbnail_path ? (
+                <Image
+                  src={getMediaUrl(activeMedia.thumbnail_path)}
+                  alt=""
+                  fill
+                  className="object-contain bg-black"
+                  sizes="(max-width: 768px) 100vw, 800px"
+                  priority
+                />
+              ) : (
+                <video
+                  src={`${getMediaUrl(activeMedia.storage_path)}#t=0.001`}
+                  preload="metadata"
+                  muted
+                  playsInline
+                  className="w-full h-full object-contain bg-black pointer-events-none"
+                />
+              )}
+              {/* Play button overlay */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="p-5 bg-black/60 rounded-full group-hover:bg-black/80 group-hover:scale-110 transition-all">
+                  <Play className="h-12 w-12 text-white fill-white" />
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Zoom hint for images */}
@@ -134,6 +196,19 @@ export function MediaGallery({ media }: MediaGalleryProps) {
                   className="object-cover"
                   sizes="64px"
                 />
+              ) : item.thumbnail_path ? (
+                <div className="relative w-full h-full">
+                  <Image
+                    src={getMediaUrl(item.thumbnail_path)}
+                    alt=""
+                    fill
+                    className="object-cover"
+                    sizes="64px"
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Play className="h-4 w-4 text-white fill-white drop-shadow-md" />
+                  </div>
+                </div>
               ) : (
                 <div className="w-full h-full bg-navy/10 flex items-center justify-center">
                   <Film className="h-6 w-6 text-navy/40" />

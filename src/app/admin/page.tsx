@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PlusCircle, FileText, LogOut, Settings, Route } from "lucide-react";
+import { PlusCircle, FileText, LogOut, Settings, Route, Film } from "lucide-react";
 import { RecentPostsList } from "@/components/admin/RecentPostsList";
 
 export default async function AdminPage() {
@@ -60,6 +60,20 @@ export default async function AdminPage() {
               <div>
                 <h2 className="text-xl font-semibold text-navy">Rediger rejserute</h2>
                 <p className="text-muted-foreground">Tilføj og rediger destinationer</p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/admin/video-thumbnails" className="block">
+          <Card className="h-full hover:border-navy hover:shadow-md transition-all cursor-pointer group">
+            <CardContent className="flex items-center gap-4 p-6">
+              <div className="p-3 rounded-full bg-navy/10 text-navy group-hover:bg-navy group-hover:text-white transition-colors">
+                <Film className="h-8 w-8" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-navy">Video thumbnails</h2>
+                <p className="text-muted-foreground">Generer previews for videoer</p>
               </div>
             </CardContent>
           </Card>
