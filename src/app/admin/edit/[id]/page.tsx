@@ -223,6 +223,9 @@ export default function EditPostPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Prevent double-submit
+    if (isSubmitting) return;
+    
     if (!body.trim()) {
       setError("Skriv venligst noget tekst");
       return;

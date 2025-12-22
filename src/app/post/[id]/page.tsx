@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, MapPin, Calendar, Share2, Pencil } from "lucide-react";
+import { DeletePostButton } from "@/components/post/DeletePostButton";
 import { formatDate } from "@/lib/utils";
 import type { Metadata } from "next";
 import { getIsAuthor } from "@/lib/author";
@@ -124,6 +125,14 @@ export default async function PostPage({ params }: PageProps) {
                     <Pencil className="h-5 w-5" />
                   </Button>
                 </Link>
+              )}
+              
+              {/* Delete button - only for post author */}
+              {isPostAuthor && (
+                <DeletePostButton
+                  postId={post.id}
+                  mediaPaths={sortedMedia.map((m: { storage_path: string }) => m.storage_path)}
+                />
               )}
               
               {/* Share button */}
