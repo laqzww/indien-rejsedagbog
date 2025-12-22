@@ -289,7 +289,7 @@ export function groupPostsByMilestoneAndDay<T extends {
     result.push({
       milestone: null,
       milestoneName: "Efter rejsen",
-      milestoneNumber: "🛬",
+      milestoneNumber: "B",
       days: createDayGroups(afterJourneyPosts),
     });
   }
@@ -326,7 +326,7 @@ export function groupPostsByMilestoneAndDay<T extends {
     result.push({
       milestone: null,
       milestoneName: "Før afrejse",
-      milestoneNumber: "🛫",
+      milestoneNumber: "A",
       days: createDayGroups(beforeJourneyPosts),
     });
   }
