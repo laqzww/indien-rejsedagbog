@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateFilename, getFileType } from "@/lib/upload";
@@ -12,9 +12,34 @@ import { UploadProgressDisplay, type UploadStage } from "@/components/post/Uploa
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Send, Loader2, MapPin, Tag, MessageSquare, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Send, Loader2, MapPin, Tag, MessageSquare, AlertTriangle, Calendar } from "lucide-react";
 import Link from "next/link";
 import type { ExifData } from "@/lib/exif";
+
+// Helper to format date as Danish readable string
+function formatDateDanish(date: Date): string {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const compareDate = new Date(date);
+  compareDate.setHours(0, 0, 0, 0);
+  
+  const diffDays = Math.round((today.getTime() - compareDate.getTime()) / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) return "I dag";
+  if (diffDays === 1) return "I går";
+  if (diffDays === 2) return "For 2 dage siden";
+  
+  return date.toLocaleDateString("da-DK", { 
+    day: "numeric", 
+    month: "short",
+    year: date.getFullYear() !== today.getFullYear() ? "numeric" : undefined
+  });
+}
+
+// Helper to get date string for input (YYYY-MM-DD)
+function toDateInputValue(date: Date): string {
+  return date.toISOString().split("T")[0];
+}
 
 export default function NewPostPage() {
   const router = useRouter();
@@ -28,6 +53,34 @@ export default function NewPostPage() {
   const [files, setFiles] = useState<MediaFile[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Date picker state for retrospective posts
+  const [postDate, setPostDate] = useState<Date>(() => new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const datePickerRef = useRef<HTMLDivElement>(null);
+  
+  // Close date picker when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (datePickerRef.current && !datePickerRef.current.contains(event.target as Node)) {
+        setShowDatePicker(false);
+      }
+    }
+    
+    if (showDatePicker) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [showDatePicker]);
+  
+  // Check if using a custom date (not today)
+  const isCustomDate = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selected = new Date(postDate);
+    selected.setHours(0, 0, 0, 0);
+    return today.getTime() !== selected.getTime();
+  }, [postDate]);
   
   // Upload progress state
   const [uploadStage, setUploadStage] = useState<UploadStage>({
@@ -112,6 +165,26 @@ export default function NewPostPage() {
         message: "Opretter opslag...",
       });
 
+      // For retrospective posts, use the selected date with current time
+      // For today's posts, use the actual current time
+      const createdAtDate = (() => {
+        const now = new Date();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const selectedDay = new Date(postDate);
+        selectedDay.setHours(0, 0, 0, 0);
+        
+        if (today.getTime() === selectedDay.getTime()) {
+          // Today: use current time
+          return now;
+        } else {
+          // Retrospective: use selected date with current time of day
+          const retroDate = new Date(postDate);
+          retroDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+          return retroDate;
+        }
+      })();
+
       const { data: post, error: postError } = await supabase
         .from("posts")
         .insert({
@@ -122,8 +195,8 @@ export default function NewPostPage() {
           lng: location?.lng || null,
           location_name: location?.name || null,
           captured_at: capturedAt?.toISOString() || null,
-          // Use client's local time to ensure correct timezone for travel blog
-          created_at: new Date().toISOString(),
+          // Use selected date for retrospective posts, or current time for today
+          created_at: createdAtDate.toISOString(),
         })
         .select("id")
         .single();
@@ -255,6 +328,59 @@ export default function NewPostPage() {
           </Button>
         </Link>
         <h1 className="text-2xl font-bold text-navy">Nyt opslag</h1>
+        
+        {/* Date picker badge */}
+        <div className="relative ml-auto" ref={datePickerRef}>
+          <button
+            type="button"
+            onClick={() => setShowDatePicker(!showDatePicker)}
+            className={`
+              inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium
+              transition-all duration-200 hover:scale-105
+              ${isCustomDate 
+                ? "bg-saffron/20 text-saffron-dark border border-saffron/30" 
+                : "bg-muted text-muted-foreground hover:bg-muted/80"
+              }
+            `}
+            disabled={isSubmitting}
+          >
+            <Calendar className="h-3.5 w-3.5" />
+            <span>{formatDateDanish(postDate)}</span>
+          </button>
+          
+          {/* Date picker popover */}
+          {showDatePicker && (
+            <div className="absolute right-0 top-full mt-2 z-50 bg-white rounded-lg shadow-lg border p-3 min-w-[200px]">
+              <p className="text-xs text-muted-foreground mb-2">Vælg dato for opslaget</p>
+              <input
+                type="date"
+                value={toDateInputValue(postDate)}
+                max={toDateInputValue(new Date())}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    // Parse date and set to noon to avoid timezone issues
+                    const [year, month, day] = e.target.value.split("-").map(Number);
+                    const newDate = new Date(year, month - 1, day, 12, 0, 0);
+                    setPostDate(newDate);
+                  }
+                }}
+                className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-saffron"
+              />
+              {isCustomDate && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPostDate(new Date());
+                    setShowDatePicker(false);
+                  }}
+                  className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Nulstil til i dag
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
