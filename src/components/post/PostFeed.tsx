@@ -7,7 +7,7 @@ import { ChevronDown, Calendar } from "lucide-react";
 import type { MilestoneGroup, DayGroup } from "@/lib/journey";
 
 // Context to share scroll state between components
-const ScrollContext = createContext<{ isScrolling: boolean }>({ isScrolling: false });
+const ScrollContext = createContext<{ showHeaders: boolean }>({ showHeaders: true });
 
 interface PostFeedProps {
   groups: MilestoneGroup[];
@@ -15,10 +15,33 @@ interface PostFeedProps {
 
 export function PostFeed({ groups }: PostFeedProps) {
   const [isScrolling, setIsScrolling] = useState(false);
+  const [isAtTop, setIsAtTop] = useState(true);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const handleScroll = () => {
+    // Find the scrollable container (the parent with overflow-y-auto)
+    const findScrollContainer = (): HTMLElement | null => {
+      let el = containerRef.current?.parentElement;
+      while (el) {
+        const style = getComputedStyle(el);
+        if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+          return el;
+        }
+        el = el.parentElement;
+      }
+      return null;
+    };
+
+    const scrollContainer = findScrollContainer();
+
+    const handleScroll = (e: Event) => {
+      const target = e.target as HTMLElement;
+      
+      // Check if we're at the top of the scroll container
+      const scrollTop = target.scrollTop ?? 0;
+      setIsAtTop(scrollTop < 10); // Consider "at top" if within 10px
+
       // Show headers when scrolling starts
       setIsScrolling(true);
 
@@ -33,10 +56,16 @@ export function PostFeed({ groups }: PostFeedProps) {
       }, 1500);
     };
 
-    // Listen to scroll on the main scrollable container (parent of this component)
+    // Listen to scroll on the main scrollable container
+    if (scrollContainer) {
+      scrollContainer.addEventListener("scroll", handleScroll);
+    }
     window.addEventListener("scroll", handleScroll, true);
 
     return () => {
+      if (scrollContainer) {
+        scrollContainer.removeEventListener("scroll", handleScroll);
+      }
       window.removeEventListener("scroll", handleScroll, true);
       if (scrollTimeoutRef.current) {
         clearTimeout(scrollTimeoutRef.current);
@@ -44,9 +73,12 @@ export function PostFeed({ groups }: PostFeedProps) {
     };
   }, []);
 
+  // Show headers when at top OR when actively scrolling
+  const showHeaders = isAtTop || isScrolling;
+
   return (
-    <ScrollContext.Provider value={{ isScrolling }}>
-      <div className="space-y-0">
+    <ScrollContext.Provider value={{ showHeaders }}>
+      <div ref={containerRef} className="space-y-0">
         {groups.map((group, index) => (
           <MilestoneSection key={group.milestone?.id || "unknown"} group={group} index={index} />
         ))}
@@ -62,13 +94,13 @@ interface MilestoneSectionProps {
 
 function MilestoneSection({ group, index }: MilestoneSectionProps) {
   const [isExpanded, setIsExpanded] = useState(index === 0); // First milestone expanded by default
-  const { isScrolling } = useContext(ScrollContext);
+  const { showHeaders } = useContext(ScrollContext);
 
   const totalPosts = group.days.reduce((sum, day) => sum + day.posts.length, 0);
 
   return (
     <section className="border-b border-border last:border-b-0">
-      {/* Milestone header - sticky, solid background, auto-hide when not scrolling */}
+      {/* Milestone header - sticky, solid background, auto-hide when not scrolling (but visible at top) */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
@@ -77,8 +109,8 @@ function MilestoneSection({ group, index }: MilestoneSectionProps) {
           "flex items-center justify-between px-4 py-3",
           "hover:from-[#ffead6] hover:to-[#e5f5e1] transition-all duration-300",
           "border-b border-border",
-          // Auto-hide when not scrolling
-          isScrolling 
+          // Auto-hide when not scrolling (but always visible at top)
+          showHeaders 
             ? "opacity-100 translate-y-0" 
             : "opacity-0 -translate-y-full pointer-events-none"
         )}
@@ -124,17 +156,17 @@ interface DaySectionProps {
 }
 
 function DaySection({ day }: DaySectionProps) {
-  const { isScrolling } = useContext(ScrollContext);
+  const { showHeaders } = useContext(ScrollContext);
   
   return (
     <div>
-      {/* Day header - solid background, auto-hide when not scrolling */}
+      {/* Day header - solid background, auto-hide when not scrolling (but visible at top) */}
       <div 
         className={cn(
           "sticky top-[57px] z-10 bg-white px-4 py-2 border-b border-border/50",
           "transition-all duration-300",
-          // Auto-hide when not scrolling
-          isScrolling 
+          // Auto-hide when not scrolling (but always visible at top)
+          showHeaders 
             ? "opacity-100 translate-y-0" 
             : "opacity-0 -translate-y-full pointer-events-none"
         )}
