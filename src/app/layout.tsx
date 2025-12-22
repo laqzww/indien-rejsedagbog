@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Outfit, JetBrains_Mono } from "next/font/google";
+import { Outfit, JetBrains_Mono, Tillana } from "next/font/google";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -11,6 +11,12 @@ const outfit = Outfit({
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+const tillana = Tillana({
+  variable: "--font-tillana",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -42,7 +48,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${outfit.variable} ${jetbrainsMono.variable} antialiased min-h-screen`}
+        className={`${outfit.variable} ${jetbrainsMono.variable} ${tillana.variable} antialiased min-h-screen`}
       >
         {children}
       </body>

@@ -21,12 +21,12 @@ export function Header({
   useLinks = false,
 }: HeaderProps) {
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+    <header className="sticky top-0 z-50 w-full bg-saffron shadow-md">
       <div className="container mx-auto px-4">
         <div className="flex h-14 items-center justify-between">
           {/* Logo - always links to home */}
           <Link href="/" className="flex-shrink-0">
-            <Logo size="sm" />
+            <Logo size="sm" variant="light" />
           </Link>
 
           {/* Icon Navigation */}
@@ -39,8 +39,8 @@ export function Header({
                   className={cn(
                     "p-2.5 rounded-lg transition-all",
                     activeView === "feed"
-                      ? "bg-saffron text-white"
-                      : "text-muted-foreground hover:bg-muted hover:text-navy"
+                      ? "bg-white/25 text-white"
+                      : "text-white/80 hover:bg-white/15 hover:text-white"
                   )}
                   aria-label="Opslag"
                   title="Opslag"
@@ -53,8 +53,8 @@ export function Header({
                   className={cn(
                     "p-2.5 rounded-lg transition-all",
                     activeView === "feed"
-                      ? "bg-saffron text-white"
-                      : "text-muted-foreground hover:bg-muted hover:text-navy"
+                      ? "bg-white/25 text-white"
+                      : "text-white/80 hover:bg-white/15 hover:text-white"
                   )}
                   aria-label="Opslag"
                   title="Opslag"
@@ -70,8 +70,8 @@ export function Header({
                   className={cn(
                     "p-2.5 rounded-lg transition-all",
                     activeView === "map"
-                      ? "bg-saffron text-white"
-                      : "text-muted-foreground hover:bg-muted hover:text-navy"
+                      ? "bg-white/25 text-white"
+                      : "text-white/80 hover:bg-white/15 hover:text-white"
                   )}
                   aria-label="Kort"
                   title="Kort"
@@ -84,8 +84,8 @@ export function Header({
                   className={cn(
                     "p-2.5 rounded-lg transition-all",
                     activeView === "map"
-                      ? "bg-saffron text-white"
-                      : "text-muted-foreground hover:bg-muted hover:text-navy"
+                      ? "bg-white/25 text-white"
+                      : "text-white/80 hover:bg-white/15 hover:text-white"
                   )}
                   aria-label="Kort"
                   title="Kort"
@@ -101,8 +101,8 @@ export function Header({
                   className={cn(
                     "p-2.5 rounded-lg transition-all ml-1",
                     activeView === "admin"
-                      ? "bg-saffron text-white"
-                      : "text-muted-foreground hover:bg-muted hover:text-navy"
+                      ? "bg-white/25 text-white"
+                      : "text-white/80 hover:bg-white/15 hover:text-white"
                   )}
                   aria-label="Admin"
                   title="Admin"
