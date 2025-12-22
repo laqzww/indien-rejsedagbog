@@ -6,6 +6,7 @@ import { Camera, X, Loader2, MapPinOff, Film } from "lucide-react";
 import { isHeicFile, convertHeicToJpeg } from "@/lib/heic";
 import { extractExifData, type ExifData } from "@/lib/exif";
 import { compressImage, shouldCompress, formatFileSize } from "@/lib/image-compression";
+import { generateVideoThumbnail } from "@/lib/video-thumbnail";
 import { MediaSortable, type SortableMediaItem } from "./MediaSortable";
 import { MAX_FILE_SIZE_MB, MAX_FILE_SIZE_BYTES, formatBytes } from "@/lib/resumable-upload";
 
@@ -23,6 +24,10 @@ export interface MediaFile {
   hasGps?: boolean; // Explicit GPS status
   originalSize?: number; // Original file size
   compressedSize?: number; // Compressed file size
+  // Video thumbnail
+  thumbnailBlob?: Blob; // JPEG thumbnail for video first frame
+  thumbnailWidth?: number;
+  thumbnailHeight?: number;
 }
 
 interface MediaUploadProps {
@@ -136,9 +141,25 @@ export function MediaUpload({
           mediaFile.preview = URL.createObjectURL(blobToCompress);
         }
       } else {
-        // Video - no compression, use original file as-is
-        mediaFile.preview = URL.createObjectURL(file);
+        // Video - generate thumbnail and use original file
         mediaFile.uploadBlob = file;
+        
+        try {
+          // Generate thumbnail from first frame
+          const thumbnail = await generateVideoThumbnail(file);
+          mediaFile.thumbnailBlob = thumbnail.blob;
+          mediaFile.thumbnailWidth = thumbnail.width;
+          mediaFile.thumbnailHeight = thumbnail.height;
+          // Use thumbnail as preview image
+          mediaFile.preview = URL.createObjectURL(thumbnail.blob);
+          console.log(
+            `Generated thumbnail for ${file.name}: ${thumbnail.width}x${thumbnail.height} (${formatFileSize(thumbnail.blob.size)})`
+          );
+        } catch (error) {
+          console.error("Thumbnail generation failed:", error);
+          // Fallback to video preview (will show black initially)
+          mediaFile.preview = URL.createObjectURL(file);
+        }
       }
 
       mediaFile.isConverting = false;

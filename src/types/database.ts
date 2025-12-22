@@ -68,6 +68,7 @@ export type Database = {
           mime_type: string | null
           post_id: string
           storage_path: string
+          thumbnail_path: string | null
           type: string
           width: number | null
         }
@@ -83,6 +84,7 @@ export type Database = {
           mime_type?: string | null
           post_id: string
           storage_path: string
+          thumbnail_path?: string | null
           type: string
           width?: number | null
         }
@@ -98,6 +100,7 @@ export type Database = {
           mime_type?: string | null
           post_id?: string
           storage_path?: string
+          thumbnail_path?: string | null
           type?: string
           width?: number | null
         }

@@ -213,7 +213,11 @@ export default function NewPostPage() {
         });
 
         // Prepare upload items - use uploadBlob (compressed) when available
-        const uploadItems: UploadItem[] = files.map((mediaFile, i) => {
+        // Also include thumbnail uploads for videos
+        const uploadItems: UploadItem[] = [];
+        const thumbnailMap = new Map<string, string>(); // mediaFile.id -> thumbnail upload id
+        
+        files.forEach((mediaFile, i) => {
           const filename = generateFilename(mediaFile.file.name, i);
           const type = getFileType(mediaFile.file);
           
@@ -227,12 +231,28 @@ export default function NewPostPage() {
           }
           const path = `${user.id}/${post.id}/${finalFilename}`;
           
-          return {
+          uploadItems.push({
             id: mediaFile.id,
             file: mediaFile.uploadBlob || mediaFile.file,
             path,
             isVideo: type === "video", // Enable resumable upload for videos
-          };
+          });
+          
+          // Add thumbnail upload for videos
+          if (type === "video" && mediaFile.thumbnailBlob) {
+            const thumbId = `${mediaFile.id}-thumb`;
+            const thumbFilename = finalFilename.replace(/\.[^.]+$/, "-thumb.jpg");
+            const thumbPath = `${user.id}/${post.id}/${thumbFilename}`;
+            
+            uploadItems.push({
+              id: thumbId,
+              file: mediaFile.thumbnailBlob,
+              path: thumbPath,
+              isVideo: false,
+            });
+            
+            thumbnailMap.set(mediaFile.id, thumbId);
+          }
         });
 
         // Upload all files in parallel with progress tracking
@@ -269,9 +289,19 @@ export default function NewPostPage() {
             ? mediaFile.file.type 
             : "image/jpeg";
 
+          // Get thumbnail path for videos
+          let thumbnailPath: string | null = null;
+          if (type === "video") {
+            const thumbId = thumbnailMap.get(mediaFile.id);
+            if (thumbId) {
+              thumbnailPath = uploadResults.get(thumbId) ?? null;
+            }
+          }
+
           return {
             post_id: post.id,
             storage_path: storagePath,
+            thumbnail_path: thumbnailPath,
             type,
             mime_type: mimeType,
             width,

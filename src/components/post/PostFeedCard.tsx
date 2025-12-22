@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { getMediaUrl } from "@/lib/upload";
-import { MapPin, ChevronLeft, ChevronRight, Film } from "lucide-react";
+import { MapPin, ChevronLeft, ChevronRight, Play, Loader2 } from "lucide-react";
 import { formatDayLabel } from "@/lib/journey";
 import type { PostWithDayInfo } from "@/lib/journey";
 
@@ -19,6 +19,23 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  
+  // Track which videos are playing (by media id)
+  const [playingVideos, setPlayingVideos] = useState<Set<string>>(new Set());
+  const [loadingVideos, setLoadingVideos] = useState<Set<string>>(new Set());
+  
+  const handlePlayVideo = (mediaId: string) => {
+    setLoadingVideos(prev => new Set(prev).add(mediaId));
+    setPlayingVideos(prev => new Set(prev).add(mediaId));
+  };
+  
+  const handleVideoCanPlay = (mediaId: string) => {
+    setLoadingVideos(prev => {
+      const next = new Set(prev);
+      next.delete(mediaId);
+      return next;
+    });
+  };
 
   // Sort media by display_order to ensure correct order
   const sortedMedia = [...post.media].sort(
@@ -151,14 +168,57 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
                   sizes="100vw"
                   priority={index === 0}
                 />
+              ) : playingVideos.has(media.id) ? (
+                // Video is playing - show actual video
+                <div className="relative w-full h-full">
+                  <video
+                    src={getMediaUrl(media.storage_path)}
+                    controls
+                    playsInline
+                    autoPlay
+                    preload="auto"
+                    onCanPlay={() => handleVideoCanPlay(media.id)}
+                    className="w-full h-full object-contain bg-black"
+                  />
+                  {/* Loading overlay */}
+                  {loadingVideos.has(media.id) && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                      <Loader2 className="h-10 w-10 text-white animate-spin" />
+                    </div>
+                  )}
+                </div>
               ) : (
-                <video
-                  src={`${getMediaUrl(media.storage_path)}#t=0.001`}
-                  controls
-                  playsInline
-                  preload="metadata"
-                  className="w-full h-full object-cover"
-                />
+                // Video thumbnail with play button
+                <div 
+                  className="relative w-full h-full cursor-pointer group"
+                  onClick={() => handlePlayVideo(media.id)}
+                >
+                  {/* Thumbnail image or video fallback */}
+                  {media.thumbnail_path ? (
+                    <Image
+                      src={getMediaUrl(media.thumbnail_path)}
+                      alt=""
+                      fill
+                      className="object-cover"
+                      sizes="100vw"
+                      priority={index === 0}
+                    />
+                  ) : (
+                    <video
+                      src={`${getMediaUrl(media.storage_path)}#t=0.001`}
+                      preload="metadata"
+                      muted
+                      playsInline
+                      className="w-full h-full object-cover pointer-events-none"
+                    />
+                  )}
+                  {/* Play button overlay */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="p-4 bg-black/60 rounded-full group-hover:bg-black/80 group-hover:scale-110 transition-all">
+                      <Play className="h-10 w-10 text-white fill-white" />
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           ))}
@@ -185,12 +245,6 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
             </>
           )}
 
-          {/* Media type indicator */}
-          {sortedMedia[activeIndex]?.type === "video" && (
-            <div className="absolute top-3 right-3 p-1.5 bg-black/60 rounded-lg">
-              <Film className="h-4 w-4 text-white" />
-            </div>
-          )}
 
           {/* Dots indicator */}
           {mediaCount > 1 && (

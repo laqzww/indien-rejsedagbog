@@ -113,6 +113,7 @@ export interface PostWithDayInfo {
     id: string;
     type: string;
     storage_path: string;
+    thumbnail_path: string | null;
     width: number | null;
     height: number | null;
     display_order: number;
@@ -151,6 +152,7 @@ export function groupPostsByMilestoneAndDay<T extends {
     id: string;
     type: string;
     storage_path: string;
+    thumbnail_path: string | null;
     width: number | null;
     height: number | null;
     display_order: number;

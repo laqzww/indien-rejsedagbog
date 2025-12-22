@@ -5,7 +5,7 @@ import Image from "next/image";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { MapPin, Calendar, ImageIcon, Film } from "lucide-react";
+import { MapPin, Calendar, ImageIcon, Film, Play } from "lucide-react";
 import { formatRelativeDate } from "@/lib/utils";
 import { getMediaUrl } from "@/lib/upload";
 
@@ -21,6 +21,7 @@ interface PostCardData {
     id: string;
     type: string;
     storage_path: string;
+    thumbnail_path: string | null;
     width: number | null;
     height: number | null;
     display_order: number;
@@ -82,17 +83,28 @@ export function PostCard({ post, index = 0 }: PostCardProps) {
               />
             ) : (
               <>
-                <video
-                  src={`${getMediaUrl(firstMedia.storage_path)}#t=0.001`}
-                  preload="metadata"
-                  muted
-                  playsInline
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
-                {/* Video indicator overlay */}
+                {/* Video thumbnail - use stored thumbnail or fallback to video frame */}
+                {firstMedia.thumbnail_path ? (
+                  <Image
+                    src={getMediaUrl(firstMedia.thumbnail_path)}
+                    alt=""
+                    fill
+                    className="object-cover group-hover:scale-105 transition-transform duration-300"
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                  />
+                ) : (
+                  <video
+                    src={`${getMediaUrl(firstMedia.storage_path)}#t=0.001`}
+                    preload="metadata"
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                )}
+                {/* Play button overlay */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="p-3 bg-black/50 rounded-full">
-                    <Film className="h-8 w-8 text-white" />
+                  <div className="p-3 bg-black/50 rounded-full group-hover:bg-black/70 group-hover:scale-110 transition-all">
+                    <Play className="h-8 w-8 text-white fill-white" />
                   </div>
                 </div>
               </>
