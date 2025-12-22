@@ -21,6 +21,10 @@ module.exports = {
           DEFAULT: '#000080',
           light: '#1a1a9a',
         },
+        cream: {
+          DEFAULT: '#FFFDD0',
+          dark: '#F5F5DC',
+        },
         background: '#ffffff',
         foreground: '#1a1a2e',
         muted: {
@@ -59,6 +63,7 @@ module.exports = {
       fontFamily: {
         sans: ['var(--font-outfit)', 'system-ui', 'sans-serif'],
         mono: ['var(--font-geist-mono)', 'monospace'],
+        tillana: ['var(--font-tillana)', 'serif'],
       },
       keyframes: {
         'fade-in': {
