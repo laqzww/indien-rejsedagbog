@@ -197,9 +197,9 @@ export function groupPostsByMilestoneAndDay<T extends {
     }
   }
   
-  // Sort milestones by display_order
+  // Sort milestones by display_order (descending - newest/most recent first)
   const sortedMilestones = [...milestones].sort(
-    (a, b) => a.display_order - b.display_order
+    (a, b) => b.display_order - a.display_order
   );
   
   // Build the result, only including milestones that have posts
@@ -230,7 +230,7 @@ export function groupPostsByMilestoneAndDay<T extends {
     });
   }
   
-  // Add unknown posts if any
+  // Add unknown posts if any (at the end, since they are oldest - before journey started)
   if (unknownPosts.length > 0) {
     const dayMap = new Map<number, PostWithDayInfo[]>();
     for (const post of unknownPosts) {
@@ -242,7 +242,7 @@ export function groupPostsByMilestoneAndDay<T extends {
     
     const sortedDays = Array.from(dayMap.entries()).sort((a, b) => b[0] - a[0]);
     
-    result.unshift({
+    result.push({
       milestone: null,
       milestoneName: "Før afrejse",
       days: sortedDays.map(([dayNumber, dayPosts]) => ({
