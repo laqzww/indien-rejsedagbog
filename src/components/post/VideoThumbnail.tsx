@@ -72,6 +72,7 @@ export function VideoThumbnail({
   };
 
   // If video is being played, render the video element
+  // Use object-cover to match thumbnail format and avoid black bars
   if (isPlaying) {
     return (
       <div className={cn("relative w-full h-full bg-black", className)}>
@@ -85,7 +86,7 @@ export function VideoThumbnail({
           preload="auto"
           onCanPlay={handleCanPlay}
           onError={handleError}
-          className="w-full h-full object-contain"
+          className="w-full h-full object-cover"
         />
         
         {/* Loading overlay */}

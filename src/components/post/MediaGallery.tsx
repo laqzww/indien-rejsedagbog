@@ -64,7 +64,7 @@ export function MediaGallery({ media }: MediaGalleryProps) {
               priority
             />
           ) : playingVideos.has(activeMedia.id) ? (
-            // Video is playing - show actual video
+            // Video is playing - show actual video (object-cover to match thumbnail)
             <div className="relative w-full h-full">
               <video
                 src={getMediaUrl(activeMedia.storage_path)}
@@ -73,7 +73,7 @@ export function MediaGallery({ media }: MediaGalleryProps) {
                 autoPlay
                 preload="auto"
                 onCanPlay={() => handleVideoCanPlay(activeMedia.id)}
-                className="w-full h-full object-contain bg-black"
+                className="w-full h-full object-cover bg-black"
                 onClick={(e) => e.stopPropagation()}
               />
               {/* Loading overlay */}
