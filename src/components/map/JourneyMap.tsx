@@ -347,9 +347,9 @@ export function JourneyMap({
       // Note: Posts are intentionally excluded from bounds calculation
       // so the map focuses on the main journey route in India
 
-      // Calculate 15% padding based on container size for consistent margin
+      // Calculate 20% padding based on container size for consistent margin
       const container = mapInstance.getContainer();
-      const paddingPercent = 0.15;
+      const paddingPercent = 0.20;
       const horizontalPadding = Math.round(container.clientWidth * paddingPercent);
       const verticalPadding = Math.round(container.clientHeight * paddingPercent);
 
