@@ -122,6 +122,8 @@ export default function NewPostPage() {
           lng: location?.lng || null,
           location_name: location?.name || null,
           captured_at: capturedAt?.toISOString() || null,
+          // Use client's local time to ensure correct timezone for travel blog
+          created_at: new Date().toISOString(),
         })
         .select("id")
         .single();
