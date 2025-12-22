@@ -118,7 +118,7 @@ function MilestoneSection({ group, index }: MilestoneSectionProps) {
         <div className="flex items-center gap-3">
           {/* Milestone number badge */}
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-saffron to-saffron-dark text-white flex items-center justify-center text-sm font-bold shadow-sm">
-            {index + 1}
+            {group.milestoneNumber}
           </div>
           <div className="text-left">
             <h2 className="font-bold text-foreground text-base leading-tight">
