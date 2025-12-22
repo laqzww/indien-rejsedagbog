@@ -169,7 +169,7 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
                   priority={index === 0}
                 />
               ) : playingVideos.has(media.id) ? (
-                // Video is playing - show actual video
+                // Video is playing - show actual video (object-cover to match thumbnail)
                 <div className="relative w-full h-full">
                   <video
                     src={getMediaUrl(media.storage_path)}
@@ -178,7 +178,7 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
                     autoPlay
                     preload="auto"
                     onCanPlay={() => handleVideoCanPlay(media.id)}
-                    className="w-full h-full object-contain bg-black"
+                    className="w-full h-full object-cover bg-black"
                   />
                   {/* Loading overlay */}
                   {loadingVideos.has(media.id) && (
