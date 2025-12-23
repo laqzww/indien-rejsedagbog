@@ -72,6 +72,11 @@ export default function EditPostPage() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const datePickerRef = useRef<HTMLDivElement>(null);
   
+  // Ref to always have access to the latest postDate value
+  // This avoids stale closure issues in handleSubmit
+  const postDateRef = useRef<Date>(postDate);
+  const originalPostDateRef = useRef<Date | null>(null);
+  
   // Existing media from the database
   const [existingMedia, setExistingMedia] = useState<ExistingMediaItem[]>([]);
   const [mediaToDelete, setMediaToDelete] = useState<ExistingMediaItem[]>([]);
@@ -91,6 +96,15 @@ export default function EditPostPage() {
   useEffect(() => {
     mediaToDeleteRef.current = mediaToDelete;
   }, [mediaToDelete]);
+
+  // Keep the postDate refs in sync with the state
+  useEffect(() => {
+    postDateRef.current = postDate;
+  }, [postDate]);
+
+  useEffect(() => {
+    originalPostDateRef.current = originalPostDate;
+  }, [originalPostDate]);
   
   // Close date picker when clicking outside
   useEffect(() => {
@@ -225,6 +239,9 @@ export default function EditPostPage() {
           const createdDate = new Date(post.created_at);
           setPostDate(createdDate);
           setOriginalPostDate(createdDate);
+          // Also update refs immediately
+          postDateRef.current = createdDate;
+          originalPostDateRef.current = createdDate;
         }
         
         // Sort media by display_order (handle null/undefined for legacy data)
@@ -323,10 +340,24 @@ export default function EditPostPage() {
       // Calculate created_at if date was changed
       // If user changed the date, use selected date with original time-of-day
       // Otherwise keep the original created_at
+      // Use refs to avoid stale closure issues (similar to existingMediaRef pattern)
       let newCreatedAt: string | undefined;
-      if (isCustomDate && originalPostDate) {
-        const originalTime = originalPostDate;
-        const newDate = new Date(postDate);
+      const currentPostDate = postDateRef.current;
+      const currentOriginalPostDate = originalPostDateRef.current;
+      
+      // Calculate isCustomDate using ref values to ensure we have the latest
+      const dateWasChanged = (() => {
+        if (!currentOriginalPostDate) return false;
+        const original = new Date(currentOriginalPostDate);
+        original.setHours(0, 0, 0, 0);
+        const selected = new Date(currentPostDate);
+        selected.setHours(0, 0, 0, 0);
+        return original.getTime() !== selected.getTime();
+      })();
+      
+      if (dateWasChanged && currentOriginalPostDate) {
+        const originalTime = currentOriginalPostDate;
+        const newDate = new Date(currentPostDate);
         newDate.setHours(
           originalTime.getHours(),
           originalTime.getMinutes(),
@@ -700,6 +731,8 @@ export default function EditPostPage() {
                     // Parse date and set to noon to avoid timezone issues
                     const [year, month, day] = e.target.value.split("-").map(Number);
                     const newDate = new Date(year, month - 1, day, 12, 0, 0);
+                    // Update ref synchronously to avoid stale closure issues
+                    postDateRef.current = newDate;
                     setPostDate(newDate);
                   }
                 }}
@@ -709,6 +742,8 @@ export default function EditPostPage() {
                 <button
                   type="button"
                   onClick={() => {
+                    // Update ref synchronously to avoid stale closure issues
+                    postDateRef.current = originalPostDate;
                     setPostDate(originalPostDate);
                     setShowDatePicker(false);
                   }}
