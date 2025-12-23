@@ -33,7 +33,13 @@ export const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 // Use 5MB chunks for better compatibility with Supabase's limits
 // Smaller chunks are more reliable for slower connections
 const DEFAULT_CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
-const DEFAULT_RETRY_DELAYS = [0, 1000, 3000, 5000, 10000]; // Retry delays with longer final delay
+
+// Longer retry delays for better recovery from network issues
+// TUS will automatically retry with these delays when a chunk fails
+const DEFAULT_RETRY_DELAYS = [0, 2000, 5000, 10000, 20000, 30000]; // Up to 30s final delay
+
+// Token refresh threshold - refresh if expiring within 5 minutes
+const TOKEN_REFRESH_THRESHOLD_SECONDS = 5 * 60;
 
 /**
  * Get a fresh access token, refreshing if needed
@@ -45,13 +51,13 @@ async function getFreshAccessToken(): Promise<string> {
   const { data: { session }, error } = await supabase.auth.getSession();
   
   if (error || !session) {
-    throw new Error("User must be authenticated to upload files");
+    throw new Error("Bruger skal være logget ind for at uploade filer");
   }
   
-  // Check if token is about to expire (within 60 seconds)
+  // Check if token is about to expire (within threshold)
   const expiresAt = session.expires_at ?? 0;
   const now = Math.floor(Date.now() / 1000);
-  const isExpiringSoon = expiresAt - now < 60;
+  const isExpiringSoon = expiresAt - now < TOKEN_REFRESH_THRESHOLD_SECONDS;
   
   if (isExpiringSoon) {
     console.log("[Resumable Upload] Token expiring soon, refreshing...");
@@ -82,38 +88,80 @@ export function validateFileSize(file: Blob): string | null {
 }
 
 /**
- * Parse TUS error to get a user-friendly message
+ * Error types for better handling
  */
-function parseTusError(error: Error | unknown): { isFileTooLarge: boolean; message: string } {
+type TusErrorType = "file_too_large" | "auth" | "network" | "timeout" | "server" | "unknown";
+
+interface ParsedTusError {
+  type: TusErrorType;
+  isRetryable: boolean;
+  message: string;
+}
+
+/**
+ * Parse TUS error to get a user-friendly message and determine if retryable
+ */
+function parseTusError(error: Error | unknown): ParsedTusError {
   const errorMessage = error instanceof Error ? error.message : String(error);
+  const lowerMessage = errorMessage.toLowerCase();
   
   // Check for 413 errors (file too large)
-  if (errorMessage.includes("413") || errorMessage.toLowerCase().includes("maximum size exceeded")) {
+  if (errorMessage.includes("413") || lowerMessage.includes("maximum size exceeded") || lowerMessage.includes("payload too large")) {
     return {
-      isFileTooLarge: true,
+      type: "file_too_large",
+      isRetryable: false,
       message: "Filen overstiger Supabase's filstørrelsesbegrænsning. Kontrollér dine Supabase Storage indstillinger eller komprimer videoen."
     };
   }
   
   // Check for auth errors
-  if (errorMessage.includes("401") || errorMessage.toLowerCase().includes("unauthorized")) {
+  if (errorMessage.includes("401") || errorMessage.includes("403") || lowerMessage.includes("unauthorized") || lowerMessage.includes("forbidden")) {
     return {
-      isFileTooLarge: false,
-      message: "Autentificeringsfejl. Prøv at logge ind igen."
+      type: "auth",
+      isRetryable: true, // Can retry with fresh token
+      message: "Autentificeringsfejl. Prøver at genopfriske login..."
     };
   }
   
-  // Check for network errors
-  if (errorMessage.includes("XMLHttpRequestProgressEvent") || errorMessage.includes("network")) {
+  // Check for timeout errors
+  if (lowerMessage.includes("timeout") || lowerMessage.includes("timed out") || lowerMessage.includes("aborted")) {
     return {
-      isFileTooLarge: false,
-      message: "Netværksfejl under upload. Prøv igen."
+      type: "timeout",
+      isRetryable: true,
+      message: "Forbindelsen fik timeout. Prøver igen..."
+    };
+  }
+  
+  // Check for network/connection errors
+  if (
+    errorMessage.includes("XMLHttpRequestProgressEvent") || 
+    lowerMessage.includes("network") ||
+    lowerMessage.includes("connection") ||
+    lowerMessage.includes("failed to fetch") ||
+    lowerMessage.includes("load failed") ||
+    lowerMessage.includes("net::") ||
+    lowerMessage.includes("err_")
+  ) {
+    return {
+      type: "network",
+      isRetryable: true,
+      message: "Netværksfejl under upload. Prøver igen..."
+    };
+  }
+  
+  // Check for server errors (5xx)
+  if (errorMessage.includes("500") || errorMessage.includes("502") || errorMessage.includes("503") || errorMessage.includes("504")) {
+    return {
+      type: "server",
+      isRetryable: true,
+      message: "Serverfejl. Prøver igen om lidt..."
     };
   }
   
   return {
-    isFileTooLarge: false,
-    message: errorMessage
+    type: "unknown",
+    isRetryable: true, // Assume unknown errors are retryable
+    message: errorMessage || "Ukendt fejl under upload"
   };
 }
 
@@ -179,10 +227,11 @@ export async function uploadResumable(
         
         // Parse the error for better handling
         const parsedError = parseTusError(error);
+        console.log(`[Resumable Upload] Error type: ${parsedError.type}, retryable: ${parsedError.isRetryable}`);
         
-        // If file is too large, don't retry - it won't help
-        if (parsedError.isFileTooLarge) {
-          console.error("[Resumable Upload] File too large for Supabase, not retrying");
+        // If error is not retryable (e.g., file too large), fail immediately
+        if (!parsedError.isRetryable) {
+          console.error("[Resumable Upload] Non-retryable error, failing immediately");
           onProgress?.({
             bytesUploaded: 0,
             bytesTotal: file.size,
@@ -195,14 +244,9 @@ export async function uploadResumable(
           return;
         }
         
-        // Check if this is a token/auth error and retry once with fresh token
-        if (!hasStarted && (
-          errorMessage.includes("XMLHttpRequestProgressEvent") ||
-          errorMessage.includes("n/a") ||
-          errorMessage.includes("401") ||
-          errorMessage.includes("unauthorized")
-        )) {
-          console.log("[Resumable Upload] Retrying with fresh token...");
+        // For auth errors or initial connection failures, try with fresh token
+        if (!hasStarted && (parsedError.type === "auth" || parsedError.type === "network")) {
+          console.log("[Resumable Upload] Attempting recovery with fresh token...");
           
           try {
             const freshToken = await getFreshAccessToken();
@@ -228,10 +272,17 @@ export async function uploadResumable(
             }
             
             hasStarted = true;
+            
+            // Add a small delay before retrying for network issues
+            if (parsedError.type === "network") {
+              console.log("[Resumable Upload] Waiting 2s before retry...");
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+            
             upload.start();
             return;
           } catch (retryError) {
-            console.error("[Resumable Upload] Retry failed:", retryError);
+            console.error("[Resumable Upload] Recovery failed:", retryError);
           }
         }
         

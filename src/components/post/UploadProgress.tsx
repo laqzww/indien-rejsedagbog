@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { CheckCircle2, AlertCircle, Loader2, Upload, ImageIcon, Film, Zap } from "lucide-react";
+import { CheckCircle2, AlertCircle, Loader2, Upload, ImageIcon, Film, Zap, Clock } from "lucide-react";
 import type { UploadProgress as UploadProgressType } from "@/lib/parallel-upload";
 
 export interface UploadStage {
@@ -54,6 +54,8 @@ function getStatusText(status: UploadProgressType["status"], retryCount?: number
       return "Fejl";
     case "pending":
       return "Venter...";
+    case "waiting":
+      return "I kø...";
     default:
       return "";
   }
@@ -117,7 +119,7 @@ export function UploadProgressDisplay({
             const fileType = fileTypes?.get(id) || "image";
             const isRetrying = progress.status === "retrying";
             return (
-              <div
+                <div
                 key={id}
                 className={cn(
                   "flex items-center gap-2 p-2 rounded-lg text-sm transition-colors",
@@ -125,7 +127,8 @@ export function UploadProgressDisplay({
                   progress.status === "error" && "bg-destructive/10",
                   progress.status === "uploading" && "bg-saffron/10",
                   progress.status === "retrying" && "bg-amber-500/10",
-                  progress.status === "pending" && "bg-muted"
+                  progress.status === "pending" && "bg-muted",
+                  progress.status === "waiting" && "bg-muted/50"
                 )}
               >
                 {/* File type icon */}
@@ -148,7 +151,8 @@ export function UploadProgressDisplay({
                           progress.status === "error" && "bg-destructive",
                           progress.status === "uploading" && "bg-saffron",
                           progress.status === "retrying" && "bg-amber-500",
-                          progress.status === "pending" && "bg-muted-foreground/30"
+                          progress.status === "pending" && "bg-muted-foreground/30",
+                          progress.status === "waiting" && "bg-muted-foreground/20"
                         )}
                         style={{ width: `${progress.progress}%` }}
                       />
@@ -157,10 +161,16 @@ export function UploadProgressDisplay({
                       {progress.progress}%
                     </span>
                   </div>
-                  {/* Show retry status */}
-                  {isRetrying && (
+                  {/* Show retry status with wait time */}
+                  {isRetrying && progress.error && (
                     <div className="text-xs text-amber-600 mt-0.5">
-                      {getStatusText(progress.status, progress.retryCount)}
+                      {progress.error}
+                    </div>
+                  )}
+                  {/* Show waiting status */}
+                  {progress.status === "waiting" && (
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {getStatusText(progress.status)}
                     </div>
                   )}
                   {/* Show error message */}
@@ -192,6 +202,9 @@ export function UploadProgressDisplay({
                 )}
                 {progress.status === "retrying" && (
                   <Loader2 className="h-4 w-4 text-amber-500 animate-spin flex-shrink-0" />
+                )}
+                {(progress.status === "pending" || progress.status === "waiting") && (
+                  <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 )}
               </div>
             );
