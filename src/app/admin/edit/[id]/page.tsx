@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateFilename, getFileType, deleteMedia, getMediaUrl } from "@/lib/upload";
-import { uploadFilesInParallel, calculateOverallProgress, type UploadProgress, type UploadItem } from "@/lib/parallel-upload";
+import { uploadFilesInParallel, calculateOverallProgress, type UploadProgress, type UploadItem, type ParallelUploadResult } from "@/lib/parallel-upload";
 import { MediaUpload, type MediaFile } from "@/components/post/MediaUpload";
 import { MediaSortable, type SortableMediaItem } from "@/components/post/MediaSortable";
 import { LocationPicker } from "@/components/post/LocationPicker";
@@ -444,6 +444,9 @@ export default function EditPostPage() {
       // Get current highest display_order
       const startOrder = currentExistingMedia.length;
 
+      // Track upload result for partial failure reporting
+      let uploadResult: ParallelUploadResult | null = null;
+
       // STAGE 2: Upload new media files in parallel
       if (newFiles.length > 0) {
         setUploadStage({
@@ -496,77 +499,105 @@ export default function EditPostPage() {
         });
 
         // Upload all files in parallel with progress tracking
-        const uploadResults = await uploadFilesInParallel(uploadItems, {
-          concurrency: 3,
+        uploadResult = await uploadFilesInParallel(uploadItems, {
           onProgress: (progress) => {
             setFileProgress(progress);
             setOverallProgress(calculateOverallProgress(progress));
           },
         });
 
-        // STAGE 3: Save media records (batch insert)
-        setUploadStage({
-          stage: "saving",
-          message: "Gemmer medieoplysninger...",
-          detail: `Registrerer ${newFiles.length} filer i databasen`,
-        });
-
-        // Prepare all media records for batch insert
-        const mediaRecords = newFiles.map((mediaFile, i) => {
-          const storagePath = uploadResults.get(mediaFile.id);
-          if (!storagePath) {
-            throw new Error(`Upload failed for file ${i + 1}`);
-          }
-
-          const type = getFileType(mediaFile.file);
+        // Check for failed uploads
+        if (uploadResult.hasFailures) {
+          const failedCount = uploadResult.failed.size;
+          const successCount = uploadResult.results.size;
           
-          // Use compressed dimensions if available, otherwise fall back to EXIF
-          const width = mediaFile.compressedWidth ?? mediaFile.exif?.width ?? null;
-          const height = mediaFile.compressedHeight ?? mediaFile.exif?.height ?? null;
-
-          // Determine mime_type: JPEG for compressed images, original for videos
-          const mimeType = type === "video" 
-            ? mediaFile.file.type 
-            : "image/jpeg";
-
-          // Get thumbnail path for videos
-          let thumbnailPath: string | null = null;
-          if (type === "video") {
-            const thumbId = thumbnailMap.get(mediaFile.id);
-            if (thumbId) {
-              thumbnailPath = uploadResults.get(thumbId) ?? null;
-            }
+          // If ALL uploads failed, throw an error
+          if (successCount === 0) {
+            const firstError = Array.from(uploadResult.failed.values())[0];
+            throw new Error(`Alle uploads fejlede: ${firstError}`);
           }
+          
+          // Log which files failed
+          console.warn(`[Upload] ${failedCount} file(s) failed to upload:`, 
+            Array.from(uploadResult.failed.entries())
+          );
+        }
 
-          return {
-            post_id: postId,
-            storage_path: storagePath,
-            thumbnail_path: thumbnailPath,
-            type,
-            mime_type: mimeType,
-            width,
-            height,
-            exif_data: mediaFile.exif?.raw ?? null,
-            lat: mediaFile.exif?.lat ?? null,
-            lng: mediaFile.exif?.lng ?? null,
-            captured_at: mediaFile.exif?.capturedAt?.toISOString() ?? null,
-            display_order: startOrder + i,
-          };
-        });
+        // STAGE 3: Save media records (batch insert)
+        // Only save records for files that were successfully uploaded
+        const successfulFiles = newFiles.filter(f => uploadResult!.results.has(f.id));
+        
+        if (successfulFiles.length === 0 && newFiles.length > 0) {
+          throw new Error("Ingen filer blev uploadet succesfuldt");
+        }
+        
+        if (successfulFiles.length > 0) {
+          setUploadStage({
+            stage: "saving",
+            message: "Gemmer medieoplysninger...",
+            detail: `Registrerer ${successfulFiles.length} filer i databasen`,
+          });
 
-        // Batch insert all media records at once
-        const { error: mediaError } = await supabase
-          .from("media")
-          .insert(mediaRecords);
+          // Prepare all media records for batch insert
+          const mediaRecords = successfulFiles.map((mediaFile, i) => {
+            const storagePath = uploadResult!.results.get(mediaFile.id);
+            if (!storagePath) {
+              throw new Error(`Upload failed for file ${i + 1}`);
+            }
 
-        if (mediaError) throw mediaError;
+            const type = getFileType(mediaFile.file);
+            
+            // Use compressed dimensions if available, otherwise fall back to EXIF
+            const width = mediaFile.compressedWidth ?? mediaFile.exif?.width ?? null;
+            const height = mediaFile.compressedHeight ?? mediaFile.exif?.height ?? null;
+
+            // Determine mime_type: JPEG for compressed images, original for videos
+            const mimeType = type === "video" 
+              ? mediaFile.file.type 
+              : "image/jpeg";
+
+            // Get thumbnail path for videos
+            let thumbnailPath: string | null = null;
+            if (type === "video") {
+              const thumbId = thumbnailMap.get(mediaFile.id);
+              if (thumbId) {
+                thumbnailPath = uploadResult!.results.get(thumbId) ?? null;
+              }
+            }
+
+            return {
+              post_id: postId,
+              storage_path: storagePath,
+              thumbnail_path: thumbnailPath,
+              type,
+              mime_type: mimeType,
+              width,
+              height,
+              exif_data: mediaFile.exif?.raw ?? null,
+              lat: mediaFile.exif?.lat ?? null,
+              lng: mediaFile.exif?.lng ?? null,
+              captured_at: mediaFile.exif?.capturedAt?.toISOString() ?? null,
+              display_order: startOrder + i,
+            };
+          });
+
+          // Batch insert all media records at once
+          const { error: mediaError } = await supabase
+            .from("media")
+            .insert(mediaRecords);
+
+          if (mediaError) throw mediaError;
+        }
       }
 
       // STAGE 4: Complete
+      const hasPartialFailure = newFiles.length > 0 && uploadResult?.hasFailures;
       setUploadStage({
         stage: "complete",
-        message: "Ændringer gemt! 🎉",
-        detail: "Sender dig til opslaget...",
+        message: hasPartialFailure ? "Ændringer gemt (med nogle fejl) ⚠️" : "Ændringer gemt! 🎉",
+        detail: hasPartialFailure 
+          ? `${uploadResult?.failed.size ?? 0} filer kunne ikke uploades` 
+          : "Sender dig til opslaget...",
       });
 
       // Small delay so user can see the success message
