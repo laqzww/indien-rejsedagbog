@@ -234,14 +234,16 @@ export default function EditPostPage() {
           });
         }
         
-        // Set post date from created_at
-        if (post.created_at) {
-          const createdDate = new Date(post.created_at);
-          setPostDate(createdDate);
-          setOriginalPostDate(createdDate);
+        // Set post date from captured_at (if available) or created_at
+        // This matches the display logic in PostCard/PostFeedCard
+        const displayDate = post.captured_at || post.created_at;
+        if (displayDate) {
+          const dateValue = new Date(displayDate);
+          setPostDate(dateValue);
+          setOriginalPostDate(dateValue);
           // Also update refs immediately
-          postDateRef.current = createdDate;
-          originalPostDateRef.current = createdDate;
+          postDateRef.current = dateValue;
+          originalPostDateRef.current = dateValue;
         }
         
         // Sort media by display_order (handle null/undefined for legacy data)
@@ -337,11 +339,11 @@ export default function EditPostPage() {
         message: "Opdaterer opslag...",
       });
 
-      // Calculate created_at if date was changed
+      // Calculate new date values if date was changed
       // If user changed the date, use selected date with original time-of-day
-      // Otherwise keep the original created_at
+      // We update captured_at (which is used for display) and keep created_at as-is
       // Use refs to avoid stale closure issues (similar to existingMediaRef pattern)
-      let newCreatedAt: string | undefined;
+      let newCapturedAt: string | undefined;
       const currentPostDate = postDateRef.current;
       const currentOriginalPostDate = originalPostDateRef.current;
       
@@ -364,7 +366,7 @@ export default function EditPostPage() {
           originalTime.getSeconds(),
           originalTime.getMilliseconds()
         );
-        newCreatedAt = newDate.toISOString();
+        newCapturedAt = newDate.toISOString();
       }
 
       const { error: updateError } = await supabase
@@ -376,8 +378,8 @@ export default function EditPostPage() {
           lng: location?.lng || null,
           location_name: location?.name || null,
           updated_at: new Date().toISOString(),
-          // Only update created_at if date was changed
-          ...(newCreatedAt && { created_at: newCreatedAt }),
+          // Update captured_at if date was changed (this is the field used for display)
+          ...(newCapturedAt && { captured_at: newCapturedAt }),
         })
         .eq("id", postId)
         .eq("author_id", user.id); // Extra safety check
