@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { generateFilename, getFileType } from "@/lib/upload";
-import { uploadFilesInParallel, calculateOverallProgress, type UploadProgress, type UploadItem } from "@/lib/parallel-upload";
+import { uploadFilesInParallel, calculateOverallProgress, type UploadProgress, type UploadItem, type ParallelUploadResult } from "@/lib/parallel-upload";
 import { MediaUpload, type MediaFile } from "@/components/post/MediaUpload";
 import { LocationPicker } from "@/components/post/LocationPicker";
 import { TagInput } from "@/components/post/TagInput";
@@ -204,6 +204,9 @@ export default function NewPostPage() {
       if (postError) throw postError;
       if (!post) throw new Error("Kunne ikke oprette opslaget");
 
+      // Track upload result for partial failure reporting
+      let uploadResult: ParallelUploadResult | null = null;
+
       // STAGE 2: Upload media files in parallel
       if (files.length > 0) {
         setUploadStage({
@@ -256,24 +259,47 @@ export default function NewPostPage() {
         });
 
         // Upload all files in parallel with progress tracking
-        const uploadResults = await uploadFilesInParallel(uploadItems, {
-          concurrency: 3,
+        uploadResult = await uploadFilesInParallel(uploadItems, {
           onProgress: (progress) => {
             setFileProgress(progress);
             setOverallProgress(calculateOverallProgress(progress));
           },
         });
 
+        // Check for failed uploads
+        if (uploadResult.hasFailures) {
+          const failedCount = uploadResult.failed.size;
+          const successCount = uploadResult.results.size;
+          
+          // If ALL uploads failed, throw an error
+          if (successCount === 0) {
+            const firstError = Array.from(uploadResult.failed.values())[0];
+            throw new Error(`Alle uploads fejlede: ${firstError}`);
+          }
+          
+          // Log which files failed
+          console.warn(`[Upload] ${failedCount} file(s) failed to upload:`, 
+            Array.from(uploadResult.failed.entries())
+          );
+        }
+
         // STAGE 3: Save media records (batch insert)
+        // Only save records for files that were successfully uploaded
+        const successfulFiles = files.filter(f => uploadResult!.results.has(f.id));
+        
+        if (successfulFiles.length === 0) {
+          throw new Error("Ingen filer blev uploadet succesfuldt");
+        }
+        
         setUploadStage({
           stage: "saving",
           message: "Gemmer medieoplysninger...",
-          detail: `Registrerer ${files.length} filer i databasen`,
+          detail: `Registrerer ${successfulFiles.length} filer i databasen`,
         });
 
         // Prepare all media records for batch insert
-        const mediaRecords = files.map((mediaFile, i) => {
-          const storagePath = uploadResults.get(mediaFile.id);
+        const mediaRecords = successfulFiles.map((mediaFile, i) => {
+          const storagePath = uploadResult!.results.get(mediaFile.id);
           if (!storagePath) {
             throw new Error(`Upload failed for file ${i + 1}`);
           }
@@ -294,7 +320,7 @@ export default function NewPostPage() {
           if (type === "video") {
             const thumbId = thumbnailMap.get(mediaFile.id);
             if (thumbId) {
-              thumbnailPath = uploadResults.get(thumbId) ?? null;
+              thumbnailPath = uploadResult!.results.get(thumbId) ?? null;
             }
           }
 
@@ -323,10 +349,13 @@ export default function NewPostPage() {
       }
 
       // STAGE 4: Complete
+      const hasPartialFailure = files.length > 0 && uploadResult?.hasFailures;
       setUploadStage({
         stage: "complete",
-        message: "Opslag delt! 🎉",
-        detail: "Sender dig til opslaget...",
+        message: hasPartialFailure ? "Opslag delt (med nogle fejl) ⚠️" : "Opslag delt! 🎉",
+        detail: hasPartialFailure 
+          ? `${uploadResult?.failed.size ?? 0} filer kunne ikke uploades` 
+          : "Sender dig til opslaget...",
       });
 
       // Small delay so user can see the success message

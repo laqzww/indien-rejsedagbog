@@ -12,31 +12,85 @@ export interface UploadItem {
 
 export interface UploadProgress {
   id: string;
-  status: "pending" | "uploading" | "completed" | "error";
+  status: "pending" | "uploading" | "completed" | "error" | "retrying";
   progress: number; // 0-100
   error?: string;
   bytesUploaded?: number;
   bytesTotal?: number;
+  retryCount?: number;
+}
+
+export interface ParallelUploadResult {
+  results: Map<string, string>;
+  failed: Map<string, string>; // id -> error message
+  hasFailures: boolean;
 }
 
 export interface ParallelUploadOptions {
   concurrency?: number;
   onProgress?: (progress: Map<string, UploadProgress>) => void;
+  maxRetries?: number; // Number of retries per file (default: 2)
+  failSoft?: boolean; // Continue uploading other files even if one fails (default: true)
 }
 
 const DEFAULT_CONCURRENCY = 3;
+const DEFAULT_MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 1000; // Wait 1 second before retrying
+
+/**
+ * Calculate optimal concurrency based on file count and sizes
+ */
+function calculateOptimalConcurrency(items: UploadItem[]): number {
+  const totalSize = items.reduce((sum, item) => sum + item.file.size, 0);
+  const avgSize = totalSize / items.length;
+  const hasLargeFiles = items.some(item => item.file.size > 50 * 1024 * 1024); // 50MB+
+  const hasVideos = items.some(item => item.isVideo);
+  
+  // For many files or large files, reduce concurrency to avoid overwhelming the connection
+  if (items.length > 10 || hasLargeFiles) {
+    return 2;
+  }
+  
+  // For video-heavy uploads, use lower concurrency
+  if (hasVideos && avgSize > 20 * 1024 * 1024) {
+    return 2;
+  }
+  
+  // Standard concurrency for smaller batches
+  return DEFAULT_CONCURRENCY;
+}
+
+/**
+ * Sleep for a specified number of milliseconds
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 /**
  * Upload multiple files in parallel with concurrency limit
  * Automatically uses resumable upload for large files (videos)
- * Returns a map of item id -> upload result path
+ * Returns a result object with successful uploads and any failures
+ * 
+ * Features:
+ * - Automatic retry on failure (configurable)
+ * - Fail-soft mode: continues with other files even if one fails
+ * - Dynamic concurrency based on file sizes
  */
 export async function uploadFilesInParallel(
   items: UploadItem[],
   options: ParallelUploadOptions = {}
-): Promise<Map<string, string>> {
-  const { concurrency = DEFAULT_CONCURRENCY, onProgress } = options;
+): Promise<ParallelUploadResult> {
+  const { 
+    concurrency = calculateOptimalConcurrency(items), 
+    onProgress,
+    maxRetries = DEFAULT_MAX_RETRIES,
+    failSoft = true,
+  } = options;
+  
   const supabase = createClient();
+
+  console.log(`[Upload] Starting parallel upload of ${items.length} files with concurrency ${concurrency}`);
 
   // Initialize progress tracking
   const progressMap = new Map<string, UploadProgress>();
@@ -47,20 +101,22 @@ export async function uploadFilesInParallel(
       progress: 0,
       bytesTotal: item.file.size,
       bytesUploaded: 0,
+      retryCount: 0,
     });
   }
 
   // Notify initial progress
   onProgress?.(new Map(progressMap));
 
-  // Results map
+  // Results and failures maps
   const results = new Map<string, string>();
+  const failed = new Map<string, string>();
 
   // Process items with concurrency limit
   const queue = [...items];
   const inFlight = new Set<Promise<void>>();
 
-  const processItem = async (item: UploadItem) => {
+  const processItem = async (item: UploadItem, retryCount: number = 0): Promise<void> => {
     // Determine if we should use resumable upload
     const useResumable = item.isVideo || shouldUseResumableUpload(item.file);
 
@@ -74,25 +130,28 @@ export async function uploadFilesInParallel(
         error: sizeError,
         bytesTotal: item.file.size,
         bytesUploaded: 0,
+        retryCount,
       });
       onProgress?.(new Map(progressMap));
-      throw new Error(sizeError);
+      failed.set(item.id, sizeError);
+      return; // Don't throw - just mark as failed and continue
     }
 
-    // Update status to uploading
+    // Update status to uploading (or retrying)
     progressMap.set(item.id, {
       id: item.id,
-      status: "uploading",
-      progress: useResumable ? 0 : 10, // Resumable starts at 0, regular at 10
+      status: retryCount > 0 ? "retrying" : "uploading",
+      progress: useResumable ? 0 : 10,
       bytesTotal: item.file.size,
       bytesUploaded: 0,
+      retryCount,
     });
     onProgress?.(new Map(progressMap));
 
     try {
       if (useResumable) {
         // Use resumable upload for large files (videos)
-        console.log(`[Upload] Using resumable upload for ${item.path} (${(item.file.size / 1024 / 1024).toFixed(1)} MB)`);
+        console.log(`[Upload] Using resumable upload for ${item.path} (${(item.file.size / 1024 / 1024).toFixed(1)} MB)${retryCount > 0 ? ` [Retry ${retryCount}]` : ''}`);
         
         try {
           await uploadResumable(item.file, item.path, {
@@ -103,6 +162,7 @@ export async function uploadFilesInParallel(
                 progress: progress.percentage,
                 bytesUploaded: progress.bytesUploaded,
                 bytesTotal: progress.bytesTotal,
+                retryCount,
               });
               onProgress?.(new Map(progressMap));
             },
@@ -118,6 +178,7 @@ export async function uploadFilesInParallel(
             progress: 100,
             bytesUploaded: item.file.size,
             bytesTotal: item.file.size,
+            retryCount,
           });
           onProgress?.(new Map(progressMap));
           results.set(item.id, item.path);
@@ -129,13 +190,14 @@ export async function uploadFilesInParallel(
           if (fileSizeMB <= 50) {
             console.log(`[Upload] Falling back to regular upload for ${item.path} (${fileSizeMB.toFixed(1)} MB)`);
             
-            // Reset progress for retry
+            // Reset progress for fallback
             progressMap.set(item.id, {
               id: item.id,
               status: "uploading",
               progress: 5,
               bytesTotal: item.file.size,
               bytesUploaded: 0,
+              retryCount,
             });
             onProgress?.(new Map(progressMap));
             
@@ -158,6 +220,7 @@ export async function uploadFilesInParallel(
               progress: 100,
               bytesUploaded: item.file.size,
               bytesTotal: item.file.size,
+              retryCount,
             });
             onProgress?.(new Map(progressMap));
             results.set(item.id, item.path);
@@ -168,6 +231,8 @@ export async function uploadFilesInParallel(
         }
       } else {
         // Use regular upload for smaller files (images)
+        console.log(`[Upload] Using regular upload for ${item.path} (${(item.file.size / 1024 / 1024).toFixed(1)} MB)${retryCount > 0 ? ` [Retry ${retryCount}]` : ''}`);
+        
         // Simulate progress updates during upload
         // (Supabase JS doesn't expose upload progress, so we simulate it)
         const progressInterval = setInterval(() => {
@@ -203,23 +268,56 @@ export async function uploadFilesInParallel(
           progress: 100,
           bytesUploaded: item.file.size,
           bytesTotal: item.file.size,
+          retryCount,
         });
         onProgress?.(new Map(progressMap));
 
         results.set(item.id, item.path);
       }
     } catch (err) {
-      // Mark as error
+      const errorMessage = err instanceof Error ? err.message : "Upload failed";
+      console.error(`[Upload] Error uploading ${item.path}:`, errorMessage);
+      
+      // Check if we should retry
+      if (retryCount < maxRetries) {
+        console.log(`[Upload] Scheduling retry ${retryCount + 1}/${maxRetries} for ${item.path}`);
+        
+        progressMap.set(item.id, {
+          id: item.id,
+          status: "retrying",
+          progress: 0,
+          error: `Prøver igen (${retryCount + 1}/${maxRetries})...`,
+          bytesTotal: item.file.size,
+          bytesUploaded: 0,
+          retryCount: retryCount + 1,
+        });
+        onProgress?.(new Map(progressMap));
+        
+        // Wait before retrying (exponential backoff)
+        await sleep(RETRY_DELAY_MS * (retryCount + 1));
+        
+        // Retry the upload
+        return processItem(item, retryCount + 1);
+      }
+      
+      // Max retries exceeded - mark as permanently failed
       progressMap.set(item.id, {
         id: item.id,
         status: "error",
         progress: 0,
-        error: err instanceof Error ? err.message : "Upload failed",
+        error: errorMessage,
         bytesTotal: item.file.size,
         bytesUploaded: 0,
+        retryCount,
       });
       onProgress?.(new Map(progressMap));
-      throw err;
+      
+      failed.set(item.id, errorMessage);
+      
+      // In fail-soft mode, don't throw - just continue with other files
+      if (!failSoft) {
+        throw err;
+      }
     }
   };
 
@@ -240,7 +338,13 @@ export async function uploadFilesInParallel(
     }
   }
 
-  return results;
+  console.log(`[Upload] Completed: ${results.size} successful, ${failed.size} failed`);
+
+  return {
+    results,
+    failed,
+    hasFailures: failed.size > 0,
+  };
 }
 
 /**

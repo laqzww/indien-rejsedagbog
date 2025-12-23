@@ -181,38 +181,49 @@ export function MediaUpload({
       if (tooLargeFiles.length > 0) {
         const fileNames = tooLargeFiles.map(f => `${f.name} (${formatBytes(f.size)})`).join(", ");
         alert(`Følgende filer er for store (maks ${MAX_FILE_SIZE_MB}MB):\n${fileNames}\n\nPrøv at komprimere videoerne før upload.`);
-        // Filter out the too-large files and continue with the rest
-        const validFiles = filesToProcess.filter(f => f.size <= MAX_FILE_SIZE_BYTES);
-        if (validFiles.length === 0) return;
+      }
+      
+      // Filter out the too-large files and continue with the rest
+      const validFiles = filesToProcess.filter(f => f.size <= MAX_FILE_SIZE_BYTES);
+      if (validFiles.length === 0) return;
+
+      // Process files in chunks to avoid memory issues with many large files
+      // Process 3 files at a time to balance speed and memory usage
+      const CHUNK_SIZE = 3;
+      const allProcessedFiles: MediaFile[] = [];
+      let firstExifData: ExifData | undefined;
+      
+      for (let i = 0; i < validFiles.length; i += CHUNK_SIZE) {
+        const chunk = validFiles.slice(i, i + CHUNK_SIZE);
         
-        // Process only valid files
-        const processedFiles = await Promise.all(
-          validFiles.map((f) => processFile(f))
-        );
-
-        const newFileList = [...files, ...processedFiles];
-        onFilesChange(newFileList);
-
-        const firstImageWithExif = processedFiles.find(f => f.exif);
-        if (firstImageWithExif?.exif && onExifExtracted) {
-          onExifExtracted(firstImageWithExif.exif);
+        try {
+          // Process this chunk in parallel
+          const processedChunk = await Promise.all(
+            chunk.map((f) => processFile(f))
+          );
+          
+          allProcessedFiles.push(...processedChunk);
+          
+          // Update UI progressively with each chunk
+          const newFileList = [...files, ...allProcessedFiles];
+          onFilesChange(newFileList);
+          
+          // Capture first EXIF data for location auto-fill
+          if (!firstExifData) {
+            const fileWithExif = processedChunk.find(f => f.exif);
+            if (fileWithExif?.exif) {
+              firstExifData = fileWithExif.exif;
+            }
+          }
+        } catch (error) {
+          console.error(`Error processing file chunk ${i / CHUNK_SIZE + 1}:`, error);
+          // Continue with next chunk even if this one failed
         }
-        return;
       }
 
-      // Process all files in parallel (now that videos don't need heavy processing)
-      const processedFiles = await Promise.all(
-        filesToProcess.map((f) => processFile(f))
-      );
-
-      // Update with processed files
-      const newFileList = [...files, ...processedFiles];
-      onFilesChange(newFileList);
-
       // Notify about first file's EXIF data (for auto-filling location)
-      const firstImageWithExif = processedFiles.find(f => f.exif);
-      if (firstImageWithExif?.exif && onExifExtracted) {
-        onExifExtracted(firstImageWithExif.exif);
+      if (firstExifData && onExifExtracted) {
+        onExifExtracted(firstExifData);
       }
     },
     [files, maxFiles, onFilesChange, onExifExtracted, processFile]

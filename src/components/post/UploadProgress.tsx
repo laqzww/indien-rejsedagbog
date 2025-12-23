@@ -41,6 +41,24 @@ const stageIcons: Record<UploadStage["stage"], React.ReactNode> = {
   error: <AlertCircle className="h-5 w-5 text-destructive" />,
 };
 
+// Helper to get status display text
+function getStatusText(status: UploadProgressType["status"], retryCount?: number): string {
+  switch (status) {
+    case "retrying":
+      return retryCount ? `Prøver igen (${retryCount})...` : "Prøver igen...";
+    case "uploading":
+      return "Uploader...";
+    case "completed":
+      return "Færdig";
+    case "error":
+      return "Fejl";
+    case "pending":
+      return "Venter...";
+    default:
+      return "";
+  }
+}
+
 /**
  * Format bytes to human readable string
  */
@@ -97,6 +115,7 @@ export function UploadProgressDisplay({
         <div className="space-y-2 max-h-48 overflow-y-auto">
           {Array.from(fileProgress.entries()).map(([id, progress]) => {
             const fileType = fileTypes?.get(id) || "image";
+            const isRetrying = progress.status === "retrying";
             return (
               <div
                 key={id}
@@ -105,6 +124,7 @@ export function UploadProgressDisplay({
                   progress.status === "completed" && "bg-india-green/10",
                   progress.status === "error" && "bg-destructive/10",
                   progress.status === "uploading" && "bg-saffron/10",
+                  progress.status === "retrying" && "bg-amber-500/10",
                   progress.status === "pending" && "bg-muted"
                 )}
               >
@@ -127,6 +147,7 @@ export function UploadProgressDisplay({
                           progress.status === "completed" && "bg-india-green",
                           progress.status === "error" && "bg-destructive",
                           progress.status === "uploading" && "bg-saffron",
+                          progress.status === "retrying" && "bg-amber-500",
                           progress.status === "pending" && "bg-muted-foreground/30"
                         )}
                         style={{ width: `${progress.progress}%` }}
@@ -136,8 +157,20 @@ export function UploadProgressDisplay({
                       {progress.progress}%
                     </span>
                   </div>
+                  {/* Show retry status */}
+                  {isRetrying && (
+                    <div className="text-xs text-amber-600 mt-0.5">
+                      {getStatusText(progress.status, progress.retryCount)}
+                    </div>
+                  )}
+                  {/* Show error message */}
+                  {progress.status === "error" && progress.error && (
+                    <div className="text-xs text-destructive mt-0.5 truncate" title={progress.error}>
+                      {progress.error}
+                    </div>
+                  )}
                   {/* Show byte progress for videos */}
-                  {fileType === "video" && progress.bytesTotal && progress.bytesTotal > 0 && (
+                  {fileType === "video" && progress.bytesTotal && progress.bytesTotal > 0 && !isRetrying && progress.status !== "error" && (
                     <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
                       <Zap className="h-3 w-3" />
                       <span>
@@ -156,6 +189,9 @@ export function UploadProgressDisplay({
                 )}
                 {progress.status === "uploading" && (
                   <Loader2 className="h-4 w-4 text-saffron animate-spin flex-shrink-0" />
+                )}
+                {progress.status === "retrying" && (
+                  <Loader2 className="h-4 w-4 text-amber-500 animate-spin flex-shrink-0" />
                 )}
               </div>
             );
