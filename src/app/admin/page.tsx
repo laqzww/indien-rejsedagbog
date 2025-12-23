@@ -5,17 +5,22 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PlusCircle, FileText, LogOut, Settings, Route } from "lucide-react";
 import { RecentPostsList } from "@/components/admin/RecentPostsList";
 
+const INITIAL_POSTS_LIMIT = 20;
+
 export default async function AdminPage() {
   const supabase = await createClient();
   
   const { data: { user } } = await supabase.auth.getUser();
 
-  const { data: recentPosts } = await supabase
+  const { data: posts, count } = await supabase
     .from("posts")
-    .select("id, body, location_name, created_at")
+    .select("id, body, location_name, created_at", { count: "exact" })
     .eq("author_id", user!.id)
     .order("created_at", { ascending: false })
-    .limit(5);
+    .limit(INITIAL_POSTS_LIMIT);
+  
+  const totalPosts = count || 0;
+  const hasMorePosts = totalPosts > INITIAL_POSTS_LIMIT;
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -67,16 +72,20 @@ export default async function AdminPage() {
 
       </div>
 
-      {/* Recent posts */}
+      {/* All posts */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-saffron" />
-            Seneste opslag
+            Alle opslag
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <RecentPostsList initialPosts={recentPosts || []} />
+          <RecentPostsList 
+            initialPosts={posts || []} 
+            initialTotal={totalPosts}
+            initialHasMore={hasMorePosts}
+          />
         </CardContent>
       </Card>
     </div>
