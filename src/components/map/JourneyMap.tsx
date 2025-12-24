@@ -28,6 +28,9 @@ interface JourneyMapProps {
   focusZoom?: number; // defaults to 14 (neighborhood level)
 }
 
+// Zoom level at which post markers become visible
+const POST_VISIBILITY_ZOOM = 9;
+
 export function JourneyMap({
   milestones,
   posts,
@@ -42,15 +45,27 @@ export function JourneyMap({
 }: JourneyMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
-  const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const milestoneMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  const postMarkersRef = useRef<mapboxgl.Marker[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
   const initAttempted = useRef(false);
 
   // Cleanup function to remove all markers
   const cleanupMarkers = useCallback(() => {
-    markersRef.current.forEach((marker) => marker.remove());
-    markersRef.current = [];
+    milestoneMarkersRef.current.forEach((marker) => marker.remove());
+    milestoneMarkersRef.current = [];
+    postMarkersRef.current.forEach((marker) => marker.remove());
+    postMarkersRef.current = [];
+  }, []);
+
+  // Update post marker visibility based on zoom level
+  const updatePostVisibility = useCallback((zoom: number) => {
+    const shouldShow = zoom >= POST_VISIBILITY_ZOOM;
+    postMarkersRef.current.forEach((marker) => {
+      const el = marker.getElement();
+      el.style.display = shouldShow ? "block" : "none";
+    });
   }, []);
 
   // Initialize map
@@ -244,7 +259,51 @@ export function JourneyMap({
     const markerSize = isMobileDevice ? "w-10 h-10 text-base" : "w-8 h-8 text-sm";
     const postMarkerSize = isMobileDevice ? "w-8 h-8 text-base" : "w-6 h-6 text-sm";
 
-    // Add milestone markers
+    // Check if we should focus on a specific POI (affects initial post visibility)
+    const hasFocusPoint = focusLat !== undefined && focusLng !== undefined && !isNaN(focusLat) && !isNaN(focusLng);
+    const currentZoom = mapInstance.getZoom();
+    const shouldShowPosts = hasFocusPoint || currentZoom >= POST_VISIBILITY_ZOOM;
+
+    // Add post markers FIRST (so they appear BELOW milestone markers in the layer order)
+    posts.forEach((post) => {
+      if (!post.lat || !post.lng) return;
+
+      const el = document.createElement("div");
+      el.className = "post-marker";
+      el.style.cursor = "pointer";
+      // Initially hide posts if zoom is below threshold (unless we're focusing on a POI)
+      el.style.display = shouldShowPosts ? "block" : "none";
+      el.innerHTML = `
+        <div class="${postMarkerSize} rounded-full bg-india-green text-white flex items-center justify-center shadow-lg border-2 border-white cursor-pointer hover:scale-110 transition-transform" style="background-color: #138808;">
+          📍
+        </div>
+      `;
+
+      const popup = new mapboxgl.Popup({
+        offset: 20,
+        closeButton: true,
+        closeOnClick: true,
+      }).setHTML(`
+        <div class="p-2 max-w-[200px]">
+          <p class="text-sm">${post.body.slice(0, 80)}${post.body.length > 80 ? "..." : ""}</p>
+          ${post.location_name ? `<p class="text-xs text-gray-500 mt-1">📍 ${post.location_name}</p>` : ""}
+        </div>
+      `);
+
+      const marker = new mapboxgl.Marker({ element: el })
+        .setLngLat([post.lng, post.lat])
+        .setPopup(popup)
+        .addTo(mapInstance);
+
+      postMarkersRef.current.push(marker);
+
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        onPostClick?.(post);
+      });
+    });
+
+    // Add milestone markers AFTER posts (so they appear ON TOP in the layer order)
     milestones.forEach((milestone, index) => {
       const el = document.createElement("div");
       el.className = "milestone-marker";
@@ -272,7 +331,7 @@ export function JourneyMap({
         .setPopup(popup)
         .addTo(mapInstance);
 
-      markersRef.current.push(marker);
+      milestoneMarkersRef.current.push(marker);
 
       el.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -280,46 +339,14 @@ export function JourneyMap({
       });
     });
 
-    // Add post markers
-    posts.forEach((post) => {
-      if (!post.lat || !post.lng) return;
+    // Add zoom listener to toggle post visibility
+    const handleZoom = () => {
+      const zoom = mapInstance.getZoom();
+      updatePostVisibility(zoom);
+    };
+    mapInstance.on("zoom", handleZoom);
 
-      const el = document.createElement("div");
-      el.className = "post-marker";
-      el.style.cursor = "pointer";
-      el.innerHTML = `
-        <div class="${postMarkerSize} rounded-full bg-india-green text-white flex items-center justify-center shadow-lg border-2 border-white cursor-pointer hover:scale-110 transition-transform" style="background-color: #138808;">
-          📍
-        </div>
-      `;
-
-      const popup = new mapboxgl.Popup({
-        offset: 20,
-        closeButton: true,
-        closeOnClick: true,
-      }).setHTML(`
-        <div class="p-2 max-w-[200px]">
-          <p class="text-sm">${post.body.slice(0, 80)}${post.body.length > 80 ? "..." : ""}</p>
-          ${post.location_name ? `<p class="text-xs text-gray-500 mt-1">📍 ${post.location_name}</p>` : ""}
-        </div>
-      `);
-
-      const marker = new mapboxgl.Marker({ element: el })
-        .setLngLat([post.lng, post.lat])
-        .setPopup(popup)
-        .addTo(mapInstance);
-
-      markersRef.current.push(marker);
-
-      el.addEventListener("click", (e) => {
-        e.stopPropagation();
-        onPostClick?.(post);
-      });
-    });
-
-    // Check if we should focus on a specific POI
-    const hasFocusPoint = focusLat !== undefined && focusLng !== undefined && !isNaN(focusLat) && !isNaN(focusLng);
-    
+    // Handle POI focus or fit bounds
     if (hasFocusPoint) {
       // Map already starts at focus point (set during initialization)
       // Just open the popup for the matching post immediately
@@ -330,7 +357,7 @@ export function JourneyMap({
         // Find the marker for this post and open its popup
         // Use a small delay to ensure markers are fully rendered
         setTimeout(() => {
-          const postMarkers = markersRef.current.filter((marker) => {
+          const postMarkers = postMarkersRef.current.filter((marker) => {
             const lngLat = marker.getLngLat();
             return lngLat.lat === focusLat && lngLat.lng === focusLng;
           });
@@ -364,7 +391,12 @@ export function JourneyMap({
         duration: 0,
       });
     }
-  }, [isLoaded, milestones, posts, onMilestoneClick, onPostClick, cleanupMarkers, focusLat, focusLng, focusZoom]);
+
+    // Cleanup zoom listener on unmount
+    return () => {
+      mapInstance.off("zoom", handleZoom);
+    };
+  }, [isLoaded, milestones, posts, onMilestoneClick, onPostClick, cleanupMarkers, updatePostVisibility, focusLat, focusLng, focusZoom]);
 
   // Don't render error here - parent handles it via onError callback
   // This allows for a cleaner retry mechanism
