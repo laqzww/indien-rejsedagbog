@@ -7,11 +7,13 @@ import { Header } from "./Header";
 import { PostFeed } from "./post/PostFeed";
 import { EmptyFeed } from "./post/EmptyFeed";
 import { Timeline } from "./map/Timeline";
+import { PostCarousel, type CarouselPost } from "./map/PostCarousel";
 import { Button } from "./ui/button";
 import { List, Map as MapIcon, X, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Milestone } from "@/types/database";
 import type { MilestoneGroup } from "@/lib/journey";
+import { findMilestoneForDate } from "@/lib/journey";
 
 // Dynamic import for map to avoid SSR issues
 const JourneyMap = dynamic(
@@ -95,6 +97,11 @@ export function HomeClient({
   const [mapKey, setMapKey] = useState(0);
   const [mapError, setMapError] = useState(false);
   
+  // Carousel state
+  const [carouselPosts, setCarouselPosts] = useState<CarouselPost[]>([]);
+  const [activePostIndex, setActivePostIndex] = useState(0);
+  const [highlightPostId, setHighlightPostId] = useState<string | null>(null);
+  
   // Track if map has ever been shown - once shown, keep it mounted
   const [mapHasBeenShown, setMapHasBeenShown] = useState(initialView === "map");
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -127,9 +134,30 @@ export function HomeClient({
     }
   }, [focusLat, focusLng]);
 
-  const handleMilestoneClick = useCallback((milestone: Milestone) => {
+  // Helper to get posts for a milestone
+  const getPostsForMilestone = useCallback((milestone: Milestone): CarouselPost[] => {
+    return mapPosts.filter((post) => {
+      if (!post.lat || !post.lng) return false;
+      const postDate = post.captured_at || post.created_at;
+      const result = findMilestoneForDate(postDate, milestones);
+      return result?.type === "milestone" && result.milestone.id === milestone.id;
+    });
+  }, [mapPosts, milestones]);
+
+  const handleMilestoneClick = useCallback((milestone: Milestone, milestonePosts?: CarouselPost[]) => {
     setActiveMilestone(milestone);
-  }, []);
+    // Use provided posts or find them
+    const posts = milestonePosts ?? getPostsForMilestone(milestone);
+    if (posts.length > 0) {
+      setCarouselPosts(posts);
+      setActivePostIndex(0);
+      setHighlightPostId(posts[0].id);
+    } else {
+      // Close carousel if no posts
+      setCarouselPosts([]);
+      setHighlightPostId(null);
+    }
+  }, [getPostsForMilestone]);
 
   const handlePostClick = useCallback((post: { id: string }) => {
     // Navigate to feed view and scroll to the post
@@ -141,6 +169,43 @@ export function HomeClient({
     params.delete("zoom");
     router.push(`/?${params.toString()}`, { scroll: false });
   }, [router, searchParams]);
+
+  // Handle carousel post change - zoom map to post location
+  const handleCarouselPostChange = useCallback((index: number, post: CarouselPost) => {
+    setActivePostIndex(index);
+    setHighlightPostId(post.id);
+    
+    // Update URL to focus on this post's location for map sync
+    if (post.lat && post.lng) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("lat", post.lat.toString());
+      params.set("lng", post.lng.toString());
+      params.set("zoom", "12"); // Good zoom for seeing the post in context
+      router.replace(`/?${params.toString()}`, { scroll: false });
+    }
+  }, [router, searchParams]);
+
+  // Handle carousel close
+  const handleCarouselClose = useCallback(() => {
+    setActiveMilestone(null);
+    setCarouselPosts([]);
+    setHighlightPostId(null);
+    setActivePostIndex(0);
+    
+    // Clear focus coordinates
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("lat");
+    params.delete("lng");
+    params.delete("zoom");
+    router.replace(`/?${params.toString()}`, { scroll: false });
+  }, [router, searchParams]);
+
+  // Handle direct post click on map (when not in carousel mode)
+  const handleMapPostClick = useCallback((post: CarouselPost) => {
+    // Find which milestone this post belongs to and open carousel
+    // For now, just navigate to feed
+    handlePostClick(post);
+  }, [handlePostClick]);
 
   const handleMapError = useCallback(() => {
     setMapError(true);
@@ -230,31 +295,49 @@ export function HomeClient({
                 </Button>
               </div>
             ) : (
-              <JourneyMap
-                key={mapKey}
-                milestones={milestones}
-                posts={mapPosts}
-                onMilestoneClick={handleMilestoneClick}
-                onPostClick={handlePostClick}
-                onError={handleMapError}
-                focusLat={focusLat}
-                focusLng={focusLng}
-                focusZoom={focusZoom}
-                isVisible={activeView === "map"}
-              />
+              <>
+                <JourneyMap
+                  key={mapKey}
+                  milestones={milestones}
+                  posts={mapPosts}
+                  onMilestoneClick={handleMilestoneClick}
+                  onPostClick={handleMapPostClick}
+                  onError={handleMapError}
+                  focusLat={focusLat}
+                  focusLng={focusLng}
+                  focusZoom={focusZoom}
+                  isVisible={activeView === "map"}
+                  activeMilestone={activeMilestone}
+                  highlightPostId={highlightPostId}
+                />
+
+                {/* Post Carousel */}
+                {activeMilestone && carouselPosts.length > 0 && (
+                  <PostCarousel
+                    posts={carouselPosts}
+                    milestone={activeMilestone}
+                    activePostIndex={activePostIndex}
+                    onPostChange={handleCarouselPostChange}
+                    onPostClick={handlePostClick}
+                    onClose={handleCarouselClose}
+                  />
+                )}
+              </>
             )}
 
-            {/* Mobile Timeline Toggle */}
-            <div className="lg:hidden absolute bottom-4 left-4 right-4 flex justify-center pointer-events-none">
-              <Button
-                onClick={() => setShowTimeline(true)}
-                className="gap-2 shadow-lg pointer-events-auto"
-                size="lg"
-              >
-                <List className="h-5 w-5" />
-                Se rejserute ({milestones.length} stops)
-              </Button>
-            </div>
+            {/* Mobile Timeline Toggle - hidden when carousel is open */}
+            {!(activeMilestone && carouselPosts.length > 0) && (
+              <div className="lg:hidden absolute bottom-4 left-4 right-4 flex justify-center pointer-events-none z-30">
+                <Button
+                  onClick={() => setShowTimeline(true)}
+                  className="gap-2 shadow-lg pointer-events-auto"
+                  size="lg"
+                >
+                  <List className="h-5 w-5" />
+                  Se rejserute ({milestones.length} stops)
+                </Button>
+              </div>
+            )}
 
             {/* Legend */}
             <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-3 text-sm hidden lg:block">
