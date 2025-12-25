@@ -117,33 +117,44 @@ export function JourneyMap({
       
       if (isSameMilestone && isZoomedInRef.current) {
         // Currently zoomed in on this milestone - zoom out to show neighbors (±1)
-        const bounds = new mapboxgl.LngLatBounds();
-        
-        // Add current milestone
-        bounds.extend([milestone.lng, milestone.lat]);
+        // Collect all points to include
+        const points: [number, number][] = [[milestone.lng, milestone.lat]];
         
         // Add previous milestone if it exists
         if (milestoneIndex > 0) {
           const prevMilestone = sortedMilestones[milestoneIndex - 1];
-          bounds.extend([prevMilestone.lng, prevMilestone.lat]);
+          points.push([prevMilestone.lng, prevMilestone.lat]);
         }
         
         // Add next milestone if it exists
         if (milestoneIndex < sortedMilestones.length - 1) {
           const nextMilestone = sortedMilestones[milestoneIndex + 1];
-          bounds.extend([nextMilestone.lng, nextMilestone.lat]);
+          points.push([nextMilestone.lng, nextMilestone.lat]);
         }
 
-        mapInstance.fitBounds(bounds, {
-          padding: {
-            top: verticalPadding,
-            bottom: verticalPadding,
-            left: horizontalPadding,
-            right: horizontalPadding,
-          },
-          maxZoom: 10,
-          duration: 800,
-        });
+        if (points.length === 1) {
+          // Only one point (first or last milestone with no neighbors on one side)
+          mapInstance.flyTo({
+            center: points[0],
+            zoom: 8,
+            duration: 800,
+          });
+        } else {
+          // Multiple points - create bounds and fit
+          const bounds = new mapboxgl.LngLatBounds(points[0], points[0]);
+          points.forEach((p) => bounds.extend(p));
+          
+          mapInstance.fitBounds(bounds, {
+            padding: {
+              top: verticalPadding,
+              bottom: verticalPadding,
+              left: horizontalPadding,
+              right: horizontalPadding,
+            },
+            maxZoom: 10,
+            duration: 800,
+          });
+        }
 
         // Mark as zoomed out (but still on this milestone)
         isZoomedInRef.current = false;
@@ -152,22 +163,26 @@ export function JourneyMap({
         // In both cases: zoom in to this milestone's posts
         const stagePosts = getPostsForMilestone(milestone, posts, milestones);
 
-        // Create bounds starting with the milestone itself
-        const bounds = new mapboxgl.LngLatBounds();
-        bounds.extend([milestone.lng, milestone.lat]);
-
-        // Add all posts with valid coordinates
-        let hasPostsWithLocation = false;
+        // Collect all points: milestone + posts with coordinates
+        const points: [number, number][] = [[milestone.lng, milestone.lat]];
         stagePosts.forEach((post) => {
           if (post.lat && post.lng) {
-            bounds.extend([post.lng, post.lat]);
-            hasPostsWithLocation = true;
+            points.push([post.lng, post.lat]);
           }
         });
 
-        // If we have posts, zoom to fit all points
-        // Otherwise, just zoom to the milestone with a default zoom level
-        if (hasPostsWithLocation) {
+        if (points.length === 1) {
+          // Only milestone, no posts with coordinates
+          mapInstance.flyTo({
+            center: points[0],
+            zoom: 10,
+            duration: 800,
+          });
+        } else {
+          // Multiple points - create bounds and fit
+          const bounds = new mapboxgl.LngLatBounds(points[0], points[0]);
+          points.forEach((p) => bounds.extend(p));
+          
           mapInstance.fitBounds(bounds, {
             padding: {
               top: verticalPadding,
@@ -175,14 +190,7 @@ export function JourneyMap({
               left: horizontalPadding,
               right: horizontalPadding,
             },
-            maxZoom: 14, // Don't zoom in too close
-            duration: 800, // Fast but smooth fly-to animation
-          });
-        } else {
-          // No posts for this stage - fly to milestone with default zoom
-          mapInstance.flyTo({
-            center: [milestone.lng, milestone.lat],
-            zoom: 10,
+            maxZoom: 14,
             duration: 800,
           });
         }
