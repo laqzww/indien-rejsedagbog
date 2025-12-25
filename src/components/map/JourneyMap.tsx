@@ -112,6 +112,38 @@ export function JourneyMap({
       const horizontalPadding = Math.round(container.clientWidth * paddingPercent);
       const verticalPadding = Math.round(container.clientHeight * paddingPercent);
 
+      // Helper function to safely fit bounds or fly to point
+      // LngLatBounds with only one point (sw === ne) causes fitBounds to zoom out to globe
+      const safeFitBounds = (
+        bounds: mapboxgl.LngLatBounds,
+        options: { maxZoom: number; fallbackZoom: number }
+      ) => {
+        const sw = bounds.getSouthWest();
+        const ne = bounds.getNorthEast();
+        const isSinglePoint = sw.lng === ne.lng && sw.lat === ne.lat;
+
+        if (isSinglePoint) {
+          // Single point - use flyTo instead of fitBounds
+          mapInstance.flyTo({
+            center: [sw.lng, sw.lat],
+            zoom: options.fallbackZoom,
+            duration: 800,
+          });
+        } else {
+          // Multiple points - use fitBounds
+          mapInstance.fitBounds(bounds, {
+            padding: {
+              top: verticalPadding,
+              bottom: verticalPadding,
+              left: horizontalPadding,
+              right: horizontalPadding,
+            },
+            maxZoom: options.maxZoom,
+            duration: 800,
+          });
+        }
+      };
+
       // Check if we're clicking the same milestone - toggle between zoomed in/out
       const isSameMilestone = activeMilestoneRef.current === milestone.id;
       
@@ -134,17 +166,7 @@ export function JourneyMap({
           bounds.extend([nextMilestone.lng, nextMilestone.lat]);
         }
 
-        mapInstance.fitBounds(bounds, {
-          padding: {
-            top: verticalPadding,
-            bottom: verticalPadding,
-            left: horizontalPadding,
-            right: horizontalPadding,
-          },
-          minZoom: 4, // Never zoom out further than country level
-          maxZoom: 10,
-          duration: 800,
-        });
+        safeFitBounds(bounds, { maxZoom: 10, fallbackZoom: 8 });
 
         // Mark as zoomed out (but still on this milestone)
         isZoomedInRef.current = false;
@@ -166,18 +188,9 @@ export function JourneyMap({
           }
         });
 
-        // Always use fitBounds with the milestone as minimum
-        // This handles both cases: with posts and without posts
-        mapInstance.fitBounds(bounds, {
-          padding: {
-            top: verticalPadding,
-            bottom: verticalPadding,
-            left: horizontalPadding,
-            right: horizontalPadding,
-          },
-          minZoom: 4, // Never zoom out further than country level
-          maxZoom: hasPostsWithLocation ? 14 : 10, // Zoom closer if we have posts
-          duration: 800,
+        safeFitBounds(bounds, { 
+          maxZoom: hasPostsWithLocation ? 14 : 10, 
+          fallbackZoom: 10 
         });
 
         // Mark this milestone as active and zoomed in
