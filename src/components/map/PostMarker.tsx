@@ -320,7 +320,7 @@ export function createPostPreviewHTML(post: MapPost): string {
             }
           </div>
           <a 
-            href="/post/${post.id}" 
+            href="/?view=feed&post=${post.id}" 
             style="
               font-size: 12px;
               font-weight: 500;

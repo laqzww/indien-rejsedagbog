@@ -6,18 +6,32 @@ import { cn } from "@/lib/utils";
 import { ChevronDown, Calendar } from "lucide-react";
 import type { MilestoneGroup, DayGroup } from "@/lib/journey";
 
-// Context to share scroll state between components
-const ScrollContext = createContext<{ showHeaders: boolean }>({ showHeaders: true });
+// Context to share scroll state and focus post between components
+const ScrollContext = createContext<{ showHeaders: boolean; focusPostId?: string }>({ showHeaders: true });
 
 interface PostFeedProps {
   groups: MilestoneGroup[];
+  focusPostId?: string; // Post ID to scroll to and highlight
 }
 
-export function PostFeed({ groups }: PostFeedProps) {
+export function PostFeed({ groups, focusPostId }: PostFeedProps) {
   const [isScrolling, setIsScrolling] = useState(false);
   const [isAtTop, setIsAtTop] = useState(true);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const hasScrolledToFocusRef = useRef(false);
+
+  // Find which milestone contains the focus post
+  const focusMilestoneId = focusPostId ? (() => {
+    for (const group of groups) {
+      for (const day of group.days) {
+        if (day.posts.some(p => p.id === focusPostId)) {
+          return group.milestone?.id;
+        }
+      }
+    }
+    return null;
+  })() : null;
 
   useEffect(() => {
     // Find the scrollable container (the parent with overflow-y-auto)
@@ -73,14 +87,48 @@ export function PostFeed({ groups }: PostFeedProps) {
     };
   }, []);
 
+  // Scroll to focus post when it changes
+  useEffect(() => {
+    if (!focusPostId || hasScrolledToFocusRef.current) return;
+
+    // Small delay to allow DOM to render and milestones to expand
+    const scrollTimeout = setTimeout(() => {
+      const postElement = document.getElementById(`post-${focusPostId}`);
+      if (postElement) {
+        // Scroll the post into view with some offset for the header
+        postElement.scrollIntoView({ behavior: "smooth", block: "center" });
+        
+        // Add highlight effect
+        postElement.classList.add("ring-2", "ring-saffron", "ring-offset-2");
+        setTimeout(() => {
+          postElement.classList.remove("ring-2", "ring-saffron", "ring-offset-2");
+        }, 2000);
+        
+        hasScrolledToFocusRef.current = true;
+      }
+    }, 100);
+
+    return () => clearTimeout(scrollTimeout);
+  }, [focusPostId]);
+
+  // Reset scroll ref when focusPostId changes
+  useEffect(() => {
+    hasScrolledToFocusRef.current = false;
+  }, [focusPostId]);
+
   // Show headers when at top OR when actively scrolling
   const showHeaders = isAtTop || isScrolling;
 
   return (
-    <ScrollContext.Provider value={{ showHeaders }}>
+    <ScrollContext.Provider value={{ showHeaders, focusPostId }}>
       <div ref={containerRef} className="space-y-0">
         {groups.map((group, index) => (
-          <MilestoneSection key={group.milestone?.id || "unknown"} group={group} index={index} />
+          <MilestoneSection 
+            key={group.milestone?.id || "unknown"} 
+            group={group} 
+            index={index}
+            forceExpanded={focusMilestoneId === group.milestone?.id}
+          />
         ))}
       </div>
     </ScrollContext.Provider>
@@ -90,11 +138,19 @@ export function PostFeed({ groups }: PostFeedProps) {
 interface MilestoneSectionProps {
   group: MilestoneGroup;
   index: number;
+  forceExpanded?: boolean;
 }
 
-function MilestoneSection({ group, index }: MilestoneSectionProps) {
-  const [isExpanded, setIsExpanded] = useState(index === 0); // First milestone expanded by default
+function MilestoneSection({ group, index, forceExpanded }: MilestoneSectionProps) {
+  const [isExpanded, setIsExpanded] = useState(index === 0 || forceExpanded); // First milestone or forced expanded by default
   const { showHeaders } = useContext(ScrollContext);
+
+  // Expand when forceExpanded becomes true
+  useEffect(() => {
+    if (forceExpanded) {
+      setIsExpanded(true);
+    }
+  }, [forceExpanded]);
 
   const totalPosts = group.days.reduce((sum, day) => sum + day.posts.length, 0);
 
@@ -185,7 +241,9 @@ function DaySection({ day }: DaySectionProps) {
       {/* Posts for this day */}
       <div>
         {day.posts.map((post) => (
-          <PostFeedCard key={post.id} post={post} showDayBadge={false} />
+          <div key={post.id} id={`post-${post.id}`} className="transition-all duration-300">
+            <PostFeedCard post={post} showDayBadge={false} />
+          </div>
         ))}
       </div>
     </div>

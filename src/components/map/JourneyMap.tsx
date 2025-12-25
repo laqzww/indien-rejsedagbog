@@ -246,6 +246,49 @@ export function JourneyMap({
     [posts, milestones, updatePostVisibility]
   );
 
+  // Track previous focus coordinates to detect changes
+  const prevFocusRef = useRef<{ lat?: number; lng?: number; zoom?: number }>({});
+
+  // Handle dynamic focus changes (fly to new location when focus changes)
+  useEffect(() => {
+    const mapInstance = map.current;
+    if (!mapInstance || !isLoaded) return;
+
+    const hasFocusPoint = focusLat !== undefined && focusLng !== undefined && !isNaN(focusLat) && !isNaN(focusLng);
+    if (!hasFocusPoint) return;
+
+    // Check if focus actually changed
+    const focusChanged = 
+      prevFocusRef.current.lat !== focusLat || 
+      prevFocusRef.current.lng !== focusLng;
+
+    if (focusChanged) {
+      // Fly to new focus point
+      mapInstance.flyTo({
+        center: [focusLng, focusLat],
+        zoom: focusZoom,
+        duration: 800,
+        essential: true,
+      });
+
+      // Open popup for matching post after flying
+      mapInstance.once("moveend", () => {
+        const postMarkers = postMarkersRef.current.filter((marker) => {
+          const lngLat = marker.getLngLat();
+          return lngLat.lat === focusLat && lngLat.lng === focusLng;
+        });
+        if (postMarkers.length > 0) {
+          postMarkers[0].togglePopup();
+        }
+        // Update post visibility after move
+        updatePostVisibility(mapInstance.getZoom());
+      });
+
+      // Update previous focus ref
+      prevFocusRef.current = { lat: focusLat, lng: focusLng, zoom: focusZoom };
+    }
+  }, [focusLat, focusLng, focusZoom, isLoaded, updatePostVisibility]);
+
   // Initialize map
   useEffect(() => {
     // Prevent double initialization
@@ -340,6 +383,10 @@ export function JourneyMap({
         // Map loaded successfully
         mapInstance.on("load", () => {
           console.log("[JourneyMap] Map loaded successfully");
+          // Initialize prevFocusRef with initial focus to prevent duplicate fly on mount
+          if (focusLat !== undefined && focusLng !== undefined) {
+            prevFocusRef.current = { lat: focusLat, lng: focusLng, zoom: focusZoom };
+          }
           setIsLoaded(true);
           setMapError(null);
         });

@@ -76,6 +76,7 @@ export function HomeClient({
   const urlLat = searchParams.get("lat");
   const urlLng = searchParams.get("lng");
   const urlZoom = searchParams.get("zoom");
+  const urlPostId = searchParams.get("post"); // Post ID to scroll to in feed
   
   // Compute active view from URL - URL is the single source of truth
   // This ensures "Se på kort" links always switch the view correctly
@@ -85,6 +86,9 @@ export function HomeClient({
   const focusLat = urlLat ? parseFloat(urlLat) : initialFocusLat;
   const focusLng = urlLng ? parseFloat(urlLng) : initialFocusLng;
   const focusZoom = urlZoom ? parseFloat(urlZoom) : initialFocusZoom;
+  
+  // Focus post ID for scrolling to specific post in feed
+  const focusPostId = urlPostId || undefined;
   
   const [activeMilestone, setActiveMilestone] = useState<Milestone | null>(null);
   const [showTimeline, setShowTimeline] = useState(false);
@@ -117,8 +121,15 @@ export function HomeClient({
   }, []);
 
   const handlePostClick = useCallback((post: { id: string }) => {
-    window.location.href = `/post/${post.id}`;
-  }, []);
+    // Navigate to feed view and scroll to the post
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("view", "feed");
+    params.set("post", post.id);
+    params.delete("lat");
+    params.delete("lng");
+    params.delete("zoom");
+    router.push(`/?${params.toString()}`, { scroll: false });
+  }, [router, searchParams]);
 
   const handleMapError = useCallback(() => {
     setMapError(true);
@@ -138,12 +149,20 @@ export function HomeClient({
         showNavigation={true}
       />
 
-      {/* Feed View */}
-      {activeView === "feed" && (
-        <div className="flex-1 overflow-y-auto">
+      {/* Views Container - Both views are always mounted for instant switching */}
+      <div className="flex-1 relative overflow-hidden">
+        {/* Feed View - Always mounted, visibility controlled by CSS */}
+        <div 
+          className={cn(
+            "absolute inset-0 overflow-y-auto bg-white transition-opacity duration-150",
+            activeView === "feed" 
+              ? "opacity-100 z-10" 
+              : "opacity-0 z-0 pointer-events-none"
+          )}
+        >
           <main className="max-w-2xl mx-auto pb-8">
             {hasPosts ? (
-              <PostFeed groups={groupedPosts} />
+              <PostFeed groups={groupedPosts} focusPostId={focusPostId} />
             ) : (
               <div className="px-4 py-8">
                 <EmptyFeed />
@@ -158,11 +177,16 @@ export function HomeClient({
             </div>
           </footer>
         </div>
-      )}
 
-      {/* Map View */}
-      {activeView === "map" && (
-        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+        {/* Map View - Always mounted for instant switching */}
+        <div 
+          className={cn(
+            "absolute inset-0 flex flex-col lg:flex-row transition-opacity duration-150",
+            activeView === "map" 
+              ? "opacity-100 z-10" 
+              : "opacity-0 z-0 pointer-events-none"
+          )}
+        >
           {/* Desktop Timeline Sidebar */}
           <aside className="hidden lg:block w-80 border-r border-border overflow-y-auto bg-white flex-shrink-0">
             <div className="p-4 border-b border-border">
@@ -195,7 +219,7 @@ export function HomeClient({
               </div>
             ) : (
               <JourneyMap
-                key={`${mapKey}-${focusLat ?? "default"}-${focusLng ?? "default"}`}
+                key={mapKey}
                 milestones={milestones}
                 posts={mapPosts}
                 onMilestoneClick={handleMilestoneClick}
@@ -296,7 +320,7 @@ export function HomeClient({
             </div>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
