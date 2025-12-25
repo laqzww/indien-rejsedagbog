@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Header } from "./Header";
@@ -95,6 +95,17 @@ export function HomeClient({
   const [mapKey, setMapKey] = useState(0);
   const [mapError, setMapError] = useState(false);
   
+  // Track if map has ever been shown - once shown, keep it mounted
+  const [mapHasBeenShown, setMapHasBeenShown] = useState(initialView === "map");
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  
+  // Update mapHasBeenShown when switching to map view
+  useEffect(() => {
+    if (activeView === "map" && !mapHasBeenShown) {
+      setMapHasBeenShown(true);
+    }
+  }, [activeView, mapHasBeenShown]);
+  
   // Handler for view changes - updates URL instead of local state
   // This ensures URL stays in sync and enables browser back/forward navigation
   const handleViewChange = useCallback((view: "feed" | "map") => {
@@ -140,6 +151,9 @@ export function HomeClient({
     setMapKey((k) => k + 1);
   }, []);
 
+  // Should we render the map? Only if it's active or has been shown before
+  const shouldRenderMap = activeView === "map" || mapHasBeenShown;
+
   return (
     <div className="h-screen bg-white flex flex-col overflow-hidden">
       <Header
@@ -149,22 +163,44 @@ export function HomeClient({
         showNavigation={true}
       />
 
-      {/* Views Container - Both views are always mounted for instant switching */}
-      <div className="flex-1 relative overflow-hidden">
-        {/* Map View - Rendered first (behind), always visible for Mapbox but hidden by feed overlay */}
+      {/* Feed View */}
+      {activeView === "feed" && (
+        <div className="flex-1 overflow-y-auto">
+          <main className="max-w-2xl mx-auto pb-8">
+            {hasPosts ? (
+              <PostFeed groups={groupedPosts} focusPostId={focusPostId} />
+            ) : (
+              <div className="px-4 py-8">
+                <EmptyFeed />
+              </div>
+            )}
+          </main>
+
+          {/* Minimal footer */}
+          <footer className="border-t border-border bg-white py-4">
+            <div className="flex items-center justify-center text-xs text-muted-foreground">
+              <span>© {new Date().getFullYear()} Tommy & Amalie</span>
+            </div>
+          </footer>
+        </div>
+      )}
+
+      {/* Map View - Render if active OR if it has been shown before (for faster switching back) */}
+      {shouldRenderMap && (
         <div 
-          className={cn(
-            "absolute inset-0 flex flex-col lg:flex-row",
-            activeView === "map" 
-              ? "z-10" 
-              : "z-0"
-          )}
+          ref={mapContainerRef}
+          className="flex-1 flex flex-col lg:flex-row overflow-hidden"
+          style={{
+            // When not active, move off-screen but keep dimensions (for Mapbox)
+            position: activeView !== "map" ? "absolute" : undefined,
+            left: activeView !== "map" ? "-9999px" : undefined,
+            top: activeView !== "map" ? "0" : undefined,
+            width: activeView !== "map" ? "100%" : undefined,
+            height: activeView !== "map" ? "100%" : undefined,
+          }}
         >
           {/* Desktop Timeline Sidebar */}
-          <aside className={cn(
-            "hidden lg:block w-80 border-r border-border overflow-y-auto bg-white flex-shrink-0",
-            activeView !== "map" && "pointer-events-none"
-          )}>
+          <aside className="hidden lg:block w-80 border-r border-border overflow-y-auto bg-white flex-shrink-0">
             <div className="p-4 border-b border-border">
               <h2 className="text-lg font-bold text-navy">Rejserute</h2>
               <p className="text-sm text-muted-foreground">
@@ -181,10 +217,7 @@ export function HomeClient({
           </aside>
 
           {/* Map Container */}
-          <div className={cn(
-            "flex-1 relative bg-muted",
-            activeView !== "map" && "pointer-events-none"
-          )}>
+          <div className="flex-1 relative bg-muted">
             {mapError ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-muted">
                 <MapIcon className="h-16 w-16 text-muted-foreground/30 mb-4" />
@@ -212,10 +245,7 @@ export function HomeClient({
             )}
 
             {/* Mobile Timeline Toggle */}
-            <div className={cn(
-              "lg:hidden absolute bottom-4 left-4 right-4 flex justify-center pointer-events-none",
-              activeView !== "map" && "hidden"
-            )}>
+            <div className="lg:hidden absolute bottom-4 left-4 right-4 flex justify-center pointer-events-none">
               <Button
                 onClick={() => setShowTimeline(true)}
                 className="gap-2 shadow-lg pointer-events-auto"
@@ -227,10 +257,7 @@ export function HomeClient({
             </div>
 
             {/* Legend */}
-            <div className={cn(
-              "absolute top-4 left-4 bg-white rounded-lg shadow-lg p-3 text-sm hidden lg:block",
-              activeView !== "map" && "!hidden"
-            )}>
+            <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-3 text-sm hidden lg:block">
               <h3 className="font-medium mb-2">Forklaring</h3>
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -306,34 +333,7 @@ export function HomeClient({
             </div>
           )}
         </div>
-
-        {/* Feed View - Rendered on top, covers the map when active */}
-        <div 
-          className={cn(
-            "absolute inset-0 overflow-y-auto bg-white",
-            activeView === "feed" 
-              ? "z-20" 
-              : "z-0 pointer-events-none opacity-0"
-          )}
-        >
-          <main className="max-w-2xl mx-auto pb-8">
-            {hasPosts ? (
-              <PostFeed groups={groupedPosts} focusPostId={focusPostId} />
-            ) : (
-              <div className="px-4 py-8">
-                <EmptyFeed />
-              </div>
-            )}
-          </main>
-
-          {/* Minimal footer */}
-          <footer className="border-t border-border bg-white py-4">
-            <div className="flex items-center justify-center text-xs text-muted-foreground">
-              <span>© {new Date().getFullYear()} Tommy & Amalie</span>
-            </div>
-          </footer>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

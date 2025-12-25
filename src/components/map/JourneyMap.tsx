@@ -258,11 +258,16 @@ export function JourneyMap({
     if (!mapInstance || !isLoaded) return;
 
     if (isVisible) {
-      // Small delay to ensure container has correct dimensions
-      const resizeTimeout = setTimeout(() => {
-        mapInstance.resize();
-      }, 50);
-      return () => clearTimeout(resizeTimeout);
+      // Multiple resize calls with increasing delays to ensure it works
+      // This handles cases where the container dimensions aren't immediately available
+      const timeouts = [0, 50, 100, 200, 500].map((delay) =>
+        setTimeout(() => {
+          if (map.current) {
+            map.current.resize();
+          }
+        }, delay)
+      );
+      return () => timeouts.forEach(clearTimeout);
     }
   }, [isVisible, isLoaded]);
 
