@@ -73,6 +73,8 @@ export function JourneyMap({
   const [isLoaded, setIsLoaded] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
   const initAttempted = useRef(false);
+  // Track which milestone is currently zoomed in (for toggle behavior)
+  const zoomedMilestoneRef = useRef<string | null>(null);
 
   // Cleanup function to remove all markers
   const cleanupMarkers = useCallback(() => {
@@ -91,27 +93,17 @@ export function JourneyMap({
     });
   }, []);
 
-  // Zoom to stage extent when a milestone is clicked
+  // Zoom to stage extent when a milestone is clicked (with toggle behavior)
   const zoomToMilestoneStage = useCallback(
     (milestone: Milestone) => {
       const mapInstance = map.current;
       if (!mapInstance) return;
 
-      // Find all posts that belong to this milestone
-      const stagePosts = getPostsForMilestone(milestone, posts, milestones);
-
-      // Create bounds starting with the milestone itself
-      const bounds = new mapboxgl.LngLatBounds();
-      bounds.extend([milestone.lng, milestone.lat]);
-
-      // Add all posts with valid coordinates
-      let hasPostsWithLocation = false;
-      stagePosts.forEach((post) => {
-        if (post.lat && post.lng) {
-          bounds.extend([post.lng, post.lat]);
-          hasPostsWithLocation = true;
-        }
-      });
+      // Find the index of this milestone in the sorted list
+      const sortedMilestones = [...milestones].sort(
+        (a, b) => a.display_order - b.display_order
+      );
+      const milestoneIndex = sortedMilestones.findIndex((m) => m.id === milestone.id);
 
       // Calculate padding based on container size
       const container = mapInstance.getContainer();
@@ -119,9 +111,26 @@ export function JourneyMap({
       const horizontalPadding = Math.round(container.clientWidth * paddingPercent);
       const verticalPadding = Math.round(container.clientHeight * paddingPercent);
 
-      // If we have posts, zoom to fit all points
-      // Otherwise, just zoom to the milestone with a default zoom level
-      if (hasPostsWithLocation) {
+      // Check if we're clicking the same milestone that's already zoomed in
+      if (zoomedMilestoneRef.current === milestone.id) {
+        // Toggle: Zoom out to show neighboring milestones (±1)
+        const bounds = new mapboxgl.LngLatBounds();
+        
+        // Add current milestone
+        bounds.extend([milestone.lng, milestone.lat]);
+        
+        // Add previous milestone if it exists
+        if (milestoneIndex > 0) {
+          const prevMilestone = sortedMilestones[milestoneIndex - 1];
+          bounds.extend([prevMilestone.lng, prevMilestone.lat]);
+        }
+        
+        // Add next milestone if it exists
+        if (milestoneIndex < sortedMilestones.length - 1) {
+          const nextMilestone = sortedMilestones[milestoneIndex + 1];
+          bounds.extend([nextMilestone.lng, nextMilestone.lat]);
+        }
+
         mapInstance.fitBounds(bounds, {
           padding: {
             top: verticalPadding,
@@ -129,16 +138,53 @@ export function JourneyMap({
             left: horizontalPadding,
             right: horizontalPadding,
           },
-          maxZoom: 14, // Don't zoom in too close
-          duration: 800, // Fast but smooth fly-to animation
-        });
-      } else {
-        // No posts for this stage - fly to milestone with default zoom
-        mapInstance.flyTo({
-          center: [milestone.lng, milestone.lat],
-          zoom: 10,
+          maxZoom: 10,
           duration: 800,
         });
+
+        // Clear the zoomed state
+        zoomedMilestoneRef.current = null;
+      } else {
+        // Zoom in to this milestone's posts
+        const stagePosts = getPostsForMilestone(milestone, posts, milestones);
+
+        // Create bounds starting with the milestone itself
+        const bounds = new mapboxgl.LngLatBounds();
+        bounds.extend([milestone.lng, milestone.lat]);
+
+        // Add all posts with valid coordinates
+        let hasPostsWithLocation = false;
+        stagePosts.forEach((post) => {
+          if (post.lat && post.lng) {
+            bounds.extend([post.lng, post.lat]);
+            hasPostsWithLocation = true;
+          }
+        });
+
+        // If we have posts, zoom to fit all points
+        // Otherwise, just zoom to the milestone with a default zoom level
+        if (hasPostsWithLocation) {
+          mapInstance.fitBounds(bounds, {
+            padding: {
+              top: verticalPadding,
+              bottom: verticalPadding,
+              left: horizontalPadding,
+              right: horizontalPadding,
+            },
+            maxZoom: 14, // Don't zoom in too close
+            duration: 800, // Fast but smooth fly-to animation
+          });
+        } else {
+          // No posts for this stage - fly to milestone with default zoom
+          mapInstance.flyTo({
+            center: [milestone.lng, milestone.lat],
+            zoom: 10,
+            duration: 800,
+          });
+        }
+
+        // Mark this milestone as zoomed
+        zoomedMilestoneRef.current = milestone.id;
       }
 
       // After zoom completes, ensure posts are visible
