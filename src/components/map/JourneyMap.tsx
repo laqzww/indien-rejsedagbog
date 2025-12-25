@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import mapboxgl from "mapbox-gl";
 import type { Milestone } from "@/types/database";
+import { findMilestoneForDate } from "@/lib/journey";
 
 // Simplified post type for map
 interface MapPost {
@@ -11,6 +12,8 @@ interface MapPost {
   lat: number | null;
   lng: number | null;
   location_name: string | null;
+  created_at: string;
+  captured_at: string | null;
   media: { storage_path: string }[];
 }
 
@@ -30,6 +33,26 @@ interface JourneyMapProps {
 
 // Zoom level at which post markers become visible
 const POST_VISIBILITY_ZOOM = 9;
+
+/**
+ * Find all posts that belong to a specific milestone based on their date
+ */
+function getPostsForMilestone(
+  milestone: Milestone,
+  posts: MapPost[],
+  milestones: Milestone[]
+): MapPost[] {
+  return posts.filter((post) => {
+    // Use captured_at if available, otherwise created_at (same logic as journey.ts)
+    const postDate = post.captured_at || post.created_at;
+    const result = findMilestoneForDate(postDate, milestones);
+    
+    if (result && result.type === "milestone") {
+      return result.milestone.id === milestone.id;
+    }
+    return false;
+  });
+}
 
 export function JourneyMap({
   milestones,
@@ -67,6 +90,65 @@ export function JourneyMap({
       el.style.display = shouldShow ? "block" : "none";
     });
   }, []);
+
+  // Zoom to stage extent when a milestone is clicked
+  const zoomToMilestoneStage = useCallback(
+    (milestone: Milestone) => {
+      const mapInstance = map.current;
+      if (!mapInstance) return;
+
+      // Find all posts that belong to this milestone
+      const stagePosts = getPostsForMilestone(milestone, posts, milestones);
+
+      // Create bounds starting with the milestone itself
+      const bounds = new mapboxgl.LngLatBounds();
+      bounds.extend([milestone.lng, milestone.lat]);
+
+      // Add all posts with valid coordinates
+      let hasPostsWithLocation = false;
+      stagePosts.forEach((post) => {
+        if (post.lat && post.lng) {
+          bounds.extend([post.lng, post.lat]);
+          hasPostsWithLocation = true;
+        }
+      });
+
+      // Calculate padding based on container size
+      const container = mapInstance.getContainer();
+      const paddingPercent = 0.15;
+      const horizontalPadding = Math.round(container.clientWidth * paddingPercent);
+      const verticalPadding = Math.round(container.clientHeight * paddingPercent);
+
+      // If we have posts, zoom to fit all points
+      // Otherwise, just zoom to the milestone with a default zoom level
+      if (hasPostsWithLocation) {
+        mapInstance.fitBounds(bounds, {
+          padding: {
+            top: verticalPadding,
+            bottom: verticalPadding,
+            left: horizontalPadding,
+            right: horizontalPadding,
+          },
+          maxZoom: 14, // Don't zoom in too close
+          duration: 800, // Fast but smooth fly-to animation
+        });
+      } else {
+        // No posts for this stage - fly to milestone with default zoom
+        mapInstance.flyTo({
+          center: [milestone.lng, milestone.lat],
+          zoom: 10,
+          duration: 800,
+        });
+      }
+
+      // After zoom completes, ensure posts are visible
+      mapInstance.once("moveend", () => {
+        const zoom = mapInstance.getZoom();
+        updatePostVisibility(zoom);
+      });
+    },
+    [posts, milestones, updatePostVisibility]
+  );
 
   // Initialize map
   useEffect(() => {
@@ -335,6 +417,9 @@ export function JourneyMap({
 
       el.addEventListener("click", (e) => {
         e.stopPropagation();
+        // Zoom to stage extent with posts
+        zoomToMilestoneStage(milestone);
+        // Also trigger the external callback
         onMilestoneClick?.(milestone);
       });
     });
@@ -396,7 +481,7 @@ export function JourneyMap({
     return () => {
       mapInstance.off("zoom", handleZoom);
     };
-  }, [isLoaded, milestones, posts, onMilestoneClick, onPostClick, cleanupMarkers, updatePostVisibility, focusLat, focusLng, focusZoom]);
+  }, [isLoaded, milestones, posts, onMilestoneClick, onPostClick, cleanupMarkers, updatePostVisibility, zoomToMilestoneStage, focusLat, focusLng, focusZoom]);
 
   // Don't render error here - parent handles it via onError callback
   // This allows for a cleaner retry mechanism
