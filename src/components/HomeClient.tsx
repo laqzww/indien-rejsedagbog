@@ -151,44 +151,20 @@ export function HomeClient({
 
       {/* Views Container - Both views are always mounted for instant switching */}
       <div className="flex-1 relative overflow-hidden">
-        {/* Feed View - Always mounted, visibility controlled by CSS */}
+        {/* Map View - Rendered first (behind), always visible for Mapbox but hidden by feed overlay */}
         <div 
           className={cn(
-            "absolute inset-0 overflow-y-auto bg-white transition-opacity duration-150",
-            activeView === "feed" 
-              ? "opacity-100 z-10" 
-              : "opacity-0 z-0 pointer-events-none"
-          )}
-        >
-          <main className="max-w-2xl mx-auto pb-8">
-            {hasPosts ? (
-              <PostFeed groups={groupedPosts} focusPostId={focusPostId} />
-            ) : (
-              <div className="px-4 py-8">
-                <EmptyFeed />
-              </div>
-            )}
-          </main>
-
-          {/* Minimal footer */}
-          <footer className="border-t border-border bg-white py-4">
-            <div className="flex items-center justify-center text-xs text-muted-foreground">
-              <span>© {new Date().getFullYear()} Tommy & Amalie</span>
-            </div>
-          </footer>
-        </div>
-
-        {/* Map View - Always mounted for instant switching */}
-        <div 
-          className={cn(
-            "absolute inset-0 flex flex-col lg:flex-row transition-opacity duration-150",
+            "absolute inset-0 flex flex-col lg:flex-row",
             activeView === "map" 
-              ? "opacity-100 z-10" 
-              : "opacity-0 z-0 pointer-events-none"
+              ? "z-10" 
+              : "z-0"
           )}
         >
           {/* Desktop Timeline Sidebar */}
-          <aside className="hidden lg:block w-80 border-r border-border overflow-y-auto bg-white flex-shrink-0">
+          <aside className={cn(
+            "hidden lg:block w-80 border-r border-border overflow-y-auto bg-white flex-shrink-0",
+            activeView !== "map" && "pointer-events-none"
+          )}>
             <div className="p-4 border-b border-border">
               <h2 className="text-lg font-bold text-navy">Rejserute</h2>
               <p className="text-sm text-muted-foreground">
@@ -205,7 +181,10 @@ export function HomeClient({
           </aside>
 
           {/* Map Container */}
-          <div className="flex-1 relative bg-muted">
+          <div className={cn(
+            "flex-1 relative bg-muted",
+            activeView !== "map" && "pointer-events-none"
+          )}>
             {mapError ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-muted">
                 <MapIcon className="h-16 w-16 text-muted-foreground/30 mb-4" />
@@ -233,7 +212,10 @@ export function HomeClient({
             )}
 
             {/* Mobile Timeline Toggle */}
-            <div className="lg:hidden absolute bottom-4 left-4 right-4 flex justify-center pointer-events-none">
+            <div className={cn(
+              "lg:hidden absolute bottom-4 left-4 right-4 flex justify-center pointer-events-none",
+              activeView !== "map" && "hidden"
+            )}>
               <Button
                 onClick={() => setShowTimeline(true)}
                 className="gap-2 shadow-lg pointer-events-auto"
@@ -245,7 +227,10 @@ export function HomeClient({
             </div>
 
             {/* Legend */}
-            <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-3 text-sm hidden lg:block">
+            <div className={cn(
+              "absolute top-4 left-4 bg-white rounded-lg shadow-lg p-3 text-sm hidden lg:block",
+              activeView !== "map" && "!hidden"
+            )}>
               <h3 className="font-medium mb-2">Forklaring</h3>
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -320,6 +305,33 @@ export function HomeClient({
               </div>
             </div>
           )}
+        </div>
+
+        {/* Feed View - Rendered on top, covers the map when active */}
+        <div 
+          className={cn(
+            "absolute inset-0 overflow-y-auto bg-white",
+            activeView === "feed" 
+              ? "z-20" 
+              : "z-0 pointer-events-none opacity-0"
+          )}
+        >
+          <main className="max-w-2xl mx-auto pb-8">
+            {hasPosts ? (
+              <PostFeed groups={groupedPosts} focusPostId={focusPostId} />
+            ) : (
+              <div className="px-4 py-8">
+                <EmptyFeed />
+              </div>
+            )}
+          </main>
+
+          {/* Minimal footer */}
+          <footer className="border-t border-border bg-white py-4">
+            <div className="flex items-center justify-center text-xs text-muted-foreground">
+              <span>© {new Date().getFullYear()} Tommy & Amalie</span>
+            </div>
+          </footer>
         </div>
       </div>
     </div>
