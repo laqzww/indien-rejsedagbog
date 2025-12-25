@@ -51,7 +51,7 @@ export function MediaGallery({ media }: MediaGalleryProps) {
       <div className="relative rounded-xl overflow-hidden bg-muted">
         {/* Active media */}
         <div
-          className="relative aspect-[4/3] md:aspect-video cursor-pointer"
+          className="relative aspect-[4/3] cursor-pointer"
           onClick={() => activeMedia.type === "image" && setIsFullscreen(true)}
         >
           {activeMedia.type === "image" ? (

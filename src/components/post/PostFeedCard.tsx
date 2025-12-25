@@ -78,18 +78,9 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
     }
   };
 
-  // Get aspect ratio from first media
+  // Always use tall 4:5 aspect ratio for consistent media window height
   const getAspectRatio = () => {
-    const firstMedia = sortedMedia[0];
-    if (firstMedia?.width && firstMedia?.height) {
-      const ratio = firstMedia.width / firstMedia.height;
-      // For very tall images, cap at 4:5 (Instagram portrait max)
-      if (ratio < 0.8) return "4/5";
-      // For very wide images, cap at 16:9
-      if (ratio > 1.78) return "16/9";
-      return `${firstMedia.width}/${firstMedia.height}`;
-    }
-    return "4/5"; // Default to portrait
+    return "4/5";
   };
 
   const postDate = new Date(post.captured_at || post.created_at);
