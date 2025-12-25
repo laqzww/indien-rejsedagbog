@@ -35,22 +35,8 @@ interface JourneyMapProps {
 const POST_VISIBILITY_ZOOM = 9;
 
 /**
- * Calculate approximate distance between two coordinates in km
- * Uses simplified formula (good enough for filtering)
- */
-function approxDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const latDiff = Math.abs(lat2 - lat1);
-  const lngDiff = Math.abs(lng2 - lng1);
-  // Approximate: 1 degree latitude ≈ 111 km, longitude varies but ~85 km at mid-latitudes
-  return Math.sqrt(Math.pow(latDiff * 111, 2) + Math.pow(lngDiff * 85, 2));
-}
-
-// Maximum distance from milestone to include posts in bounds (in km)
-const MAX_POST_DISTANCE_KM = 300;
-
-/**
  * Find all posts that belong to a specific milestone based on their date
- * AND are geographically close enough to include in the zoom extent
+ * Posts marked as "before_journey" or "after_journey" are NOT included
  */
 function getPostsForMilestone(
   milestone: Milestone,
@@ -65,14 +51,13 @@ function getPostsForMilestone(
     const postDate = post.captured_at || post.created_at;
     const result = findMilestoneForDate(postDate, milestones);
     
+    // Only include posts that are assigned to THIS milestone
+    // Posts that are "before_journey" or "after_journey" are excluded
     if (!result || result.type !== "milestone" || result.milestone.id !== milestone.id) {
       return false;
     }
 
-    // Check if post is geographically close enough to milestone
-    // This prevents posts in Denmark from affecting bounds of milestones in India
-    const distance = approxDistanceKm(milestone.lat, milestone.lng, post.lat, post.lng);
-    return distance <= MAX_POST_DISTANCE_KM;
+    return true;
   });
 }
 

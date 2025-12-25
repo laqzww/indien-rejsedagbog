@@ -71,9 +71,10 @@ export function findMilestoneForDate(
   }
   
   // Check if date is before the journey started
-  const firstMilestone = sortedMilestones[0];
-  if (firstMilestone.arrival_date) {
-    const firstArrival = new Date(firstMilestone.arrival_date);
+  // Find the first milestone with an arrival_date
+  const firstMilestoneWithDate = sortedMilestones.find(m => m.arrival_date);
+  if (firstMilestoneWithDate?.arrival_date) {
+    const firstArrival = new Date(firstMilestoneWithDate.arrival_date);
     firstArrival.setHours(0, 0, 0, 0);
     if (d < firstArrival) {
       return { type: "before_journey" };
@@ -124,8 +125,9 @@ export function findMilestoneForDate(
     }
   }
   
-  // Fallback to first milestone if no match found (shouldn't happen with proper data)
-  return { type: "milestone", milestone: firstMilestone };
+  // No milestone matched - this means the date falls in a gap or data is incomplete
+  // Return before_journey as a safe default rather than incorrectly assigning to a milestone
+  return { type: "before_journey" };
 }
 
 // Types for grouped posts
