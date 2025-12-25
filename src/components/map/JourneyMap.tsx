@@ -35,28 +35,7 @@ interface JourneyMapProps {
 const POST_VISIBILITY_ZOOM = 9;
 
 /**
- * Calculate distance between two coordinates in kilometers (Haversine formula)
- */
-function getDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371; // Earth's radius in km
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) *
-      Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-// Maximum distance from milestone to include posts (in km)
-const MAX_POST_DISTANCE_KM = 500;
-
-/**
  * Find all posts that belong to a specific milestone based on their date
- * AND are geographically close to the milestone
  */
 function getPostsForMilestone(
   milestone: Milestone,
@@ -64,20 +43,14 @@ function getPostsForMilestone(
   milestones: Milestone[]
 ): MapPost[] {
   return posts.filter((post) => {
-    // Must have valid coordinates
-    if (!post.lat || !post.lng) return false;
-
-    // Check date match
+    // Use captured_at if available, otherwise created_at (same logic as journey.ts)
     const postDate = post.captured_at || post.created_at;
     const result = findMilestoneForDate(postDate, milestones);
     
-    if (!result || result.type !== "milestone" || result.milestone.id !== milestone.id) {
-      return false;
+    if (result && result.type === "milestone") {
+      return result.milestone.id === milestone.id;
     }
-
-    // Check geographic proximity - exclude posts that are too far from milestone
-    const distance = getDistanceKm(milestone.lat, milestone.lng, post.lat, post.lng);
-    return distance <= MAX_POST_DISTANCE_KM;
+    return false;
   });
 }
 
@@ -139,25 +112,38 @@ export function JourneyMap({
       const horizontalPadding = Math.round(container.clientWidth * paddingPercent);
       const verticalPadding = Math.round(container.clientHeight * paddingPercent);
 
-      // Helper function to safely fit bounds or fly to point
-      // LngLatBounds with only one point (sw === ne) causes fitBounds to zoom out to globe
-      const safeFitBounds = (
-        bounds: mapboxgl.LngLatBounds,
-        options: { maxZoom: number; fallbackZoom: number }
-      ) => {
-        const sw = bounds.getSouthWest();
-        const ne = bounds.getNorthEast();
-        const isSinglePoint = sw.lng === ne.lng && sw.lat === ne.lat;
+      // Check if we're clicking the same milestone - toggle between zoomed in/out
+      const isSameMilestone = activeMilestoneRef.current === milestone.id;
+      
+      if (isSameMilestone && isZoomedInRef.current) {
+        // Currently zoomed in on this milestone - zoom out to show neighbors (±1)
+        // Collect all points to include
+        const points: [number, number][] = [[milestone.lng, milestone.lat]];
+        
+        // Add previous milestone if it exists
+        if (milestoneIndex > 0) {
+          const prevMilestone = sortedMilestones[milestoneIndex - 1];
+          points.push([prevMilestone.lng, prevMilestone.lat]);
+        }
+        
+        // Add next milestone if it exists
+        if (milestoneIndex < sortedMilestones.length - 1) {
+          const nextMilestone = sortedMilestones[milestoneIndex + 1];
+          points.push([nextMilestone.lng, nextMilestone.lat]);
+        }
 
-        if (isSinglePoint) {
-          // Single point - use flyTo instead of fitBounds
+        if (points.length === 1) {
+          // Only one point (first or last milestone with no neighbors on one side)
           mapInstance.flyTo({
-            center: [sw.lng, sw.lat],
-            zoom: options.fallbackZoom,
+            center: points[0],
+            zoom: 8,
             duration: 800,
           });
         } else {
-          // Multiple points - use fitBounds
+          // Multiple points - create bounds and fit
+          const bounds = new mapboxgl.LngLatBounds(points[0], points[0]);
+          points.forEach((p) => bounds.extend(p));
+          
           mapInstance.fitBounds(bounds, {
             padding: {
               top: verticalPadding,
@@ -165,35 +151,10 @@ export function JourneyMap({
               left: horizontalPadding,
               right: horizontalPadding,
             },
-            maxZoom: options.maxZoom,
+            maxZoom: 10,
             duration: 800,
           });
         }
-      };
-
-      // Check if we're clicking the same milestone - toggle between zoomed in/out
-      const isSameMilestone = activeMilestoneRef.current === milestone.id;
-      
-      if (isSameMilestone && isZoomedInRef.current) {
-        // Currently zoomed in on this milestone - zoom out to show neighbors (±1)
-        const bounds = new mapboxgl.LngLatBounds();
-        
-        // Add current milestone
-        bounds.extend([milestone.lng, milestone.lat]);
-        
-        // Add previous milestone if it exists
-        if (milestoneIndex > 0) {
-          const prevMilestone = sortedMilestones[milestoneIndex - 1];
-          bounds.extend([prevMilestone.lng, prevMilestone.lat]);
-        }
-        
-        // Add next milestone if it exists
-        if (milestoneIndex < sortedMilestones.length - 1) {
-          const nextMilestone = sortedMilestones[milestoneIndex + 1];
-          bounds.extend([nextMilestone.lng, nextMilestone.lat]);
-        }
-
-        safeFitBounds(bounds, { maxZoom: 10, fallbackZoom: 8 });
 
         // Mark as zoomed out (but still on this milestone)
         isZoomedInRef.current = false;
@@ -202,23 +163,37 @@ export function JourneyMap({
         // In both cases: zoom in to this milestone's posts
         const stagePosts = getPostsForMilestone(milestone, posts, milestones);
 
-        // Create bounds starting with the milestone itself
-        const bounds = new mapboxgl.LngLatBounds();
-        bounds.extend([milestone.lng, milestone.lat]);
-
-        // Add all posts with valid coordinates
-        let hasPostsWithLocation = false;
+        // Collect all points: milestone + posts with coordinates
+        const points: [number, number][] = [[milestone.lng, milestone.lat]];
         stagePosts.forEach((post) => {
           if (post.lat && post.lng) {
-            bounds.extend([post.lng, post.lat]);
-            hasPostsWithLocation = true;
+            points.push([post.lng, post.lat]);
           }
         });
 
-        safeFitBounds(bounds, { 
-          maxZoom: hasPostsWithLocation ? 14 : 10, 
-          fallbackZoom: 10 
-        });
+        if (points.length === 1) {
+          // Only milestone, no posts with coordinates
+          mapInstance.flyTo({
+            center: points[0],
+            zoom: 10,
+            duration: 800,
+          });
+        } else {
+          // Multiple points - create bounds and fit
+          const bounds = new mapboxgl.LngLatBounds(points[0], points[0]);
+          points.forEach((p) => bounds.extend(p));
+          
+          mapInstance.fitBounds(bounds, {
+            padding: {
+              top: verticalPadding,
+              bottom: verticalPadding,
+              left: horizontalPadding,
+              right: horizontalPadding,
+            },
+            maxZoom: 14,
+            duration: 800,
+          });
+        }
 
         // Mark this milestone as active and zoomed in
         activeMilestoneRef.current = milestone.id;
