@@ -35,7 +35,28 @@ interface JourneyMapProps {
 const POST_VISIBILITY_ZOOM = 9;
 
 /**
+ * Calculate distance between two coordinates in kilometers (Haversine formula)
+ */
+function getDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371; // Earth's radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+// Maximum distance from milestone to include posts (in km)
+const MAX_POST_DISTANCE_KM = 500;
+
+/**
  * Find all posts that belong to a specific milestone based on their date
+ * AND are geographically close to the milestone
  */
 function getPostsForMilestone(
   milestone: Milestone,
@@ -43,14 +64,20 @@ function getPostsForMilestone(
   milestones: Milestone[]
 ): MapPost[] {
   return posts.filter((post) => {
-    // Use captured_at if available, otherwise created_at (same logic as journey.ts)
+    // Must have valid coordinates
+    if (!post.lat || !post.lng) return false;
+
+    // Check date match
     const postDate = post.captured_at || post.created_at;
     const result = findMilestoneForDate(postDate, milestones);
     
-    if (result && result.type === "milestone") {
-      return result.milestone.id === milestone.id;
+    if (!result || result.type !== "milestone" || result.milestone.id !== milestone.id) {
+      return false;
     }
-    return false;
+
+    // Check geographic proximity - exclude posts that are too far from milestone
+    const distance = getDistanceKm(milestone.lat, milestone.lng, post.lat, post.lng);
+    return distance <= MAX_POST_DISTANCE_KM;
   });
 }
 
