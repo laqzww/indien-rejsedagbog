@@ -210,7 +210,7 @@ export function JourneyMap({
           // Only milestone, no posts with coordinates
           mapInstance.flyTo({
             center: [milestone.lng, milestone.lat],
-            zoom: 10,
+            zoom: POST_VISIBILITY_ZOOM + 1, // Zoom to level where posts would be visible
             duration: 800,
           });
         } else {
@@ -227,6 +227,9 @@ export function JourneyMap({
               left: horizontalPadding,
               right: horizontalPadding,
             },
+            // Ensure we zoom in enough to see posts (minZoom)
+            // but not too close (maxZoom)
+            minZoom: POST_VISIBILITY_ZOOM,
             maxZoom: 14,
             duration: 800,
           });
