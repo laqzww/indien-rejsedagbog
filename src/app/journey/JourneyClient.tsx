@@ -88,7 +88,8 @@ export function JourneyClient({ milestones, posts }: JourneyClientProps) {
   };
 
   const handlePostClick = (post: { id: string }) => {
-    router.push(`/post/${post.id}`);
+    // Navigate to home feed view and scroll to the post
+    router.push(`/?view=feed&post=${post.id}`);
   };
 
   const handleMapError = useCallback(() => {
