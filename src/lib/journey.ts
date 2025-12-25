@@ -51,6 +51,32 @@ export type MilestoneResult =
   | { type: "after_journey" };
 
 /**
+ * Normalize a date to YYYY-MM-DD integer for consistent comparison
+ * This avoids timezone issues when comparing dates
+ */
+function toDateInt(date: Date | string): number {
+  const d = typeof date === "string" ? new Date(date) : date;
+  // Use UTC to avoid timezone shifts
+  const year = d.getUTCFullYear();
+  const month = d.getUTCMonth() + 1;
+  const day = d.getUTCDate();
+  return year * 10000 + month * 100 + day;
+}
+
+/**
+ * Parse a date-only string (YYYY-MM-DD) to an integer
+ */
+function parseDateOnlyInt(dateStr: string): number {
+  // arrival_date/departure_date are typically "YYYY-MM-DD" format
+  const parts = dateStr.split("T")[0].split("-");
+  if (parts.length >= 3) {
+    return parseInt(parts[0]) * 10000 + parseInt(parts[1]) * 100 + parseInt(parts[2]);
+  }
+  // Fallback: parse as Date and use UTC
+  return toDateInt(new Date(dateStr));
+}
+
+/**
  * Find which milestone a post belongs to based on its date
  * Posts are assigned to the milestone whose date range they fall within
  * Returns special markers for posts before/after the journey
@@ -59,7 +85,7 @@ export function findMilestoneForDate(
   date: Date | string,
   milestones: Milestone[]
 ): MilestoneResult | null {
-  const d = typeof date === "string" ? new Date(date) : date;
+  const postDateInt = toDateInt(date);
   
   // Sort milestones by display_order (chronological order)
   const sortedMilestones = [...milestones].sort(
@@ -74,9 +100,8 @@ export function findMilestoneForDate(
   // Find the first milestone with an arrival_date
   const firstMilestoneWithDate = sortedMilestones.find(m => m.arrival_date);
   if (firstMilestoneWithDate?.arrival_date) {
-    const firstArrival = new Date(firstMilestoneWithDate.arrival_date);
-    firstArrival.setHours(0, 0, 0, 0);
-    if (d < firstArrival) {
+    const firstArrivalInt = parseDateOnlyInt(firstMilestoneWithDate.arrival_date);
+    if (postDateInt < firstArrivalInt) {
       return { type: "before_journey" };
     }
   }
@@ -84,9 +109,8 @@ export function findMilestoneForDate(
   // Check if date is after the journey ended (last milestone has departure_date and date is after it)
   const lastMilestone = sortedMilestones[sortedMilestones.length - 1];
   if (lastMilestone.departure_date) {
-    const lastDeparture = new Date(lastMilestone.departure_date);
-    lastDeparture.setHours(23, 59, 59, 999);
-    if (d > lastDeparture) {
+    const lastDepartureInt = parseDateOnlyInt(lastMilestone.departure_date);
+    if (postDateInt > lastDepartureInt) {
       return { type: "after_journey" };
     }
   }
@@ -98,28 +122,25 @@ export function findMilestoneForDate(
     
     if (!milestone.arrival_date) continue;
     
-    const arrivalDate = new Date(milestone.arrival_date);
-    arrivalDate.setHours(0, 0, 0, 0);
+    const arrivalInt = parseDateOnlyInt(milestone.arrival_date);
     
     // If milestone has departure date, use it
     if (milestone.departure_date) {
-      const departureDate = new Date(milestone.departure_date);
-      departureDate.setHours(23, 59, 59, 999);
+      const departureInt = parseDateOnlyInt(milestone.departure_date);
       
-      if (d >= arrivalDate && d <= departureDate) {
+      if (postDateInt >= arrivalInt && postDateInt <= departureInt) {
         return { type: "milestone", milestone };
       }
     } else if (nextMilestone?.arrival_date) {
       // Otherwise, milestone extends until next milestone arrives
-      const nextArrival = new Date(nextMilestone.arrival_date);
-      nextArrival.setHours(0, 0, 0, 0);
+      const nextArrivalInt = parseDateOnlyInt(nextMilestone.arrival_date);
       
-      if (d >= arrivalDate && d < nextArrival) {
+      if (postDateInt >= arrivalInt && postDateInt < nextArrivalInt) {
         return { type: "milestone", milestone };
       }
     } else {
       // Last milestone without departure - extends indefinitely (journey ongoing)
-      if (d >= arrivalDate) {
+      if (postDateInt >= arrivalInt) {
         return { type: "milestone", milestone };
       }
     }

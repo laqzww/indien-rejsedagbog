@@ -119,37 +119,65 @@ export function JourneyMap({
       const horizontalPadding = Math.round(container.clientWidth * paddingPercent);
       const verticalPadding = Math.round(container.clientHeight * paddingPercent);
 
+      // Helper: Create bounds centered on milestone that includes all points
+      // This ensures milestone stays in the center of the view
+      const createCenteredBounds = (
+        center: [number, number],
+        otherPoints: [number, number][]
+      ): mapboxgl.LngLatBounds => {
+        // Find the maximum distance from center to any point
+        let maxLngDiff = 0;
+        let maxLatDiff = 0;
+        
+        otherPoints.forEach(([lng, lat]) => {
+          maxLngDiff = Math.max(maxLngDiff, Math.abs(lng - center[0]));
+          maxLatDiff = Math.max(maxLatDiff, Math.abs(lat - center[1]));
+        });
+        
+        // Create symmetric bounds around center
+        // Add a small buffer (10%) to ensure points aren't at the edge
+        const buffer = 1.1;
+        const bounds = new mapboxgl.LngLatBounds(
+          [center[0] - maxLngDiff * buffer, center[1] - maxLatDiff * buffer],
+          [center[0] + maxLngDiff * buffer, center[1] + maxLatDiff * buffer]
+        );
+        
+        return bounds;
+      };
+
       // Check if we're clicking the same milestone - toggle between zoomed in/out
       const isSameMilestone = activeMilestoneRef.current === milestone.id;
       
       if (isSameMilestone && isZoomedInRef.current) {
         // Currently zoomed in on this milestone - zoom out to show neighbors (±1)
-        // Collect all points to include
-        const points: [number, number][] = [[milestone.lng, milestone.lat]];
+        // Collect neighbor points (not including current milestone)
+        const neighborPoints: [number, number][] = [];
         
         // Add previous milestone if it exists
         if (milestoneIndex > 0) {
           const prevMilestone = sortedMilestones[milestoneIndex - 1];
-          points.push([prevMilestone.lng, prevMilestone.lat]);
+          neighborPoints.push([prevMilestone.lng, prevMilestone.lat]);
         }
         
         // Add next milestone if it exists
         if (milestoneIndex < sortedMilestones.length - 1) {
           const nextMilestone = sortedMilestones[milestoneIndex + 1];
-          points.push([nextMilestone.lng, nextMilestone.lat]);
+          neighborPoints.push([nextMilestone.lng, nextMilestone.lat]);
         }
 
-        if (points.length === 1) {
-          // Only one point (first or last milestone with no neighbors on one side)
+        if (neighborPoints.length === 0) {
+          // Only one milestone exists - just zoom out a bit
           mapInstance.flyTo({
-            center: points[0],
+            center: [milestone.lng, milestone.lat],
             zoom: 8,
             duration: 800,
           });
         } else {
-          // Multiple points - create bounds and fit
-          const bounds = new mapboxgl.LngLatBounds(points[0], points[0]);
-          points.forEach((p) => bounds.extend(p));
+          // Create bounds centered on current milestone that includes neighbors
+          const bounds = createCenteredBounds(
+            [milestone.lng, milestone.lat],
+            neighborPoints
+          );
           
           mapInstance.fitBounds(bounds, {
             padding: {
@@ -170,25 +198,27 @@ export function JourneyMap({
         // In both cases: zoom in to this milestone's posts
         const stagePosts = getPostsForMilestone(milestone, posts, milestones);
 
-        // Collect all points: milestone + posts with coordinates
-        const points: [number, number][] = [[milestone.lng, milestone.lat]];
+        // Collect post coordinates (not including milestone itself)
+        const postPoints: [number, number][] = [];
         stagePosts.forEach((post) => {
           if (post.lat && post.lng) {
-            points.push([post.lng, post.lat]);
+            postPoints.push([post.lng, post.lat]);
           }
         });
 
-        if (points.length === 1) {
+        if (postPoints.length === 0) {
           // Only milestone, no posts with coordinates
           mapInstance.flyTo({
-            center: points[0],
+            center: [milestone.lng, milestone.lat],
             zoom: 10,
             duration: 800,
           });
         } else {
-          // Multiple points - create bounds and fit
-          const bounds = new mapboxgl.LngLatBounds(points[0], points[0]);
-          points.forEach((p) => bounds.extend(p));
+          // Create bounds centered on milestone that includes all posts
+          const bounds = createCenteredBounds(
+            [milestone.lng, milestone.lat],
+            postPoints
+          );
           
           mapInstance.fitBounds(bounds, {
             padding: {
