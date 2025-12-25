@@ -6,7 +6,6 @@ import type { Milestone } from "@/types/database";
 import { findMilestoneForDate } from "@/lib/journey";
 import {
   createPostMarkerHTML,
-  createPostPreviewHTML,
   injectPostMarkerStyles,
   type MapPost,
 } from "./PostMarker";
@@ -14,7 +13,7 @@ import {
 interface JourneyMapProps {
   milestones: Milestone[];
   posts: MapPost[];
-  onMilestoneClick?: (milestone: Milestone) => void;
+  onMilestoneClick?: (milestone: Milestone, milestonePosts: MapPost[]) => void;
   onPostClick?: (post: MapPost) => void;
   onError?: () => void;
   initialCenter?: [number, number];
@@ -25,6 +24,10 @@ interface JourneyMapProps {
   focusZoom?: number; // defaults to 14 (neighborhood level)
   // Visibility prop - when true, map is visible and should resize
   isVisible?: boolean;
+  // Active milestone for carousel integration
+  activeMilestone?: Milestone | null;
+  // Highlight a specific post on the map
+  highlightPostId?: string | null;
 }
 
 // Re-export MapPost type for consumers
@@ -72,6 +75,8 @@ export function JourneyMap({
   focusLng,
   focusZoom = 14, // Default to neighborhood level
   isVisible = true,
+  activeMilestone,
+  highlightPostId,
 }: JourneyMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -293,16 +298,8 @@ export function JourneyMap({
         essential: true,
       });
 
-      // Open popup for matching post after flying
+      // Update post visibility after move - carousel handles post display now
       mapInstance.once("moveend", () => {
-        const postMarkers = postMarkersRef.current.filter((marker) => {
-          const lngLat = marker.getLngLat();
-          return lngLat.lat === focusLat && lngLat.lng === focusLng;
-        });
-        if (postMarkers.length > 0) {
-          postMarkers[0].togglePopup();
-        }
-        // Update post visibility after move
         updatePostVisibility(mapInstance.getZoom());
       });
 
@@ -527,27 +524,18 @@ export function JourneyMap({
       // Use the new thumbnail-based marker HTML
       el.innerHTML = createPostMarkerHTML(post, isMobileDevice);
 
-      // Create rich preview popup with image, text, and navigation
-      const popup = new mapboxgl.Popup({
-        offset: 28,
-        closeButton: true,
-        closeOnClick: true,
-        maxWidth: "none",
-        className: "post-preview-popup",
-      }).setHTML(createPostPreviewHTML(post));
-
       const marker = new mapboxgl.Marker({ element: el })
         .setLngLat([post.lng, post.lat])
-        .setPopup(popup)
         .addTo(mapInstance);
 
+      // Store post id on marker element for highlighting
+      el.dataset.postId = post.id;
       postMarkersRef.current.push(marker);
 
       el.addEventListener("click", (e) => {
         e.stopPropagation();
-        // Toggle popup on click instead of navigating immediately
-        // User can use "Læs mere" link in popup to navigate
-        marker.togglePopup();
+        // Call onPostClick instead of showing popup - carousel handles display
+        onPostClick?.(post);
       });
     });
 
@@ -585,8 +573,9 @@ export function JourneyMap({
         e.stopPropagation();
         // Zoom to stage extent with posts
         zoomToMilestoneStage(milestone);
-        // Also trigger the external callback
-        onMilestoneClick?.(milestone);
+        // Get posts for this milestone and trigger callback
+        const milestonePosts = getPostsForMilestone(milestone, posts, milestones);
+        onMilestoneClick?.(milestone, milestonePosts);
       });
     });
 
@@ -600,23 +589,7 @@ export function JourneyMap({
     // Handle POI focus or fit bounds
     if (hasFocusPoint) {
       // Map already starts at focus point (set during initialization)
-      // Just open the popup for the matching post immediately
-      const matchingPost = posts.find(
-        (p) => p.lat === focusLat && p.lng === focusLng
-      );
-      if (matchingPost) {
-        // Find the marker for this post and open its popup
-        // Use a small delay to ensure markers are fully rendered
-        setTimeout(() => {
-          const postMarkers = postMarkersRef.current.filter((marker) => {
-            const lngLat = marker.getLngLat();
-            return lngLat.lat === focusLat && lngLat.lng === focusLng;
-          });
-          if (postMarkers.length > 0) {
-            postMarkers[0].togglePopup();
-          }
-        }, 100);
-      }
+      // Carousel handles the post display now, no popup needed
     } else if (milestones.length > 0) {
       // Fit bounds to show all milestones (not posts, to avoid zooming out too far
       // when there are posts in distant locations like Denmark "dag 0" posts)
@@ -648,6 +621,33 @@ export function JourneyMap({
       mapInstance.off("zoom", handleZoom);
     };
   }, [isLoaded, milestones, posts, onMilestoneClick, onPostClick, cleanupMarkers, updatePostVisibility, zoomToMilestoneStage, focusLat, focusLng, focusZoom]);
+
+  // Handle highlighting of active post in carousel
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    // Reset all markers to normal state
+    postMarkersRef.current.forEach((marker) => {
+      const el = marker.getElement();
+      el.style.zIndex = "";
+      el.style.transform = "";
+      el.classList.remove("post-marker-highlighted");
+    });
+
+    // Highlight the active post
+    if (highlightPostId) {
+      const activeMarker = postMarkersRef.current.find((marker) => {
+        const el = marker.getElement();
+        return el.dataset.postId === highlightPostId;
+      });
+
+      if (activeMarker) {
+        const el = activeMarker.getElement();
+        el.style.zIndex = "100";
+        el.classList.add("post-marker-highlighted");
+      }
+    }
+  }, [highlightPostId, isLoaded]);
 
   // Don't render error here - parent handles it via onError callback
   // This allows for a cleaner retry mechanism

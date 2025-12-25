@@ -353,6 +353,10 @@ export function injectPostMarkerStyles(): void {
     .post-marker-thumbnail {
       transition: transform 0.2s ease, box-shadow 0.2s ease !important;
     }
+    .post-marker-highlighted .post-marker-thumbnail {
+      transform: scale(1.25) !important;
+      box-shadow: 0 0 0 3px #FF9933, 0 6px 20px rgba(0,0,0,0.4) !important;
+    }
     .mapboxgl-popup-content {
       padding: 0 !important;
       border-radius: 12px !important;
