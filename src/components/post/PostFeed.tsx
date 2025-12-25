@@ -98,15 +98,19 @@ export function PostFeed({ groups, focusPostId }: PostFeedProps) {
         // Scroll the post into view with some offset for the header
         postElement.scrollIntoView({ behavior: "smooth", block: "center" });
         
-        // Add highlight effect
-        postElement.classList.add("ring-2", "ring-saffron", "ring-offset-2");
+        // Add highlight effect using inline styles for reliability
+        postElement.style.boxShadow = "0 0 0 3px #FF9933";
+        postElement.style.borderRadius = "8px";
+        postElement.style.transition = "box-shadow 0.3s ease";
+        
         setTimeout(() => {
-          postElement.classList.remove("ring-2", "ring-saffron", "ring-offset-2");
-        }, 2000);
+          postElement.style.boxShadow = "";
+          postElement.style.borderRadius = "";
+        }, 2500);
         
         hasScrolledToFocusRef.current = true;
       }
-    }, 100);
+    }, 150);
 
     return () => clearTimeout(scrollTimeout);
   }, [focusPostId]);
@@ -241,7 +245,7 @@ function DaySection({ day }: DaySectionProps) {
       {/* Posts for this day */}
       <div>
         {day.posts.map((post) => (
-          <div key={post.id} id={`post-${post.id}`} className="transition-all duration-300">
+          <div key={post.id} id={`post-${post.id}`}>
             <PostFeedCard post={post} showDayBadge={false} />
           </div>
         ))}

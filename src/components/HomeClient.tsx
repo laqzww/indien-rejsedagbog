@@ -228,6 +228,7 @@ export function HomeClient({
                 focusLat={focusLat}
                 focusLng={focusLng}
                 focusZoom={focusZoom}
+                isVisible={activeView === "map"}
               />
             )}
 

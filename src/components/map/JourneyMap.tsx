@@ -23,6 +23,8 @@ interface JourneyMapProps {
   focusLat?: number;
   focusLng?: number;
   focusZoom?: number; // defaults to 14 (neighborhood level)
+  // Visibility prop - when true, map is visible and should resize
+  isVisible?: boolean;
 }
 
 // Re-export MapPost type for consumers
@@ -69,6 +71,7 @@ export function JourneyMap({
   focusLat,
   focusLng,
   focusZoom = 14, // Default to neighborhood level
+  isVisible = true,
 }: JourneyMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -248,6 +251,20 @@ export function JourneyMap({
 
   // Track previous focus coordinates to detect changes
   const prevFocusRef = useRef<{ lat?: number; lng?: number; zoom?: number }>({});
+
+  // Handle visibility changes - resize map when it becomes visible
+  useEffect(() => {
+    const mapInstance = map.current;
+    if (!mapInstance || !isLoaded) return;
+
+    if (isVisible) {
+      // Small delay to ensure container has correct dimensions
+      const resizeTimeout = setTimeout(() => {
+        mapInstance.resize();
+      }, 50);
+      return () => clearTimeout(resizeTimeout);
+    }
+  }, [isVisible, isLoaded]);
 
   // Handle dynamic focus changes (fly to new location when focus changes)
   useEffect(() => {
