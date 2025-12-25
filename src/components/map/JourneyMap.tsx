@@ -73,8 +73,9 @@ export function JourneyMap({
   const [isLoaded, setIsLoaded] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
   const initAttempted = useRef(false);
-  // Track which milestone is currently zoomed in (for toggle behavior)
-  const zoomedMilestoneRef = useRef<string | null>(null);
+  // Track which milestone is currently active and whether we're zoomed in or out
+  const activeMilestoneRef = useRef<string | null>(null);
+  const isZoomedInRef = useRef(false);
 
   // Cleanup function to remove all markers
   const cleanupMarkers = useCallback(() => {
@@ -111,9 +112,11 @@ export function JourneyMap({
       const horizontalPadding = Math.round(container.clientWidth * paddingPercent);
       const verticalPadding = Math.round(container.clientHeight * paddingPercent);
 
-      // Check if we're clicking the same milestone that's already zoomed in
-      if (zoomedMilestoneRef.current === milestone.id) {
-        // Toggle: Zoom out to show neighboring milestones (±1)
+      // Check if we're clicking the same milestone - toggle between zoomed in/out
+      const isSameMilestone = activeMilestoneRef.current === milestone.id;
+      
+      if (isSameMilestone && isZoomedInRef.current) {
+        // Currently zoomed in on this milestone - zoom out to show neighbors (±1)
         const bounds = new mapboxgl.LngLatBounds();
         
         // Add current milestone
@@ -142,10 +145,11 @@ export function JourneyMap({
           duration: 800,
         });
 
-        // Clear the zoomed state
-        zoomedMilestoneRef.current = null;
+        // Mark as zoomed out (but still on this milestone)
+        isZoomedInRef.current = false;
       } else {
-        // Zoom in to this milestone's posts
+        // Either clicking a new milestone, or clicking same milestone when zoomed out
+        // In both cases: zoom in to this milestone's posts
         const stagePosts = getPostsForMilestone(milestone, posts, milestones);
 
         // Create bounds starting with the milestone itself
@@ -183,8 +187,9 @@ export function JourneyMap({
           });
         }
 
-        // Mark this milestone as zoomed
-        zoomedMilestoneRef.current = milestone.id;
+        // Mark this milestone as active and zoomed in
+        activeMilestoneRef.current = milestone.id;
+        isZoomedInRef.current = true;
       }
 
       // After zoom completes, ensure posts are visible
