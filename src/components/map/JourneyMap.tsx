@@ -141,6 +141,7 @@ export function JourneyMap({
             left: horizontalPadding,
             right: horizontalPadding,
           },
+          minZoom: 4, // Never zoom out further than country level
           maxZoom: 10,
           duration: 800,
         });
@@ -165,27 +166,19 @@ export function JourneyMap({
           }
         });
 
-        // If we have posts, zoom to fit all points
-        // Otherwise, just zoom to the milestone with a default zoom level
-        if (hasPostsWithLocation) {
-          mapInstance.fitBounds(bounds, {
-            padding: {
-              top: verticalPadding,
-              bottom: verticalPadding,
-              left: horizontalPadding,
-              right: horizontalPadding,
-            },
-            maxZoom: 14, // Don't zoom in too close
-            duration: 800, // Fast but smooth fly-to animation
-          });
-        } else {
-          // No posts for this stage - fly to milestone with default zoom
-          mapInstance.flyTo({
-            center: [milestone.lng, milestone.lat],
-            zoom: 10,
-            duration: 800,
-          });
-        }
+        // Always use fitBounds with the milestone as minimum
+        // This handles both cases: with posts and without posts
+        mapInstance.fitBounds(bounds, {
+          padding: {
+            top: verticalPadding,
+            bottom: verticalPadding,
+            left: horizontalPadding,
+            right: horizontalPadding,
+          },
+          minZoom: 4, // Never zoom out further than country level
+          maxZoom: hasPostsWithLocation ? 14 : 10, // Zoom closer if we have posts
+          duration: 800,
+        });
 
         // Mark this milestone as active and zoomed in
         activeMilestoneRef.current = milestone.id;
