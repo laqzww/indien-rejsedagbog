@@ -4,18 +4,12 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import mapboxgl from "mapbox-gl";
 import type { Milestone } from "@/types/database";
 import { findMilestoneForDate } from "@/lib/journey";
-
-// Simplified post type for map
-interface MapPost {
-  id: string;
-  body: string;
-  lat: number | null;
-  lng: number | null;
-  location_name: string | null;
-  created_at: string;
-  captured_at: string | null;
-  media: { storage_path: string }[];
-}
+import {
+  createPostMarkerHTML,
+  createPostPreviewHTML,
+  injectPostMarkerStyles,
+  type MapPost,
+} from "./PostMarker";
 
 interface JourneyMapProps {
   milestones: Milestone[];
@@ -30,6 +24,9 @@ interface JourneyMapProps {
   focusLng?: number;
   focusZoom?: number; // defaults to 14 (neighborhood level)
 }
+
+// Re-export MapPost type for consumers
+export type { MapPost };
 
 // Zoom level at which post markers become visible
 const POST_VISIBILITY_ZOOM = 9;
@@ -438,14 +435,17 @@ export function JourneyMap({
     // Detect mobile for larger touch targets
     const isMobileDevice = window.innerWidth < 768;
     const markerSize = isMobileDevice ? "w-10 h-10 text-base" : "w-8 h-8 text-sm";
-    const postMarkerSize = isMobileDevice ? "w-8 h-8 text-base" : "w-6 h-6 text-sm";
 
     // Check if we should focus on a specific POI (affects initial post visibility)
     const hasFocusPoint = focusLat !== undefined && focusLng !== undefined && !isNaN(focusLat) && !isNaN(focusLng);
     const currentZoom = mapInstance.getZoom();
     const shouldShowPosts = hasFocusPoint || currentZoom >= POST_VISIBILITY_ZOOM;
 
+    // Inject global styles for post markers (hover effects, popup styling)
+    injectPostMarkerStyles();
+
     // Add post markers FIRST (so they appear BELOW milestone markers in the layer order)
+    // Now using thumbnail-based markers for a rich, visual experience
     posts.forEach((post) => {
       if (!post.lat || !post.lng) return;
 
@@ -454,22 +454,18 @@ export function JourneyMap({
       el.style.cursor = "pointer";
       // Initially hide posts if zoom is below threshold (unless we're focusing on a POI)
       el.style.display = shouldShowPosts ? "block" : "none";
-      el.innerHTML = `
-        <div class="${postMarkerSize} rounded-full bg-india-green text-white flex items-center justify-center shadow-lg border-2 border-white cursor-pointer hover:scale-110 transition-transform" style="background-color: #138808;">
-          📍
-        </div>
-      `;
+      
+      // Use the new thumbnail-based marker HTML
+      el.innerHTML = createPostMarkerHTML(post, isMobileDevice);
 
+      // Create rich preview popup with image, text, and navigation
       const popup = new mapboxgl.Popup({
-        offset: 20,
+        offset: 28,
         closeButton: true,
         closeOnClick: true,
-      }).setHTML(`
-        <div class="p-2 max-w-[200px]">
-          <p class="text-sm">${post.body.slice(0, 80)}${post.body.length > 80 ? "..." : ""}</p>
-          ${post.location_name ? `<p class="text-xs text-gray-500 mt-1">📍 ${post.location_name}</p>` : ""}
-        </div>
-      `);
+        maxWidth: "none",
+        className: "post-preview-popup",
+      }).setHTML(createPostPreviewHTML(post));
 
       const marker = new mapboxgl.Marker({ element: el })
         .setLngLat([post.lng, post.lat])
@@ -480,7 +476,9 @@ export function JourneyMap({
 
       el.addEventListener("click", (e) => {
         e.stopPropagation();
-        onPostClick?.(post);
+        // Toggle popup on click instead of navigating immediately
+        // User can use "Læs mere" link in popup to navigate
+        marker.togglePopup();
       });
     });
 

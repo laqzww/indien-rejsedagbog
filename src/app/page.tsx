@@ -62,7 +62,7 @@ export default async function HomePage({ searchParams }: PageProps) {
   // Group posts by milestone and day
   const groupedPosts = groupPostsByMilestoneAndDay(posts, milestones || []);
 
-  // Fetch posts with location for map
+  // Fetch posts with location for map (including media details for thumbnail markers)
   const { data: mapPostsRaw } = await supabase
     .from("posts")
     .select(`
@@ -73,7 +73,7 @@ export default async function HomePage({ searchParams }: PageProps) {
       location_name,
       created_at,
       captured_at,
-      media (storage_path)
+      media (id, type, storage_path, thumbnail_path, display_order)
     `)
     .not("lat", "is", null)
     .order("created_at", { ascending: false });

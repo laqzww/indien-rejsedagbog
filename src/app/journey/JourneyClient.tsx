@@ -18,7 +18,13 @@ interface JourneyPost {
   location_name: string | null;
   created_at: string;
   captured_at: string | null;
-  media: { storage_path: string }[];
+  media: {
+    id: string;
+    type: string;
+    storage_path: string;
+    thumbnail_path: string | null;
+    display_order: number;
+  }[];
 }
 
 // Dynamic import for map to avoid SSR issues
@@ -167,9 +173,12 @@ export function JourneyClient({ milestones, posts }: JourneyClientProps) {
               <span className="text-muted-foreground">Milepæl</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-5 h-5 rounded-full bg-india-green text-white text-xs flex items-center justify-center">
-                📍
-              </div>
+              <div 
+                className="w-5 h-5 rounded-full border-2 border-white shadow-sm"
+                style={{ 
+                  background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)",
+                }}
+              />
               <span className="text-muted-foreground">Opslag</span>
             </div>
             <div className="flex items-center gap-2">
