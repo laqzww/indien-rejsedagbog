@@ -200,12 +200,27 @@ export function HomeClient({
     router.replace(`/?${params.toString()}`, { scroll: false });
   }, [router, searchParams]);
 
-  // Handle direct post click on map (when not in carousel mode)
+  // Handle direct post click on map - open carousel with the clicked post
   const handleMapPostClick = useCallback((post: CarouselPost) => {
-    // Find which milestone this post belongs to and open carousel
-    // For now, just navigate to feed
-    handlePostClick(post);
-  }, [handlePostClick]);
+    // Find which milestone this post belongs to
+    const postDate = post.captured_at || post.created_at;
+    const result = findMilestoneForDate(postDate, milestones);
+    
+    if (result?.type === "milestone") {
+      const milestone = result.milestone;
+      const milestonePosts = getPostsForMilestone(milestone);
+      
+      // Find the index of the clicked post
+      const postIndex = milestonePosts.findIndex(p => p.id === post.id);
+      
+      if (milestonePosts.length > 0) {
+        setActiveMilestone(milestone);
+        setCarouselPosts(milestonePosts);
+        setActivePostIndex(postIndex >= 0 ? postIndex : 0);
+        setHighlightPostId(post.id);
+      }
+    }
+  }, [milestones, getPostsForMilestone]);
 
   const handleMapError = useCallback(() => {
     setMapError(true);
