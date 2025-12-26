@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Header } from "./Header";
@@ -12,42 +12,8 @@ import { Button } from "./ui/button";
 import { List, Map as MapIcon, X, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Milestone } from "@/types/database";
-import type { MilestoneGroup, MilestoneResult } from "@/lib/journey";
+import type { MilestoneGroup } from "@/lib/journey";
 import { findMilestoneForDate } from "@/lib/journey";
-
-// Pseudo-milestone IDs for special groups
-const BEFORE_JOURNEY_ID = "__before_journey__";
-const AFTER_JOURNEY_ID = "__after_journey__";
-
-// Create pseudo-milestone for "Før afrejse"
-function createBeforeJourneyMilestone(displayOrder: number): Milestone {
-  return {
-    id: BEFORE_JOURNEY_ID,
-    name: "Før afrejse",
-    description: "Opslag fra før rejsen startede",
-    lat: 55.6761, // Copenhagen
-    lng: 12.5683,
-    display_order: displayOrder,
-    arrival_date: null,
-    departure_date: null,
-    created_at: "",
-  };
-}
-
-// Create pseudo-milestone for "Efter rejsen"
-function createAfterJourneyMilestone(displayOrder: number): Milestone {
-  return {
-    id: AFTER_JOURNEY_ID,
-    name: "Efter rejsen",
-    description: "Opslag fra efter rejsen sluttede",
-    lat: 55.6761, // Copenhagen
-    lng: 12.5683,
-    display_order: displayOrder,
-    arrival_date: null,
-    departure_date: null,
-    created_at: "",
-  };
-}
 
 // Dynamic import for map to avoid SSR issues
 const JourneyMap = dynamic(
@@ -162,66 +128,19 @@ export function HomeClient({
     }
   }, [focusLat, focusLng]);
 
-  // Build extended milestones list including pseudo-milestones for "Før afrejse" and "Efter rejsen"
-  const extendedMilestones = React.useMemo(() => {
-    // Check if we have any posts in before/after categories
-    let hasBeforePosts = false;
-    let hasAfterPosts = false;
-    
-    for (const post of mapPosts) {
-      if (!post.lat || !post.lng) continue;
-      const postDate = post.captured_at || post.created_at;
-      const result = findMilestoneForDate(postDate, milestones);
-      if (result?.type === "before_journey") hasBeforePosts = true;
-      if (result?.type === "after_journey") hasAfterPosts = true;
-    }
-    
-    const extended: Milestone[] = [];
-    
-    // Add "Før afrejse" first (display_order 0)
-    if (hasBeforePosts) {
-      extended.push(createBeforeJourneyMilestone(0));
-    }
-    
-    // Add actual milestones with adjusted display_order
-    milestones.forEach((m, idx) => {
-      extended.push({
-        ...m,
-        display_order: hasBeforePosts ? idx + 1 : m.display_order,
-      });
-    });
-    
-    // Add "Efter rejsen" last
-    if (hasAfterPosts) {
-      extended.push(createAfterJourneyMilestone(extended.length));
-    }
-    
-    return extended;
-  }, [mapPosts, milestones]);
-
-  // Helper to get posts for a milestone (including pseudo-milestones)
+  // Helper to get posts for a milestone
   const getPostsForMilestone = useCallback((milestone: Milestone): CarouselPost[] => {
     return mapPosts.filter((post) => {
       if (!post.lat || !post.lng) return false;
       const postDate = post.captured_at || post.created_at;
       const result = findMilestoneForDate(postDate, milestones);
-      
-      // Handle pseudo-milestones
-      if (milestone.id === BEFORE_JOURNEY_ID) {
-        return result?.type === "before_journey";
-      }
-      if (milestone.id === AFTER_JOURNEY_ID) {
-        return result?.type === "after_journey";
-      }
-      
-      // Regular milestone
       return result?.type === "milestone" && result.milestone.id === milestone.id;
     });
   }, [mapPosts, milestones]);
 
   const handleMilestoneClick = useCallback((milestone: Milestone, milestonePosts?: CarouselPost[]) => {
-    // Find milestone index in extended list
-    const milestoneIndex = extendedMilestones.findIndex(m => m.id === milestone.id);
+    // Find milestone index in regular milestones list
+    const milestoneIndex = milestones.findIndex(m => m.id === milestone.id);
     
     setActiveMilestone(milestone);
     setActiveMilestoneIndex(milestoneIndex >= 0 ? milestoneIndex : 0);
@@ -237,7 +156,7 @@ export function HomeClient({
     } else {
       setHighlightPostId(null);
     }
-  }, [getPostsForMilestone, extendedMilestones]);
+  }, [getPostsForMilestone, milestones]);
 
   const handlePostClick = useCallback((post: { id: string }) => {
     // Navigate to feed view and scroll to the post
@@ -289,26 +208,22 @@ export function HomeClient({
     const postDate = post.captured_at || post.created_at;
     const result = findMilestoneForDate(postDate, milestones);
     
-    let targetMilestone: Milestone | null = null;
-    
-    if (result?.type === "milestone") {
-      targetMilestone = result.milestone;
-    } else if (result?.type === "before_journey") {
-      // Find the pseudo-milestone for "Før afrejse"
-      targetMilestone = extendedMilestones.find(m => m.id === BEFORE_JOURNEY_ID) || null;
-    } else if (result?.type === "after_journey") {
-      // Find the pseudo-milestone for "Efter rejsen"
-      targetMilestone = extendedMilestones.find(m => m.id === AFTER_JOURNEY_ID) || null;
+    // For posts before/after journey, navigate directly to feed instead of carousel
+    if (result?.type === "before_journey" || result?.type === "after_journey") {
+      handlePostClick(post);
+      return;
     }
     
-    if (targetMilestone) {
-      const milestoneIndex = extendedMilestones.findIndex(m => m.id === targetMilestone!.id);
-      const milestonePosts = getPostsForMilestone(targetMilestone);
+    // For regular milestone posts, open carousel
+    if (result?.type === "milestone") {
+      const milestone = result.milestone;
+      const milestoneIndex = milestones.findIndex(m => m.id === milestone.id);
+      const milestonePosts = getPostsForMilestone(milestone);
       
       // Find the index of the clicked post
       const postIndex = milestonePosts.findIndex(p => p.id === post.id);
       
-      setActiveMilestone(targetMilestone);
+      setActiveMilestone(milestone);
       setActiveMilestoneIndex(milestoneIndex >= 0 ? milestoneIndex : 0);
       setCarouselPosts(milestonePosts);
       setActivePostIndex(postIndex >= 0 ? postIndex : 0);
@@ -316,7 +231,7 @@ export function HomeClient({
       setShowCarousel(true);
       setCarouselViewMode("posts");
     }
-  }, [milestones, extendedMilestones, getPostsForMilestone]);
+  }, [milestones, getPostsForMilestone, handlePostClick]);
 
   // Handle milestone change from carousel (when swiping in milestone view)
   const handleCarouselMilestoneChange = useCallback((index: number, milestone: Milestone) => {
@@ -458,10 +373,10 @@ export function HomeClient({
                   highlightPostId={highlightPostId}
                 />
 
-                {/* Journey Carousel - shows milestones or posts */}
+                {/* Journey Carousel - shows milestones or posts (no pseudo-milestones) */}
                 {showCarousel && activeMilestone && (
                   <JourneyCarousel
-                    milestones={extendedMilestones}
+                    milestones={milestones}
                     activeMilestone={activeMilestone}
                     activeMilestoneIndex={activeMilestoneIndex}
                     posts={carouselPosts}
