@@ -10,6 +10,14 @@ import {
   type MapPost,
 } from "./PostMarker";
 
+// Available map styles
+export type MapStyle = "streets" | "satellite";
+
+const MAP_STYLES: Record<MapStyle, string> = {
+  streets: "mapbox://styles/mapbox/streets-v12",
+  satellite: "mapbox://styles/mapbox/satellite-streets-v12",
+};
+
 interface JourneyMapProps {
   milestones: Milestone[];
   posts: MapPost[];
@@ -29,6 +37,8 @@ interface JourneyMapProps {
   // Bottom offset for extent calculations (e.g., carousel height)
   // This ensures the "useful" visible area is above overlaying UI elements
   extentBottomOffset?: number;
+  // Map style (streets or satellite)
+  mapStyle?: MapStyle;
 }
 
 // Re-export MapPost type for consumers
@@ -78,6 +88,7 @@ export function JourneyMap({
   activeMilestone,
   highlightPostId,
   extentBottomOffset = 0,
+  mapStyle = "streets",
 }: JourneyMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -348,7 +359,7 @@ export function JourneyMap({
       try {
         const mapInstance = new mapboxgl.Map({
           container: container,
-          style: "mapbox://styles/mapbox/streets-v12",
+          style: MAP_STYLES[mapStyle],
           center: center,
           zoom: isMobile ? Math.max(zoom - 1, 3) : zoom,
           attributionControl: false,
@@ -452,6 +463,30 @@ export function JourneyMap({
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty deps - only run on mount/unmount
+
+  // Handle map style changes
+  useEffect(() => {
+    const mapInstance = map.current;
+    if (!mapInstance || !isLoaded) return;
+
+    const newStyle = MAP_STYLES[mapStyle];
+    const currentStyle = mapInstance.getStyle();
+    
+    // Only change if style is different (compare by checking if current matches expected)
+    if (currentStyle?.sprite?.toString().includes(mapStyle)) return;
+    
+    // Store current center and zoom to restore after style change
+    const center = mapInstance.getCenter();
+    const zoom = mapInstance.getZoom();
+    
+    mapInstance.setStyle(newStyle);
+    
+    // Restore view after style loads
+    mapInstance.once("style.load", () => {
+      mapInstance.setCenter(center);
+      mapInstance.setZoom(zoom);
+    });
+  }, [mapStyle, isLoaded]);
 
   // Handle container resize
   useEffect(() => {
