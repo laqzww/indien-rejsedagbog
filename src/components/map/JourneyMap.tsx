@@ -526,20 +526,24 @@ export function JourneyMap({
     injectPostMarkerStyles();
 
     // Add post markers FIRST (so they appear BELOW milestone markers in the layer order)
-    // Now using thumbnail-based markers for a rich, visual experience
+    // Using traditional pin markers with deep red color
     posts.forEach((post) => {
       if (!post.lat || !post.lng) return;
 
       const el = document.createElement("div");
       el.className = "post-marker";
-      el.style.cursor = "pointer";
       // Initially hide posts if zoom is below threshold (unless we're focusing on a POI)
       el.style.display = shouldShowPosts ? "block" : "none";
       
-      // Use the new thumbnail-based marker HTML
+      // Use the traditional pin marker HTML
       el.innerHTML = createPostMarkerHTML(post, isMobileDevice);
 
-      const marker = new mapboxgl.Marker({ element: el })
+      // IMPORTANT: Set anchor to "bottom" so the pin tip points exactly at the location
+      // This prevents the marker from shifting position during interactions
+      const marker = new mapboxgl.Marker({ 
+        element: el,
+        anchor: "bottom"  // Pin tip anchored to coordinates
+      })
         .setLngLat([post.lng, post.lat])
         .addTo(mapInstance);
 
@@ -645,18 +649,20 @@ export function JourneyMap({
   }, [isLoaded, milestones, posts, onMilestoneClick, onPostClick, cleanupMarkers, updatePostVisibility, zoomToMilestoneStage, focusLat, focusLng, focusZoom]);
 
   // Handle highlighting of active post in carousel
+  // IMPORTANT: We only use CSS classes for highlighting, never inline transforms
+  // Mapbox manages marker positioning via transforms internally, so modifying
+  // transform directly causes the marker to jump to incorrect positions
   useEffect(() => {
     if (!isLoaded) return;
 
-    // Reset all markers to normal state
+    // Reset all markers to normal state - only modify class and zIndex
     postMarkersRef.current.forEach((marker) => {
       const el = marker.getElement();
       el.style.zIndex = "";
-      el.style.transform = "";
       el.classList.remove("post-marker-highlighted");
     });
 
-    // Highlight the active post
+    // Highlight the active post using CSS class only
     if (highlightPostId) {
       const activeMarker = postMarkersRef.current.find((marker) => {
         const el = marker.getElement();
