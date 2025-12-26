@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import Image from "next/image";
 import useEmblaCarousel from "embla-carousel-react";
-import { MapPin, Calendar, ImageIcon, Film, Play, ChevronLeft, ChevronRight, X, ChevronUp, ChevronDown } from "lucide-react";
+import { MapPin, ImageIcon, Film, Play, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getMediaUrl } from "@/lib/upload";
 import type { Milestone } from "@/types/database";
@@ -186,8 +186,8 @@ export function JourneyCarousel({
     activeApi?.scrollNext();
   }, [activeApi]);
 
-  // Toggle view mode
-  const handleToggleViewMode = useCallback(() => {
+  // Toggle view mode by clicking on milestone badge
+  const handleBadgeClick = useCallback(() => {
     onViewModeChange(viewMode === "milestones" ? "posts" : "milestones");
   }, [viewMode, onViewModeChange]);
 
@@ -198,7 +198,6 @@ export function JourneyCarousel({
 
   // Handle post card click
   const handlePostCardClick = useCallback((post: CarouselPost) => {
-    // In posts mode, clicking navigates to full post
     onPostClick(post);
   }, [onPostClick]);
 
@@ -206,66 +205,35 @@ export function JourneyCarousel({
   const selectedIndex = viewMode === "milestones" ? selectedMilestoneIndex : selectedPostIndex;
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-black/60 via-black/30 to-transparent pb-4 pt-8">
-      {/* Header with view mode toggle */}
-      <div className="flex items-center justify-between px-4 mb-3">
+    <div className="absolute bottom-0 left-0 right-0 z-40 pb-3 pt-2">
+      {/* Minimal header - just milestone badge and close */}
+      <div className="flex items-center justify-between px-3 mb-2">
         <button
-          onClick={handleToggleViewMode}
-          className="flex items-center gap-2 group"
+          onClick={handleBadgeClick}
+          className="flex items-center gap-2 group px-2 py-1 rounded-full bg-black/40 backdrop-blur-sm hover:bg-black/50 transition-colors"
+          title={viewMode === "milestones" ? "Vis opslag" : "Vis destinationer"}
         >
-          <div className="w-6 h-6 rounded-full bg-saffron text-white text-xs flex items-center justify-center font-bold">
-            {viewMode === "milestones" ? selectedMilestoneIndex + 1 : activeMilestone.display_order}
+          <div className="w-5 h-5 rounded-full bg-saffron text-white text-xs flex items-center justify-center font-bold">
+            {activeMilestone.display_order}
           </div>
-          <span className="text-white font-medium text-sm drop-shadow-lg">
+          <span className="text-white text-sm font-medium">
             {viewMode === "milestones" 
-              ? `${milestones.length} destinationer`
+              ? `${selectedMilestoneIndex + 1}/${milestones.length}`
               : activeMilestone.name
             }
           </span>
-          <span className="text-white/70 text-xs">
-            ({selectedIndex + 1}/{itemCount})
-          </span>
-          {/* Toggle indicator */}
-          <div className="ml-1 p-1 rounded-full bg-white/20 group-hover:bg-white/30 transition-colors">
-            {viewMode === "milestones" ? (
-              <ChevronDown className="h-3 w-3 text-white" />
-            ) : (
-              <ChevronUp className="h-3 w-3 text-white" />
-            )}
-          </div>
+          {viewMode === "posts" && posts.length > 0 && (
+            <span className="text-white/60 text-xs">
+              {selectedPostIndex + 1}/{posts.length}
+            </span>
+          )}
         </button>
         <button
           onClick={onClose}
-          className="p-1.5 rounded-full bg-black/40 text-white hover:bg-black/60 transition-colors"
+          className="p-1.5 rounded-full bg-black/40 backdrop-blur-sm text-white hover:bg-black/50 transition-colors"
           aria-label="Luk"
         >
           <X className="h-4 w-4" />
-        </button>
-      </div>
-
-      {/* View mode indicator pills */}
-      <div className="flex justify-center gap-2 mb-3">
-        <button
-          onClick={() => onViewModeChange("milestones")}
-          className={cn(
-            "px-3 py-1 rounded-full text-xs font-medium transition-all",
-            viewMode === "milestones"
-              ? "bg-saffron text-white"
-              : "bg-white/20 text-white/80 hover:bg-white/30"
-          )}
-        >
-          Destinationer
-        </button>
-        <button
-          onClick={() => onViewModeChange("posts")}
-          className={cn(
-            "px-3 py-1 rounded-full text-xs font-medium transition-all",
-            viewMode === "posts"
-              ? "bg-saffron text-white"
-              : "bg-white/20 text-white/80 hover:bg-white/30"
-          )}
-        >
-          Opslag
         </button>
       </div>
 
@@ -276,41 +244,41 @@ export function JourneyCarousel({
           onClick={scrollPrev}
           className={cn(
             "hidden lg:flex absolute left-2 top-1/2 -translate-y-1/2 z-10",
-            "w-10 h-10 items-center justify-center rounded-full",
-            "bg-white/90 shadow-lg hover:bg-white transition-colors",
-            !canScrollPrev && "opacity-50 cursor-not-allowed"
+            "w-8 h-8 items-center justify-center rounded-full",
+            "bg-white/90 shadow-md hover:bg-white transition-colors",
+            !canScrollPrev && "opacity-40 cursor-not-allowed"
           )}
           disabled={!canScrollPrev}
           aria-label="Forrige"
         >
-          <ChevronLeft className="h-5 w-5 text-gray-700" />
+          <ChevronLeft className="h-4 w-4 text-gray-700" />
         </button>
 
         <button
           onClick={scrollNext}
           className={cn(
             "hidden lg:flex absolute right-2 top-1/2 -translate-y-1/2 z-10",
-            "w-10 h-10 items-center justify-center rounded-full",
-            "bg-white/90 shadow-lg hover:bg-white transition-colors",
-            !canScrollNext && "opacity-50 cursor-not-allowed"
+            "w-8 h-8 items-center justify-center rounded-full",
+            "bg-white/90 shadow-md hover:bg-white transition-colors",
+            !canScrollNext && "opacity-40 cursor-not-allowed"
           )}
           disabled={!canScrollNext}
           aria-label="Næste"
         >
-          <ChevronRight className="h-5 w-5 text-gray-700" />
+          <ChevronRight className="h-4 w-4 text-gray-700" />
         </button>
 
         {/* Milestones carousel */}
         <div 
           className={cn(
-            "overflow-hidden transition-opacity duration-200",
+            "overflow-hidden",
             viewMode === "milestones" ? "block" : "hidden"
           )} 
           ref={milestoneEmblaRef}
         >
-          <div className="flex gap-3 px-4 lg:px-16">
+          <div className="flex gap-2 px-3 lg:px-12">
             {milestones.map((milestone, index) => (
-              <MilestoneCard
+              <CompactMilestoneCard
                 key={milestone.id}
                 milestone={milestone}
                 postCount={getPostsForMilestone(milestone).length}
@@ -324,15 +292,15 @@ export function JourneyCarousel({
         {/* Posts carousel */}
         <div 
           className={cn(
-            "overflow-hidden transition-opacity duration-200",
+            "overflow-hidden",
             viewMode === "posts" ? "block" : "hidden"
           )} 
           ref={postEmblaRef}
         >
-          <div className="flex gap-3 px-4 lg:px-16">
+          <div className="flex gap-2 px-3 lg:px-12">
             {posts.length > 0 ? (
               posts.map((post, index) => (
-                <PostCard
+                <CompactPostCard
                   key={post.id}
                   post={post}
                   isActive={index === selectedPostIndex}
@@ -346,17 +314,17 @@ export function JourneyCarousel({
         </div>
       </div>
 
-      {/* Dot indicators for mobile */}
-      {itemCount > 1 && itemCount <= 10 && (
-        <div className="flex justify-center gap-1.5 mt-3 lg:hidden">
+      {/* Compact dot indicators for mobile - only when many items */}
+      {itemCount > 1 && itemCount <= 8 && (
+        <div className="flex justify-center gap-1 mt-2 lg:hidden">
           {Array.from({ length: itemCount }).map((_, index) => (
             <button
               key={index}
               className={cn(
-                "w-2 h-2 rounded-full transition-all",
+                "w-1.5 h-1.5 rounded-full transition-all",
                 index === selectedIndex
-                  ? "bg-white w-4"
-                  : "bg-white/50"
+                  ? "bg-white w-3"
+                  : "bg-white/40"
               )}
               onClick={() => activeApi?.scrollTo(index)}
               aria-label={`Gå til ${viewMode === "milestones" ? "destination" : "opslag"} ${index + 1}`}
@@ -368,94 +336,60 @@ export function JourneyCarousel({
   );
 }
 
-// Milestone card component
-interface MilestoneCardProps {
+// Compact milestone card component
+interface CompactMilestoneCardProps {
   milestone: Milestone;
   postCount: number;
   isActive: boolean;
   onClick: () => void;
 }
 
-function MilestoneCard({ milestone, postCount, isActive, onClick }: MilestoneCardProps) {
-  // Format date range
-  const formatDateRange = () => {
-    if (!milestone.arrival_date) return null;
-    const arrival = new Date(milestone.arrival_date);
-    const arrivalStr = arrival.toLocaleDateString("da-DK", { day: "numeric", month: "short" });
-    
-    if (!milestone.departure_date) return arrivalStr;
-    
-    const departure = new Date(milestone.departure_date);
-    const departureStr = departure.toLocaleDateString("da-DK", { day: "numeric", month: "short" });
-    return `${arrivalStr} – ${departureStr}`;
-  };
-
-  const dateRange = formatDateRange();
-
+function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: CompactMilestoneCardProps) {
   return (
     <button
       onClick={onClick}
       className={cn(
-        // Base styles
-        "flex-shrink-0 w-[280px] sm:w-[300px] lg:w-[320px]",
-        "bg-white rounded-xl overflow-hidden shadow-xl",
-        "text-left transition-all duration-200",
-        "hover:scale-[1.02] hover:shadow-2xl",
-        "focus:outline-none focus:ring-2 focus:ring-saffron focus:ring-offset-2",
+        "flex-shrink-0 w-[200px] sm:w-[220px] lg:w-[240px]",
+        "bg-white/95 backdrop-blur-sm rounded-lg overflow-hidden shadow-lg",
+        "text-left transition-all duration-150",
+        "hover:bg-white hover:shadow-xl",
+        "focus:outline-none focus:ring-2 focus:ring-saffron",
         isActive && "ring-2 ring-saffron"
       )}
     >
-      {/* Header with gradient */}
-      <div 
-        className="h-[100px] flex items-center justify-center relative"
-        style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
-      >
-        <div className="absolute top-3 left-3 w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-          <span className="text-white font-bold text-lg">{milestone.display_order}</span>
+      <div className="flex items-center gap-3 p-2.5">
+        {/* Milestone number */}
+        <div 
+          className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+          style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
+        >
+          <span className="text-white font-bold text-sm">{milestone.display_order}</span>
         </div>
-        <h3 className="text-white text-xl font-bold text-center px-4 drop-shadow-lg">
-          {milestone.name}
-        </h3>
-      </div>
-
-      {/* Content */}
-      <div className="p-3">
-        {milestone.description && (
-          <p className="text-sm text-gray-600 line-clamp-2 mb-2">
-            {milestone.description}
+        
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-gray-900 truncate">
+            {milestone.name}
+          </h3>
+          <p className="text-xs text-gray-500 flex items-center gap-1">
+            <ImageIcon className="h-3 w-3" />
+            {postCount} opslag
+            <span className="text-saffron ml-1">→</span>
           </p>
-        )}
-
-        <div className="flex items-center justify-between text-xs text-gray-500">
-          <div className="flex items-center gap-3">
-            {dateRange && (
-              <span className="flex items-center gap-1">
-                <Calendar className="h-3 w-3" />
-                {dateRange}
-              </span>
-            )}
-            <span className="flex items-center gap-1">
-              <ImageIcon className="h-3 w-3" />
-              {postCount} opslag
-            </span>
-          </div>
-          <span className="text-saffron font-medium">
-            Se opslag →
-          </span>
         </div>
       </div>
     </button>
   );
 }
 
-// Post card component
-interface PostCardProps {
+// Compact post card component
+interface CompactPostCardProps {
   post: CarouselPost;
   isActive: boolean;
   onClick: () => void;
 }
 
-function PostCard({ post, isActive, onClick }: PostCardProps) {
+function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
   const sortedMedia = [...post.media].sort(
     (a, b) => a.display_order - b.display_order
   );
@@ -478,92 +412,77 @@ function PostCard({ post, isActive, onClick }: PostCardProps) {
   const thumbnailUrl = getThumbnailUrl();
   const isVideo = firstMedia?.type === "video";
 
-  const date = new Date(post.captured_at || post.created_at);
-  const formattedDate = date.toLocaleDateString("da-DK", {
-    day: "numeric",
-    month: "short",
-  });
-
-  const truncatedBody = post.body.length > 80 
-    ? post.body.slice(0, 80) + "..." 
+  const truncatedBody = post.body.length > 50 
+    ? post.body.slice(0, 50) + "..." 
     : post.body;
 
   return (
     <button
       onClick={onClick}
       className={cn(
-        "flex-shrink-0 w-[280px] sm:w-[300px] lg:w-[320px]",
-        "bg-white rounded-xl overflow-hidden shadow-xl",
-        "text-left transition-all duration-200",
-        "hover:scale-[1.02] hover:shadow-2xl",
-        "focus:outline-none focus:ring-2 focus:ring-saffron focus:ring-offset-2",
+        "flex-shrink-0 w-[200px] sm:w-[220px] lg:w-[240px]",
+        "bg-white/95 backdrop-blur-sm rounded-lg overflow-hidden shadow-lg",
+        "text-left transition-all duration-150",
+        "hover:bg-white hover:shadow-xl",
+        "focus:outline-none focus:ring-2 focus:ring-saffron",
         isActive && "ring-2 ring-saffron"
       )}
     >
-      <div className="relative h-[120px] bg-muted">
-        {thumbnailUrl ? (
-          <>
-            <Image
-              src={thumbnailUrl}
-              alt=""
-              fill
-              className="object-cover"
-              sizes="320px"
-            />
-            {isVideo && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="p-2.5 bg-black/50 rounded-full">
-                  <Play className="h-5 w-5 text-white fill-white" />
+      <div className="flex items-center gap-2.5 p-2">
+        {/* Thumbnail */}
+        <div className="relative w-14 h-14 rounded-md overflow-hidden flex-shrink-0 bg-muted">
+          {thumbnailUrl ? (
+            <>
+              <Image
+                src={thumbnailUrl}
+                alt=""
+                fill
+                className="object-cover"
+                sizes="56px"
+              />
+              {isVideo && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                  <Play className="h-4 w-4 text-white fill-white" />
                 </div>
-              </div>
-            )}
-            {mediaCount > 1 && (
-              <div className="absolute top-2 right-2 flex gap-1">
-                {imageCount > 0 && (
-                  <div className="flex items-center gap-1 px-1.5 py-0.5 bg-black/60 rounded-full text-white text-xs">
-                    <ImageIcon className="h-3 w-3" />
-                    {imageCount}
-                  </div>
-                )}
-                {videoCount > 0 && (
-                  <div className="flex items-center gap-1 px-1.5 py-0.5 bg-black/60 rounded-full text-white text-xs">
-                    <Film className="h-3 w-3" />
-                    {videoCount}
-                  </div>
-                )}
-              </div>
-            )}
-          </>
-        ) : (
-          <div 
-            className="w-full h-full flex items-center justify-center"
-            style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
-          >
-            <span className="text-white text-3xl">📝</span>
-          </div>
-        )}
-      </div>
-
-      <div className="p-3">
-        <p className="text-sm text-gray-800 line-clamp-2 mb-2 leading-snug">
-          {truncatedBody}
-        </p>
-
-        <div className="flex items-center gap-3 text-xs text-gray-500">
-          {post.location_name ? (
-            <span className="flex items-center gap-1 truncate flex-1">
-              <MapPin className="h-3 w-3 text-india-green flex-shrink-0" />
-              <span className="truncate">{post.location_name}</span>
-            </span>
+              )}
+              {mediaCount > 1 && (
+                <div className="absolute bottom-0.5 right-0.5 flex gap-0.5">
+                  {imageCount > 1 && (
+                    <div className="flex items-center gap-0.5 px-1 py-0.5 bg-black/60 rounded text-white text-[10px]">
+                      <ImageIcon className="h-2 w-2" />
+                      {imageCount}
+                    </div>
+                  )}
+                  {videoCount > 0 && (
+                    <div className="flex items-center gap-0.5 px-1 py-0.5 bg-black/60 rounded text-white text-[10px]">
+                      <Film className="h-2 w-2" />
+                      {videoCount}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           ) : (
-            <span className="flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              {formattedDate}
-            </span>
+            <div 
+              className="w-full h-full flex items-center justify-center"
+              style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
+            >
+              <span className="text-white text-lg">📝</span>
+            </div>
           )}
-          <span className="text-saffron font-medium whitespace-nowrap">
-            Læs mere →
-          </span>
+        </div>
+        
+        {/* Content */}
+        <div className="flex-1 min-w-0 py-0.5">
+          <p className="text-xs text-gray-800 line-clamp-2 leading-snug mb-1">
+            {truncatedBody}
+          </p>
+          {post.location_name && (
+            <p className="text-[10px] text-gray-500 flex items-center gap-0.5 truncate">
+              <MapPin className="h-2.5 w-2.5 text-india-green flex-shrink-0" />
+              <span className="truncate">{post.location_name}</span>
+            </p>
+          )}
         </div>
       </div>
     </button>
@@ -575,20 +494,22 @@ function EmptyPostsCard({ milestoneName }: { milestoneName: string }) {
   return (
     <div
       className={cn(
-        "flex-shrink-0 w-[280px] sm:w-[300px] lg:w-[320px]",
-        "bg-white/90 rounded-xl overflow-hidden shadow-xl",
-        "flex flex-col items-center justify-center p-6 text-center"
+        "flex-shrink-0 w-[200px] sm:w-[220px] lg:w-[240px]",
+        "bg-white/90 backdrop-blur-sm rounded-lg overflow-hidden shadow-lg",
+        "flex items-center justify-center p-4 text-center"
       )}
     >
-      <div 
-        className="w-16 h-16 rounded-full flex items-center justify-center mb-3"
-        style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
-      >
-        <ImageIcon className="h-8 w-8 text-white" />
+      <div className="flex items-center gap-2">
+        <div 
+          className="w-8 h-8 rounded-full flex items-center justify-center"
+          style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
+        >
+          <ImageIcon className="h-4 w-4 text-white" />
+        </div>
+        <p className="text-gray-500 text-xs">
+          Ingen opslag for <span className="font-medium">{milestoneName}</span>
+        </p>
       </div>
-      <p className="text-gray-600 text-sm">
-        Ingen opslag for <span className="font-medium">{milestoneName}</span> endnu
-      </p>
     </div>
   );
 }
