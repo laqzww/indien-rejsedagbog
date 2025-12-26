@@ -132,6 +132,16 @@ export function HomeClient({
   // Track if we've already initialized the carousel from focusPost to prevent duplicate init
   const initializedFocusPostRef = useRef<string | null>(null);
 
+  // Helper to get posts for a milestone
+  const getPostsForMilestone = useCallback((milestone: Milestone): CarouselPost[] => {
+    return mapPosts.filter((post) => {
+      if (!post.lat || !post.lng) return false;
+      const postDate = post.captured_at || post.created_at;
+      const result = findMilestoneForDate(postDate, milestones);
+      return result?.type === "milestone" && result.milestone.id === milestone.id;
+    });
+  }, [mapPosts, milestones]);
+
   // Auto-initialize carousel when focusPost parameter is present and we're in map view
   useEffect(() => {
     // Only run in map view with focusPost parameter
@@ -170,16 +180,6 @@ export function HomeClient({
     setShowCarousel(true);
     setCarouselViewMode("posts");
   }, [activeView, urlFocusPost, mapPosts, milestones, getPostsForMilestone]);
-
-  // Helper to get posts for a milestone
-  const getPostsForMilestone = useCallback((milestone: Milestone): CarouselPost[] => {
-    return mapPosts.filter((post) => {
-      if (!post.lat || !post.lng) return false;
-      const postDate = post.captured_at || post.created_at;
-      const result = findMilestoneForDate(postDate, milestones);
-      return result?.type === "milestone" && result.milestone.id === milestone.id;
-    });
-  }, [mapPosts, milestones]);
 
   const handleMilestoneClick = useCallback((milestone: Milestone, milestonePosts?: CarouselPost[]) => {
     // Find milestone index in regular milestones list
