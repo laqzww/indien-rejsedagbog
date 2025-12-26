@@ -81,7 +81,6 @@ export function JourneyMap({
   const postMarkersRef = useRef<mapboxgl.Marker[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
-  const initAttempted = useRef(false);
   // Track which milestone is currently active and whether we're zoomed in or out
   const activeMilestoneRef = useRef<string | null>(null);
   const isZoomedInRef = useRef(false);
@@ -286,11 +285,10 @@ export function JourneyMap({
     }
   }, [focusLat, focusLng, focusZoom, isLoaded, updatePostVisibility]);
 
-  // Initialize map
+  // Initialize map - runs once on mount
   useEffect(() => {
-    // Prevent double initialization
-    if (initAttempted.current) return;
-    initAttempted.current = true;
+    // Already initialized
+    if (map.current) return;
 
     const container = mapContainer.current;
     if (!container) {
@@ -310,13 +308,17 @@ export function JourneyMap({
     // Set access token
     mapboxgl.accessToken = token;
 
-    // Wait for container to have dimensions
+    // Track if component is still mounted
+    let isMounted = true;
+    let retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
     const initMap = () => {
+      // Don't initialize if unmounted or already initialized
+      if (!isMounted || map.current) return true;
+
       const rect = container.getBoundingClientRect();
-      console.log("[JourneyMap] Container dimensions:", rect.width, "x", rect.height);
 
       if (rect.width === 0 || rect.height === 0) {
-        console.warn("[JourneyMap] Container has no dimensions, retrying...");
         return false;
       }
 
@@ -358,8 +360,10 @@ export function JourneyMap({
         mapInstance.on("error", (e) => {
           console.error("[JourneyMap] Map error:", e);
           const errorMsg = e.error?.message || "Unknown error";
-          setMapError(errorMsg);
-          onError?.();
+          if (isMounted) {
+            setMapError(errorMsg);
+            onError?.();
+          }
         });
 
         // Add controls
@@ -379,7 +383,8 @@ export function JourneyMap({
 
         // Map loaded successfully
         mapInstance.on("load", () => {
-          console.log("[JourneyMap] Map loaded successfully");
+          if (!isMounted) return;
+          
           // Initialize prevFocusRef with initial focus to prevent duplicate fly on mount
           if (focusLat !== undefined && focusLng !== undefined) {
             prevFocusRef.current = { lat: focusLat, lng: focusLng, zoom: focusZoom };
@@ -391,41 +396,73 @@ export function JourneyMap({
         return true;
       } catch (error) {
         console.error("[JourneyMap] Failed to initialize map:", error);
-        setMapError(error instanceof Error ? error.message : "Failed to initialize map");
-        onError?.();
+        if (isMounted) {
+          setMapError(error instanceof Error ? error.message : "Failed to initialize map");
+          onError?.();
+        }
         return true; // Don't retry on exception
       }
     };
 
-    // Try to initialize immediately
-    if (!initMap()) {
-      // If container has no dimensions, wait and retry
-      const retryTimeouts = [50, 100, 200, 500, 1000];
-      let retryIndex = 0;
-
-      const retry = () => {
-        if (retryIndex >= retryTimeouts.length || map.current) return;
+    // Use requestAnimationFrame to ensure container has dimensions
+    const startInit = () => {
+      if (!isMounted) return;
+      
+      if (!initMap()) {
+        // If container has no dimensions, retry with requestAnimationFrame
+        const retryWithRAF = (attempts: number) => {
+          if (!isMounted || map.current || attempts <= 0) return;
+          
+          retryTimeoutId = setTimeout(() => {
+            if (!isMounted || map.current) return;
+            
+            if (!initMap()) {
+              requestAnimationFrame(() => retryWithRAF(attempts - 1));
+            }
+          }, 50);
+        };
         
-        setTimeout(() => {
-          if (!map.current && initMap()) {
-            return;
-          }
-          retryIndex++;
-          retry();
-        }, retryTimeouts[retryIndex]);
-      };
+        requestAnimationFrame(() => retryWithRAF(10));
+      }
+    };
 
-      retry();
-    }
+    // Start initialization on next frame to ensure DOM is ready
+    requestAnimationFrame(startInit);
 
     return () => {
+      isMounted = false;
+      if (retryTimeoutId) {
+        clearTimeout(retryTimeoutId);
+      }
       cleanupMarkers();
       if (map.current) {
         map.current.remove();
         map.current = null;
       }
+      setIsLoaded(false);
     };
-  }, [initialCenter, initialZoom, milestones, onError, cleanupMarkers, focusLat, focusLng, focusZoom]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - only run on mount/unmount
+
+  // Handle container resize
+  useEffect(() => {
+    const mapInstance = map.current;
+    const container = mapContainer.current;
+    if (!mapInstance || !container) return;
+
+    // Use ResizeObserver for reliable container size detection
+    const resizeObserver = new ResizeObserver(() => {
+      if (map.current) {
+        map.current.resize();
+      }
+    });
+
+    resizeObserver.observe(container);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [isLoaded]);
 
   // Add route line and markers when loaded
   useEffect(() => {
