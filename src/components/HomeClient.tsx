@@ -368,7 +368,7 @@ export function HomeClient({
       {activeView === "map" && (
         <div 
           ref={mapContainerRef}
-          className="flex-1 flex flex-col lg:flex-row overflow-hidden"
+          className="flex-1 min-h-0 flex flex-col lg:flex-row"
         >
           {/* Desktop Timeline Sidebar */}
           <aside className="hidden lg:block w-80 border-r border-border overflow-y-auto bg-white flex-shrink-0">
@@ -387,8 +387,8 @@ export function HomeClient({
             </div>
           </aside>
 
-          {/* Map Container */}
-          <div className="flex-1 relative bg-muted">
+          {/* Map Container - fills remaining space */}
+          <div className="flex-1 min-h-0 relative bg-muted">
             {mapError ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-muted">
                 <MapIcon className="h-16 w-16 text-muted-foreground/30 mb-4" />

@@ -670,8 +670,7 @@ export function JourneyMap({
   return (
     <div
       ref={mapContainer}
-      className="w-full h-full"
-      style={{ minHeight: "300px" }}
+      className="absolute inset-0"
     />
   );
 }
