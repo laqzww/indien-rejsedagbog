@@ -26,6 +26,9 @@ interface JourneyMapProps {
   activeMilestone?: Milestone | null;
   // Highlight a specific post on the map
   highlightPostId?: string | null;
+  // Bottom offset for extent calculations (e.g., carousel height)
+  // This ensures the "useful" visible area is above overlaying UI elements
+  extentBottomOffset?: number;
 }
 
 // Re-export MapPost type for consumers
@@ -74,6 +77,7 @@ export function JourneyMap({
   focusZoom = 14, // Default to neighborhood level
   activeMilestone,
   highlightPostId,
+  extentBottomOffset = 0,
 }: JourneyMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -115,10 +119,15 @@ export function JourneyMap({
       const milestoneIndex = sortedMilestones.findIndex((m) => m.id === milestone.id);
 
       // Calculate padding based on container size
+      // Bottom padding includes any overlaying UI (e.g., carousel) to ensure
+      // the useful visible area is above these elements
       const container = mapInstance.getContainer();
       const paddingPercent = 0.15;
       const horizontalPadding = Math.round(container.clientWidth * paddingPercent);
-      const verticalPadding = Math.round(container.clientHeight * paddingPercent);
+      const baseVerticalPadding = Math.round(container.clientHeight * paddingPercent);
+      // Top padding stays the same, bottom padding adds the offset for overlaying UI
+      const topPadding = baseVerticalPadding;
+      const bottomPadding = baseVerticalPadding + extentBottomOffset;
 
       // Helper: Create bounds centered on milestone that includes all points
       // This ensures milestone stays in the center of the view
@@ -182,8 +191,8 @@ export function JourneyMap({
           
           mapInstance.fitBounds(bounds, {
             padding: {
-              top: verticalPadding,
-              bottom: verticalPadding,
+              top: topPadding,
+              bottom: bottomPadding,
               left: horizontalPadding,
               right: horizontalPadding,
             },
@@ -223,8 +232,8 @@ export function JourneyMap({
           
           mapInstance.fitBounds(bounds, {
             padding: {
-              top: verticalPadding,
-              bottom: verticalPadding,
+              top: topPadding,
+              bottom: bottomPadding,
               left: horizontalPadding,
               right: horizontalPadding,
             },
@@ -247,7 +256,7 @@ export function JourneyMap({
         updatePostVisibility(zoom);
       });
     },
-    [posts, milestones, updatePostVisibility]
+    [posts, milestones, updatePostVisibility, extentBottomOffset]
   );
 
   // Track previous focus coordinates to detect changes
@@ -621,15 +630,19 @@ export function JourneyMap({
       // so the map focuses on the main journey route in India
 
       // Calculate 20% padding based on container size for consistent margin
+      // Bottom padding includes any overlaying UI (e.g., carousel) to ensure
+      // the useful visible area is above these elements
       const container = mapInstance.getContainer();
       const paddingPercent = 0.20;
       const horizontalPadding = Math.round(container.clientWidth * paddingPercent);
-      const verticalPadding = Math.round(container.clientHeight * paddingPercent);
+      const baseVerticalPadding = Math.round(container.clientHeight * paddingPercent);
+      const topPadding = baseVerticalPadding;
+      const bottomPadding = baseVerticalPadding + extentBottomOffset;
 
       mapInstance.fitBounds(bounds, {
         padding: {
-          top: verticalPadding,
-          bottom: verticalPadding,
+          top: topPadding,
+          bottom: bottomPadding,
           left: horizontalPadding,
           right: horizontalPadding,
         },
@@ -642,7 +655,7 @@ export function JourneyMap({
     return () => {
       mapInstance.off("zoom", handleZoom);
     };
-  }, [isLoaded, milestones, posts, onMilestoneClick, onPostClick, cleanupMarkers, updatePostVisibility, zoomToMilestoneStage, focusLat, focusLng, focusZoom]);
+  }, [isLoaded, milestones, posts, onMilestoneClick, onPostClick, cleanupMarkers, updatePostVisibility, zoomToMilestoneStage, focusLat, focusLng, focusZoom, extentBottomOffset]);
 
   // Handle highlighting of active post in carousel
   useEffect(() => {
