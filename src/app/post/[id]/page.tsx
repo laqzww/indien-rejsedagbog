@@ -143,7 +143,17 @@ export default async function PostPage({ params }: PageProps) {
           </div>
 
           {/* Location */}
-          {post.location_name && (
+          {post.location_name && post.lat && post.lng && (
+            <Link
+              href={`/?view=map&lat=${post.lat}&lng=${post.lng}&focusPost=${post.id}`}
+              className="inline-flex items-center gap-2 text-india-green hover:underline transition-colors group"
+            >
+              <MapPin className="h-5 w-5" />
+              <span className="font-medium">{post.location_name}</span>
+              <ArrowLeft className="h-4 w-4 rotate-180 opacity-0 -ml-1 group-hover:opacity-100 transition-opacity" />
+            </Link>
+          )}
+          {post.location_name && (!post.lat || !post.lng) && (
             <div className="flex items-center gap-2 text-india-green">
               <MapPin className="h-5 w-5" />
               <span className="font-medium">{post.location_name}</span>
@@ -210,26 +220,6 @@ export default async function PostPage({ params }: PageProps) {
             </div>
           )}
 
-          {/* Mini map with location */}
-          {post.lat && post.lng && (
-            <div className="pt-4 border-t border-border">
-              <h3 className="text-sm font-medium text-muted-foreground mb-3">Lokation</h3>
-              <div className="aspect-video rounded-lg overflow-hidden bg-muted">
-                {/* Static map image from Mapbox */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/pin-l-marker+FF9933(${post.lng},${post.lat})/${post.lng},${post.lat},12,0/600x300@2x?access_token=${process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}`}
-                  alt={`Kort over ${post.location_name || "lokation"}`}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <Link href={`/?view=map&lat=${post.lat}&lng=${post.lng}&focusPost=${post.id}`}>
-                <Button variant="link" className="px-0 mt-2">
-                  Se på rejsekortet →
-                </Button>
-              </Link>
-            </div>
-          )}
         </article>
       </main>
     </div>
