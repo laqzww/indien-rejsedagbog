@@ -8,8 +8,9 @@ import { PostFeed } from "./post/PostFeed";
 import { EmptyFeed } from "./post/EmptyFeed";
 // Timeline sidebar removed - now using carousel for all milestone browsing
 import { JourneyCarousel, type CarouselPost, type CarouselViewMode } from "./map/PostCarousel";
+import type { MapStyle } from "./map/JourneyMap";
 import { Button } from "./ui/button";
-import { Route, Map as MapIcon, RefreshCw } from "lucide-react";
+import { Route, Map as MapIcon, RefreshCw, Layers } from "lucide-react";
 import type { Milestone } from "@/types/database";
 import type { MilestoneGroup } from "@/lib/journey";
 import { findMilestoneForDate } from "@/lib/journey";
@@ -101,6 +102,7 @@ export function HomeClient({
   const [activeMilestone, setActiveMilestone] = useState<Milestone | null>(null);
   const [mapKey, setMapKey] = useState(0);
   const [mapError, setMapError] = useState(false);
+  const [mapStyle, setMapStyle] = useState<MapStyle>("streets");
   
   // Carousel state
   const [carouselPosts, setCarouselPosts] = useState<CarouselPost[]>([]);
@@ -266,7 +268,7 @@ export function HomeClient({
       const params = new URLSearchParams(searchParams.toString());
       params.set("lat", post.lat.toString());
       params.set("lng", post.lng.toString());
-      params.set("zoom", "12"); // Good zoom for seeing the post in context
+      params.set("zoom", "15"); // Close zoom for seeing the local area around the post
       router.replace(`/?${params.toString()}`, { scroll: false });
     }
   }, [router, searchParams]);
@@ -354,7 +356,7 @@ export function HomeClient({
         const params = new URLSearchParams(searchParams.toString());
         params.set("lat", firstPost.lat.toString());
         params.set("lng", firstPost.lng.toString());
-        params.set("zoom", "12");
+        params.set("zoom", "15"); // Close zoom for seeing the local area
         router.replace(`/?${params.toString()}`, { scroll: false });
       }
     }
@@ -402,6 +404,11 @@ export function HomeClient({
   const handleRetryMap = useCallback(() => {
     setMapError(false);
     setMapKey((k) => k + 1);
+  }, []);
+
+  // Toggle between street and satellite map styles
+  const handleToggleMapStyle = useCallback(() => {
+    setMapStyle((prev) => prev === "streets" ? "satellite" : "streets");
   }, []);
 
   return (
@@ -469,6 +476,7 @@ export function HomeClient({
                   activeMilestone={activeMilestone}
                   highlightPostId={highlightPostId}
                   extentBottomOffset={CAROUSEL_HEIGHT}
+                  mapStyle={mapStyle}
                 />
 
                 {/* Journey Carousel - shows milestones or posts (no pseudo-milestones) */}
@@ -504,6 +512,15 @@ export function HomeClient({
                 </Button>
               </div>
             )}
+
+            {/* Map style toggle button */}
+            <button
+              onClick={handleToggleMapStyle}
+              className="absolute top-16 right-3 z-20 bg-white rounded-md shadow-lg p-2 hover:bg-gray-50 transition-colors border border-gray-200"
+              title={mapStyle === "streets" ? "Skift til satellit" : "Skift til gadekort"}
+            >
+              <Layers className="h-5 w-5 text-gray-700" />
+            </button>
 
             {/* Legend */}
             <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-3 text-sm hidden lg:block">
