@@ -131,6 +131,8 @@ export function HomeClient({
 
   // Track if we've already initialized the carousel from focusPost to prevent duplicate init
   const initializedFocusPostRef = useRef<string | null>(null);
+  // Track if we've initialized the carousel for this map view session
+  const initializedMapViewRef = useRef(false);
 
   // Helper to get posts for a milestone
   const getPostsForMilestone = useCallback((milestone: Milestone): CarouselPost[] => {
@@ -141,6 +143,42 @@ export function HomeClient({
       return result?.type === "milestone" && result.milestone.id === milestone.id;
     });
   }, [mapPosts, milestones]);
+
+  // Auto-initialize carousel when entering map view (always show carousel with milestones)
+  useEffect(() => {
+    // Only run when entering map view
+    if (activeView !== "map") {
+      // Reset the flag when leaving map view so it re-initializes on next visit
+      initializedMapViewRef.current = false;
+      return;
+    }
+    
+    // If we have a focusPost parameter, that takes precedence (handled by next effect)
+    if (urlFocusPost) return;
+    
+    // Only initialize once per map view session
+    if (initializedMapViewRef.current) return;
+    if (milestones.length === 0) return;
+    
+    // Mark as initialized for this session
+    initializedMapViewRef.current = true;
+    
+    // Initialize carousel with the first milestone in milestones view
+    const firstMilestone = milestones[0];
+    const milestonePosts = getPostsForMilestone(firstMilestone);
+    
+    setActiveMilestone(firstMilestone);
+    setActiveMilestoneIndex(0);
+    setCarouselPosts(milestonePosts);
+    setActivePostIndex(0);
+    if (milestonePosts.length > 0) {
+      setHighlightPostId(milestonePosts[0].id);
+    } else {
+      setHighlightPostId(null);
+    }
+    setShowCarousel(true);
+    setCarouselViewMode("milestones"); // Start in milestones view to browse areas
+  }, [activeView, urlFocusPost, milestones, getPostsForMilestone]);
 
   // Auto-initialize carousel when focusPost parameter is present and we're in map view
   useEffect(() => {
@@ -188,9 +226,11 @@ export function HomeClient({
     setActiveMilestone(milestone);
     setActiveMilestoneIndex(milestoneIndex >= 0 ? milestoneIndex : 0);
     setShowCarousel(true);
-    setCarouselViewMode("posts"); // Start in posts view when clicking a milestone
+    // Always start in milestones view when clicking a milestone - this allows 
+    // browsing between areas first, then drilling into posts
+    setCarouselViewMode("milestones");
     
-    // Use provided posts or find them
+    // Use provided posts or find them (for when user switches to posts view)
     const posts = milestonePosts ?? getPostsForMilestone(milestone);
     setCarouselPosts(posts);
     if (posts.length > 0) {
