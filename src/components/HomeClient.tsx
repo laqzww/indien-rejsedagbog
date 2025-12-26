@@ -268,7 +268,7 @@ export function HomeClient({
       const params = new URLSearchParams(searchParams.toString());
       params.set("lat", post.lat.toString());
       params.set("lng", post.lng.toString());
-      params.set("zoom", "15"); // Close zoom for seeing the local area around the post
+      params.set("zoom", "16"); // Very close zoom for seeing the local area around the post
       router.replace(`/?${params.toString()}`, { scroll: false });
     }
   }, [router, searchParams]);
@@ -356,7 +356,7 @@ export function HomeClient({
         const params = new URLSearchParams(searchParams.toString());
         params.set("lat", firstPost.lat.toString());
         params.set("lng", firstPost.lng.toString());
-        params.set("zoom", "15"); // Close zoom for seeing the local area
+        params.set("zoom", "16"); // Very close zoom for seeing the local area
         router.replace(`/?${params.toString()}`, { scroll: false });
       }
     }
