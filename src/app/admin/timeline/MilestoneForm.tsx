@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,9 +14,13 @@ import {
   Calendar,
   FileText,
   Search,
+  ImageIcon,
+  Upload,
+  X,
 } from "lucide-react";
 import type { Milestone } from "@/types/database";
 import { cn } from "@/lib/utils";
+import { getMediaUrl } from "@/lib/upload";
 
 interface LocationResult {
   id: string;
@@ -26,7 +31,7 @@ interface LocationResult {
 
 interface MilestoneFormProps {
   milestone?: Milestone;
-  onSubmit: (data: Omit<Milestone, "id" | "created_at">) => Promise<boolean>;
+  onSubmit: (data: Omit<Milestone, "id" | "created_at">, coverImageFile?: File) => Promise<boolean>;
   onCancel: () => void;
   title: string;
 }
@@ -48,6 +53,15 @@ export function MilestoneForm({
     milestone?.departure_date ? milestone.departure_date.split("T")[0] : ""
   );
   const [displayOrder] = useState(milestone?.display_order ?? 0);
+
+  // Cover image state
+  const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
+  const [coverImagePreview, setCoverImagePreview] = useState<string | null>(
+    milestone?.cover_image_path ? getMediaUrl(milestone.cover_image_path) : null
+  );
+  const [existingCoverPath] = useState(milestone?.cover_image_path || null);
+  const [removeCover, setRemoveCover] = useState(false);
+  const coverInputRef = useRef<HTMLInputElement>(null);
 
   // Location search state
   const [locationQuery, setLocationQuery] = useState("");
@@ -140,6 +154,44 @@ export function MilestoneForm({
     setLocationResults([]);
   };
 
+  // Handle cover image selection
+  const handleCoverImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      setError("Kun billeder er tilladt");
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Billedet må max være 5MB");
+      return;
+    }
+
+    setCoverImageFile(file);
+    setRemoveCover(false);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setCoverImagePreview(e.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Handle cover image removal
+  const handleRemoveCover = () => {
+    setCoverImageFile(null);
+    setCoverImagePreview(null);
+    setRemoveCover(true);
+    if (coverInputRef.current) {
+      coverInputRef.current.value = "";
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -157,6 +209,13 @@ export function MilestoneForm({
     setIsSubmitting(true);
     setError(null);
 
+    // Determine cover_image_path value
+    let coverImagePath: string | null = existingCoverPath;
+    if (removeCover) {
+      coverImagePath = null;
+    }
+    // Note: If a new file is selected, the path will be set by the parent component after upload
+
     const data: Omit<Milestone, "id" | "created_at"> = {
       name: name.trim(),
       description: description.trim() || null,
@@ -165,9 +224,10 @@ export function MilestoneForm({
       arrival_date: arrivalDate || null,
       departure_date: departureDate || null,
       display_order: displayOrder,
+      cover_image_path: coverImagePath,
     };
 
-    const success = await onSubmit(data);
+    const success = await onSubmit(data, coverImageFile || undefined);
     
     if (!success) {
       setIsSubmitting(false);
@@ -200,6 +260,94 @@ export function MilestoneForm({
             disabled={isSubmitting}
             className="text-base"
           />
+        </CardContent>
+      </Card>
+
+      {/* Cover Image */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <ImageIcon className="h-5 w-5 text-india-green" />
+            Cover-billede (valgfri)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Upload et billede der viser byen eller området. Vises i karrusellen på kortet.
+          </p>
+
+          {/* Preview */}
+          {coverImagePreview && (
+            <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted">
+              <Image
+                src={coverImagePreview}
+                alt="Cover preview"
+                fill
+                className="object-cover"
+              />
+              <button
+                type="button"
+                onClick={handleRemoveCover}
+                disabled={isSubmitting}
+                className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 rounded-full text-white transition-colors"
+                title="Fjern billede"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Upload button */}
+          {!coverImagePreview && (
+            <label
+              className={cn(
+                "flex flex-col items-center justify-center w-full aspect-video",
+                "border-2 border-dashed border-muted-foreground/25 rounded-lg",
+                "hover:border-saffron/50 hover:bg-saffron/5 transition-colors cursor-pointer",
+                isSubmitting && "opacity-50 cursor-not-allowed"
+              )}
+            >
+              <Upload className="h-8 w-8 text-muted-foreground/50 mb-2" />
+              <span className="text-sm text-muted-foreground">
+                Klik for at vælge billede
+              </span>
+              <span className="text-xs text-muted-foreground/70 mt-1">
+                Max 5MB · JPG, PNG, WebP
+              </span>
+              <input
+                ref={coverInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleCoverImageSelect}
+                disabled={isSubmitting}
+                className="hidden"
+              />
+            </label>
+          )}
+
+          {/* Change button when image exists */}
+          {coverImagePreview && (
+            <label
+              className={cn(
+                "flex items-center justify-center gap-2 w-full py-2",
+                "border border-muted-foreground/25 rounded-lg",
+                "hover:border-saffron/50 hover:bg-saffron/5 transition-colors cursor-pointer",
+                "text-sm text-muted-foreground",
+                isSubmitting && "opacity-50 cursor-not-allowed"
+              )}
+            >
+              <Upload className="h-4 w-4" />
+              Skift billede
+              <input
+                ref={coverInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleCoverImageSelect}
+                disabled={isSubmitting}
+                className="hidden"
+              />
+            </label>
+          )}
         </CardContent>
       </Card>
 
