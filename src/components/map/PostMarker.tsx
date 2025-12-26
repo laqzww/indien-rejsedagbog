@@ -29,69 +29,14 @@ const PIN_COLOR_DARK = "#6B1030";
  * Uses a teardrop/pin shape with deep red color
  * The pin is designed with the anchor point at the bottom tip
  */
-export function createPostMarkerHTML(post: MapPost, isMobile: boolean): string {
-  // Sort media by display_order
-  const sortedMedia = [...post.media].sort(
-    (a, b) => a.display_order - b.display_order
-  );
-  const mediaCount = sortedMedia.length;
-  const firstMedia = sortedMedia[0];
-  const isVideo = firstMedia?.type === "video";
-  const hasMedia = !!firstMedia;
-
+export function createPostMarkerHTML(_post: MapPost, isMobile: boolean): string {
   // Sizes based on device - pin dimensions
   const pinWidth = isMobile ? 28 : 24;
   const pinHeight = isMobile ? 38 : 32;
   const dotSize = isMobile ? 10 : 8;
-  const badgeSize = isMobile ? 18 : 16;
 
-  // Build badge HTML if multiple media
-  const badgeHtml = mediaCount > 1 ? `
-    <div style="
-      position: absolute;
-      top: -6px;
-      right: -8px;
-      background: #FF9933;
-      color: white;
-      font-size: ${badgeSize - 6}px;
-      font-weight: 600;
-      min-width: ${badgeSize}px;
-      height: ${badgeSize}px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border: 2px solid white;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-      z-index: 1;
-    ">${mediaCount}</div>
-  ` : "";
-
-  // Icon for center of pin
-  let iconHtml = "";
-  if (hasMedia && isVideo) {
-    // Video icon (play triangle)
-    iconHtml = `
-      <svg width="${dotSize}" height="${dotSize}" viewBox="0 0 24 24" fill="white" style="margin-left: 1px;">
-        <polygon points="5 3 19 12 5 21 5 3"/>
-      </svg>
-    `;
-  } else if (hasMedia) {
-    // Image icon (simple dot for images - cleaner look)
-    iconHtml = `<div style="width: ${dotSize}px; height: ${dotSize}px; background: white; border-radius: 50%;"></div>`;
-  } else {
-    // Text-only icon (document lines)
-    iconHtml = `
-      <svg width="${dotSize}" height="${dotSize}" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round">
-        <line x1="6" y1="9" x2="18" y2="9"/>
-        <line x1="6" y1="15" x2="14" y2="15"/>
-      </svg>
-    `;
-  }
-
-  // Traditional teardrop pin shape using SVG
-  // The viewBox is set so the bottom point of the pin is at (pinWidth/2, pinHeight)
-  // This makes positioning easier - the marker anchor is at the bottom tip
+  // Simple clean pin with just a white dot in center
+  // All other indicators are shown in the carousel
   return `
     <div class="post-marker-pin" style="
       position: relative;
@@ -99,7 +44,6 @@ export function createPostMarkerHTML(post: MapPost, isMobile: boolean): string {
       height: ${pinHeight}px;
       cursor: pointer;
     ">
-      ${badgeHtml}
       <svg 
         width="${pinWidth}" 
         height="${pinHeight}" 
@@ -125,21 +69,14 @@ export function createPostMarkerHTML(post: MapPost, isMobile: boolean): string {
           stroke="${PIN_COLOR_DARK}"
           stroke-width="1"
         />
+        <!-- Simple white dot in center -->
+        <circle 
+          cx="${pinWidth / 2}" 
+          cy="${pinHeight * 0.35}" 
+          r="${dotSize / 2}"
+          fill="white"
+        />
       </svg>
-      <!-- Center icon container -->
-      <div style="
-        position: absolute;
-        top: ${pinHeight * 0.18}px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: ${pinWidth * 0.55}px;
-        height: ${pinWidth * 0.55}px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      ">
-        ${iconHtml}
-      </div>
     </div>
   `;
 }
