@@ -214,7 +214,7 @@ export function JourneyCarousel({
           title={viewMode === "milestones" ? "Vis opslag" : "Vis destinationer"}
         >
           <div className="w-5 h-5 rounded-full bg-saffron text-white text-xs flex items-center justify-center font-bold">
-            {activeMilestone.display_order}
+            {activeMilestone.display_order + 1}
           </div>
           <span className="text-white text-sm font-medium">
             {viewMode === "milestones" 
@@ -363,7 +363,7 @@ function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: Compa
           className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
           style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
         >
-          <span className="text-white font-bold text-sm">{milestone.display_order}</span>
+          <span className="text-white font-bold text-sm">{milestone.display_order + 1}</span>
         </div>
         
         {/* Content */}

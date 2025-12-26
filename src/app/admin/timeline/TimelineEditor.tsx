@@ -243,7 +243,7 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
                       <ChevronUp className="h-4 w-4" />
                     </Button>
                     <div className="w-8 h-8 rounded-full bg-saffron text-white flex items-center justify-center font-bold text-sm">
-                      {index + 1}
+                      {milestone.display_order + 1}
                     </div>
                     <Button
                       variant="ghost"

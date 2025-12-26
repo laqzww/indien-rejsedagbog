@@ -555,13 +555,20 @@ export function JourneyMap({
     });
 
     // Add milestone markers AFTER posts (so they appear ON TOP in the layer order)
-    milestones.forEach((milestone, index) => {
+    // Sort milestones by display_order for consistent numbering
+    const sortedMilestones = [...milestones].sort(
+      (a, b) => a.display_order - b.display_order
+    );
+    
+    sortedMilestones.forEach((milestone) => {
+      // Milestone number is display_order + 1 (display_order is 0-indexed in DB)
+      const milestoneNumber = milestone.display_order + 1;
       const el = document.createElement("div");
       el.className = "milestone-marker";
       el.style.cursor = "pointer";
       el.innerHTML = `
         <div class="${markerSize} rounded-full bg-saffron text-white flex items-center justify-center font-bold shadow-lg border-2 border-white cursor-pointer hover:scale-110 transition-transform" style="background-color: #FF9933;">
-          ${index + 1}
+          ${milestoneNumber}
         </div>
       `;
 
