@@ -7,7 +7,7 @@ import { Header } from "./Header";
 import { PostFeed } from "./post/PostFeed";
 import { EmptyFeed } from "./post/EmptyFeed";
 import { Timeline } from "./map/Timeline";
-import { PostCarousel, type CarouselPost } from "./map/PostCarousel";
+import { JourneyCarousel, type CarouselPost, type CarouselViewMode } from "./map/PostCarousel";
 import { Button } from "./ui/button";
 import { List, Map as MapIcon, X, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -101,6 +101,9 @@ export function HomeClient({
   const [carouselPosts, setCarouselPosts] = useState<CarouselPost[]>([]);
   const [activePostIndex, setActivePostIndex] = useState(0);
   const [highlightPostId, setHighlightPostId] = useState<string | null>(null);
+  const [carouselViewMode, setCarouselViewMode] = useState<CarouselViewMode>("posts");
+  const [activeMilestoneIndex, setActiveMilestoneIndex] = useState(0);
+  const [showCarousel, setShowCarousel] = useState(false);
   
   // Track if map has ever been shown - once shown, keep it mounted
   const [mapHasBeenShown, setMapHasBeenShown] = useState(initialView === "map");
@@ -145,19 +148,24 @@ export function HomeClient({
   }, [mapPosts, milestones]);
 
   const handleMilestoneClick = useCallback((milestone: Milestone, milestonePosts?: CarouselPost[]) => {
+    // Find milestone index
+    const milestoneIndex = milestones.findIndex(m => m.id === milestone.id);
+    
     setActiveMilestone(milestone);
+    setActiveMilestoneIndex(milestoneIndex >= 0 ? milestoneIndex : 0);
+    setShowCarousel(true);
+    setCarouselViewMode("posts"); // Start in posts view when clicking a milestone
+    
     // Use provided posts or find them
     const posts = milestonePosts ?? getPostsForMilestone(milestone);
+    setCarouselPosts(posts);
     if (posts.length > 0) {
-      setCarouselPosts(posts);
       setActivePostIndex(0);
       setHighlightPostId(posts[0].id);
     } else {
-      // Close carousel if no posts
-      setCarouselPosts([]);
       setHighlightPostId(null);
     }
-  }, [getPostsForMilestone]);
+  }, [getPostsForMilestone, milestones]);
 
   const handlePostClick = useCallback((post: { id: string }) => {
     // Navigate to feed view and scroll to the post
@@ -187,10 +195,13 @@ export function HomeClient({
 
   // Handle carousel close
   const handleCarouselClose = useCallback(() => {
+    setShowCarousel(false);
     setActiveMilestone(null);
     setCarouselPosts([]);
     setHighlightPostId(null);
     setActivePostIndex(0);
+    setActiveMilestoneIndex(0);
+    setCarouselViewMode("posts");
     
     // Clear focus coordinates
     const params = new URLSearchParams(searchParams.toString());
@@ -208,19 +219,69 @@ export function HomeClient({
     
     if (result?.type === "milestone") {
       const milestone = result.milestone;
+      const milestoneIndex = milestones.findIndex(m => m.id === milestone.id);
       const milestonePosts = getPostsForMilestone(milestone);
       
       // Find the index of the clicked post
       const postIndex = milestonePosts.findIndex(p => p.id === post.id);
       
-      if (milestonePosts.length > 0) {
-        setActiveMilestone(milestone);
-        setCarouselPosts(milestonePosts);
-        setActivePostIndex(postIndex >= 0 ? postIndex : 0);
-        setHighlightPostId(post.id);
-      }
+      setActiveMilestone(milestone);
+      setActiveMilestoneIndex(milestoneIndex >= 0 ? milestoneIndex : 0);
+      setCarouselPosts(milestonePosts);
+      setActivePostIndex(postIndex >= 0 ? postIndex : 0);
+      setHighlightPostId(post.id);
+      setShowCarousel(true);
+      setCarouselViewMode("posts");
     }
   }, [milestones, getPostsForMilestone]);
+
+  // Handle milestone change from carousel (when swiping in milestone view)
+  const handleCarouselMilestoneChange = useCallback((index: number, milestone: Milestone) => {
+    setActiveMilestoneIndex(index);
+    setActiveMilestone(milestone);
+    
+    // Update posts for this milestone
+    const posts = getPostsForMilestone(milestone);
+    setCarouselPosts(posts);
+    setActivePostIndex(0);
+    if (posts.length > 0) {
+      setHighlightPostId(posts[0].id);
+    } else {
+      setHighlightPostId(null);
+    }
+    
+    // Zoom map to milestone location
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("lat", milestone.lat.toString());
+    params.set("lng", milestone.lng.toString());
+    params.set("zoom", "10"); // Zoomed out to see the area
+    router.replace(`/?${params.toString()}`, { scroll: false });
+  }, [getPostsForMilestone, router, searchParams]);
+
+  // Handle view mode change in carousel
+  const handleViewModeChange = useCallback((mode: CarouselViewMode) => {
+    setCarouselViewMode(mode);
+    
+    // When switching to posts view, update map to first post location
+    if (mode === "posts" && carouselPosts.length > 0) {
+      const firstPost = carouselPosts[0];
+      if (firstPost.lat && firstPost.lng) {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set("lat", firstPost.lat.toString());
+        params.set("lng", firstPost.lng.toString());
+        params.set("zoom", "12");
+        router.replace(`/?${params.toString()}`, { scroll: false });
+      }
+    }
+    // When switching to milestones view, zoom out to show the milestone
+    else if (mode === "milestones" && activeMilestone) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("lat", activeMilestone.lat.toString());
+      params.set("lng", activeMilestone.lng.toString());
+      params.set("zoom", "8"); // More zoomed out
+      router.replace(`/?${params.toString()}`, { scroll: false });
+    }
+  }, [carouselPosts, activeMilestone, router, searchParams]);
 
   const handleMapError = useCallback(() => {
     setMapError(true);
@@ -326,22 +387,28 @@ export function HomeClient({
                   highlightPostId={highlightPostId}
                 />
 
-                {/* Post Carousel */}
-                {activeMilestone && carouselPosts.length > 0 && (
-                  <PostCarousel
+                {/* Journey Carousel - shows milestones or posts */}
+                {showCarousel && activeMilestone && (
+                  <JourneyCarousel
+                    milestones={milestones}
+                    activeMilestone={activeMilestone}
+                    activeMilestoneIndex={activeMilestoneIndex}
                     posts={carouselPosts}
-                    milestone={activeMilestone}
                     activePostIndex={activePostIndex}
+                    viewMode={carouselViewMode}
+                    onViewModeChange={handleViewModeChange}
+                    onMilestoneChange={handleCarouselMilestoneChange}
                     onPostChange={handleCarouselPostChange}
                     onPostClick={handlePostClick}
                     onClose={handleCarouselClose}
+                    getPostsForMilestone={getPostsForMilestone}
                   />
                 )}
               </>
             )}
 
             {/* Mobile Timeline Toggle - hidden when carousel is open */}
-            {!(activeMilestone && carouselPosts.length > 0) && (
+            {!showCarousel && (
               <div className="lg:hidden absolute bottom-4 left-4 right-4 flex justify-center pointer-events-none z-30">
                 <Button
                   onClick={() => setShowTimeline(true)}
