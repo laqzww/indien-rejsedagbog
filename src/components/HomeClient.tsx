@@ -102,7 +102,7 @@ export function HomeClient({
   const [activeMilestone, setActiveMilestone] = useState<Milestone | null>(null);
   const [mapKey, setMapKey] = useState(0);
   const [mapError, setMapError] = useState(false);
-  const [mapStyle, setMapStyle] = useState<MapStyle>("streets");
+  const [mapStyle, setMapStyle] = useState<MapStyle>("satellite");
   
   // Carousel state
   const [carouselPosts, setCarouselPosts] = useState<CarouselPost[]>([]);
