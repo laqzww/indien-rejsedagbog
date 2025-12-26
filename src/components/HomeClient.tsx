@@ -6,11 +6,10 @@ import dynamic from "next/dynamic";
 import { Header } from "./Header";
 import { PostFeed } from "./post/PostFeed";
 import { EmptyFeed } from "./post/EmptyFeed";
-import { Timeline } from "./map/Timeline";
+// Timeline sidebar removed - now using carousel for all milestone browsing
 import { JourneyCarousel, type CarouselPost, type CarouselViewMode } from "./map/PostCarousel";
 import { Button } from "./ui/button";
-import { List, Map as MapIcon, X, RefreshCw } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Route, Map as MapIcon, RefreshCw } from "lucide-react";
 import type { Milestone } from "@/types/database";
 import type { MilestoneGroup } from "@/lib/journey";
 import { findMilestoneForDate } from "@/lib/journey";
@@ -100,7 +99,6 @@ export function HomeClient({
   const focusPostId = urlPostId || undefined;
   
   const [activeMilestone, setActiveMilestone] = useState<Milestone | null>(null);
-  const [showTimeline, setShowTimeline] = useState(false);
   const [mapKey, setMapKey] = useState(0);
   const [mapError, setMapError] = useState(false);
   
@@ -370,6 +368,33 @@ export function HomeClient({
     }
   }, [carouselPosts, activeMilestone, router, searchParams]);
 
+  // Handler for "Se rejserute" button - opens carousel at first milestone
+  const handleShowJourney = useCallback(() => {
+    if (milestones.length === 0) return;
+    
+    const firstMilestone = milestones[0];
+    const milestonePosts = getPostsForMilestone(firstMilestone);
+    
+    setActiveMilestone(firstMilestone);
+    setActiveMilestoneIndex(0);
+    setCarouselPosts(milestonePosts);
+    setActivePostIndex(0);
+    if (milestonePosts.length > 0) {
+      setHighlightPostId(milestonePosts[0].id);
+    } else {
+      setHighlightPostId(null);
+    }
+    setShowCarousel(true);
+    setCarouselViewMode("milestones");
+    
+    // Zoom to first milestone
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("lat", firstMilestone.lat.toString());
+    params.set("lng", firstMilestone.lng.toString());
+    params.set("zoom", "8");
+    router.replace(`/?${params.toString()}`, { scroll: false });
+  }, [milestones, getPostsForMilestone, router, searchParams]);
+
   const handleMapError = useCallback(() => {
     setMapError(true);
   }, []);
@@ -414,26 +439,9 @@ export function HomeClient({
       {activeView === "map" && (
         <div 
           ref={mapContainerRef}
-          className="flex-1 flex flex-col lg:flex-row overflow-hidden"
+          className="flex-1 flex flex-col overflow-hidden"
         >
-          {/* Desktop Timeline Sidebar */}
-          <aside className="hidden lg:block w-80 border-r border-border overflow-y-auto bg-white flex-shrink-0">
-            <div className="p-4 border-b border-border">
-              <h2 className="text-lg font-bold text-navy">Rejserute</h2>
-              <p className="text-sm text-muted-foreground">
-                {milestones.length} destinationer
-              </p>
-            </div>
-            <div className="p-2">
-              <Timeline
-                milestones={milestones}
-                activeMilestone={activeMilestone}
-                onMilestoneClick={handleMilestoneClick}
-              />
-            </div>
-          </aside>
-
-          {/* Map Container - fills remaining space */}
+          {/* Map Container - fills entire space */}
           <div className="flex-1 relative bg-muted overflow-hidden">
             {mapError ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-muted">
@@ -483,15 +491,15 @@ export function HomeClient({
               </>
             )}
 
-            {/* Mobile Timeline Toggle - hidden when carousel is open */}
-            {!showCarousel && (
-              <div className="lg:hidden absolute bottom-4 left-4 right-4 flex justify-center pointer-events-none z-30">
+            {/* "Se rejserute" button - opens carousel at first milestone */}
+            {!showCarousel && milestones.length > 0 && (
+              <div className="absolute bottom-4 left-4 right-4 flex justify-center pointer-events-none z-30">
                 <Button
-                  onClick={() => setShowTimeline(true)}
+                  onClick={handleShowJourney}
                   className="gap-2 shadow-lg pointer-events-auto"
                   size="lg"
                 >
-                  <List className="h-5 w-5" />
+                  <Route className="h-5 w-5" />
                   Se rejserute ({milestones.length} stops)
                 </Button>
               </div>
@@ -524,55 +532,6 @@ export function HomeClient({
             </div>
           </div>
 
-          {/* Mobile Timeline Drawer */}
-          {showTimeline && (
-            <div
-              className="lg:hidden fixed inset-0 z-50 bg-black/50"
-              onClick={() => setShowTimeline(false)}
-            >
-              <div
-                className={cn(
-                  "absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl max-h-[70vh] overflow-hidden",
-                  "animate-slide-up"
-                )}
-                onClick={(e) => e.stopPropagation()}
-              >
-                {/* Handle */}
-                <div className="flex justify-center pt-3">
-                  <div className="w-12 h-1.5 bg-muted rounded-full" />
-                </div>
-
-                {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-border">
-                  <div>
-                    <h2 className="text-lg font-bold text-navy">Rejserute</h2>
-                    <p className="text-sm text-muted-foreground">
-                      {milestones.length} destinationer
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setShowTimeline(false)}
-                  >
-                    <X className="h-5 w-5" />
-                  </Button>
-                </div>
-
-                {/* Timeline */}
-                <div className="overflow-y-auto max-h-[calc(70vh-100px)] p-2">
-                  <Timeline
-                    milestones={milestones}
-                    activeMilestone={activeMilestone}
-                    onMilestoneClick={(m) => {
-                      handleMilestoneClick(m);
-                      setShowTimeline(false);
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>
