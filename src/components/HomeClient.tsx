@@ -79,6 +79,7 @@ export function HomeClient({
   const urlLng = searchParams.get("lng");
   const urlZoom = searchParams.get("zoom");
   const urlPostId = searchParams.get("post"); // Post ID to scroll to in feed
+  const urlFocusPost = searchParams.get("focusPost"); // Post ID to focus on in map carousel
   
   // Compute active view from URL - URL is the single source of truth
   // This ensures "Se på kort" links always switch the view correctly
@@ -127,6 +128,48 @@ export function HomeClient({
       setMapError(false);
     }
   }, [focusLat, focusLng]);
+
+  // Track if we've already initialized the carousel from focusPost to prevent duplicate init
+  const initializedFocusPostRef = useRef<string | null>(null);
+
+  // Auto-initialize carousel when focusPost parameter is present and we're in map view
+  useEffect(() => {
+    // Only run in map view with focusPost parameter
+    if (activeView !== "map" || !urlFocusPost) return;
+    
+    // Prevent duplicate initialization for the same post
+    if (initializedFocusPostRef.current === urlFocusPost) return;
+    
+    // Find the post in mapPosts
+    const focusPost = mapPosts.find(p => p.id === urlFocusPost);
+    if (!focusPost) return;
+    
+    // Mark as initialized
+    initializedFocusPostRef.current = urlFocusPost;
+    
+    // Find which milestone this post belongs to
+    const postDate = focusPost.captured_at || focusPost.created_at;
+    const result = findMilestoneForDate(postDate, milestones);
+    
+    // For posts before/after journey, we can't show carousel - just show map focus
+    if (!result || result.type !== "milestone") return;
+    
+    // For regular milestone posts, open carousel
+    const milestone = result.milestone;
+    const milestoneIndex = milestones.findIndex(m => m.id === milestone.id);
+    const milestonePosts = getPostsForMilestone(milestone);
+    
+    // Find the index of the focus post
+    const postIndex = milestonePosts.findIndex(p => p.id === focusPost.id);
+    
+    setActiveMilestone(milestone);
+    setActiveMilestoneIndex(milestoneIndex >= 0 ? milestoneIndex : 0);
+    setCarouselPosts(milestonePosts);
+    setActivePostIndex(postIndex >= 0 ? postIndex : 0);
+    setHighlightPostId(focusPost.id);
+    setShowCarousel(true);
+    setCarouselViewMode("posts");
+  }, [activeView, urlFocusPost, mapPosts, milestones, getPostsForMilestone]);
 
   // Helper to get posts for a milestone
   const getPostsForMilestone = useCallback((milestone: Milestone): CarouselPost[] => {
