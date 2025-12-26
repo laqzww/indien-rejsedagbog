@@ -21,6 +21,8 @@ import {
 import type { Milestone } from "@/types/database";
 import { cn } from "@/lib/utils";
 import { getMediaUrl } from "@/lib/upload";
+import { compressImage, formatFileSize } from "@/lib/image-compression";
+import { isHeicFile, convertHeicToJpeg } from "@/lib/heic";
 
 interface LocationResult {
   id: string;
@@ -154,32 +156,69 @@ export function MilestoneForm({
     setLocationResults([]);
   };
 
-  // Handle cover image selection
-  const handleCoverImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // State for compression processing
+  const [isCompressing, setIsCompressing] = useState(false);
+
+  // Handle cover image selection with compression
+  const handleCoverImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
-    if (!file.type.startsWith("image/")) {
+    // Validate file type (allow HEIC as well)
+    const isHeic = isHeicFile(file);
+    if (!file.type.startsWith("image/") && !isHeic) {
       setError("Kun billeder er tilladt");
       return;
     }
 
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      setError("Billedet må max være 5MB");
-      return;
+    // Start compression
+    setIsCompressing(true);
+    setError(null);
+
+    try {
+      let blobToCompress: Blob = file;
+
+      // Handle HEIC files - convert to JPEG first
+      if (isHeic) {
+        try {
+          blobToCompress = await convertHeicToJpeg(file);
+        } catch (heicError) {
+          console.error("HEIC conversion failed:", heicError);
+          setError("Kunne ikke konvertere HEIC-billede");
+          setIsCompressing(false);
+          return;
+        }
+      }
+
+      // Compress image to max 1600px (good for cover images) at 85% quality
+      const compressed = await compressImage(blobToCompress, {
+        maxWidth: 1600,
+        maxHeight: 1200,
+        quality: 0.85,
+      });
+
+      // Create a File object from the compressed blob for upload
+      const compressedFile = new File(
+        [compressed.blob],
+        file.name.replace(/\.(heic|heif)$/i, ".jpg"),
+        { type: "image/jpeg" }
+      );
+
+      // Log compression stats
+      const savings = Math.round((1 - compressed.blob.size / file.size) * 100);
+      console.log(
+        `Cover image compressed: ${formatFileSize(file.size)} → ${formatFileSize(compressed.blob.size)} (${savings}% savings)`
+      );
+
+      setCoverImageFile(compressedFile);
+      setRemoveCover(false);
+      setCoverImagePreview(URL.createObjectURL(compressed.blob));
+    } catch (compressionError) {
+      console.error("Image compression failed:", compressionError);
+      setError("Kunne ikke komprimere billedet. Prøv et andet billede.");
+    } finally {
+      setIsCompressing(false);
     }
-
-    setCoverImageFile(file);
-    setRemoveCover(false);
-
-    // Create preview
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setCoverImagePreview(e.target?.result as string);
-    };
-    reader.readAsDataURL(file);
   };
 
   // Handle cover image removal
@@ -288,7 +327,7 @@ export function MilestoneForm({
               <button
                 type="button"
                 onClick={handleRemoveCover}
-                disabled={isSubmitting}
+                disabled={isSubmitting || isCompressing}
                 className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 rounded-full text-white transition-colors"
                 title="Fjern billede"
               >
@@ -297,8 +336,18 @@ export function MilestoneForm({
             </div>
           )}
 
+          {/* Compression loading state */}
+          {isCompressing && (
+            <div className="flex flex-col items-center justify-center w-full aspect-video border-2 border-dashed border-saffron/50 rounded-lg bg-saffron/5">
+              <Loader2 className="h-8 w-8 text-saffron animate-spin mb-2" />
+              <span className="text-sm text-muted-foreground">
+                Komprimerer billede...
+              </span>
+            </div>
+          )}
+
           {/* Upload button */}
-          {!coverImagePreview && (
+          {!coverImagePreview && !isCompressing && (
             <label
               className={cn(
                 "flex flex-col items-center justify-center w-full aspect-video",
@@ -312,12 +361,12 @@ export function MilestoneForm({
                 Klik for at vælge billede
               </span>
               <span className="text-xs text-muted-foreground/70 mt-1">
-                Max 5MB · JPG, PNG, WebP
+                JPG, PNG, WebP, HEIC · Komprimeres automatisk
               </span>
               <input
                 ref={coverInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,.heic,.heif"
                 onChange={handleCoverImageSelect}
                 disabled={isSubmitting}
                 className="hidden"
@@ -326,7 +375,7 @@ export function MilestoneForm({
           )}
 
           {/* Change button when image exists */}
-          {coverImagePreview && (
+          {coverImagePreview && !isCompressing && (
             <label
               className={cn(
                 "flex items-center justify-center gap-2 w-full py-2",
@@ -341,7 +390,7 @@ export function MilestoneForm({
               <input
                 ref={coverInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,.heic,.heif"
                 onChange={handleCoverImageSelect}
                 disabled={isSubmitting}
                 className="hidden"
@@ -512,14 +561,14 @@ export function MilestoneForm({
           type="button"
           variant="outline"
           onClick={onCancel}
-          disabled={isSubmitting}
+          disabled={isSubmitting || isCompressing}
           className="flex-1"
         >
           Annuller
         </Button>
         <Button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || isCompressing}
           className="flex-1 gap-2"
         >
           {isSubmitting ? (
