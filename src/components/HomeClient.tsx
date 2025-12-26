@@ -374,7 +374,7 @@ export function HomeClient({
   }, []);
 
   return (
-    <div className="h-screen bg-white flex flex-col overflow-hidden">
+    <div className="h-dvh h-[100svh] bg-white flex flex-col overflow-hidden">
       <Header
         isAuthor={isAuthor}
         activeView={activeView}
