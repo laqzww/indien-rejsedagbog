@@ -79,8 +79,8 @@ export function JourneyClient({ milestones, posts }: JourneyClientProps) {
   const [mapError, setMapError] = useState(false);
   const viewportHeight = useViewportHeight();
 
-  // Header height is 4rem (64px)
-  const headerHeight = 64;
+  // Header height is h-14 (3.5rem = 56px)
+  const headerHeight = 56;
   const mapHeight = viewportHeight ? viewportHeight - headerHeight : null;
 
   const handleMilestoneClick = (milestone: Milestone) => {
@@ -125,7 +125,7 @@ export function JourneyClient({ milestones, posts }: JourneyClientProps) {
         className="flex-1 relative bg-muted"
         style={{
           // On mobile/tablet, use calculated height. On desktop (lg:), use full height
-          height: mapHeight ? `${mapHeight}px` : "calc(100vh - 4rem)",
+          height: mapHeight ? `${mapHeight}px` : "calc(100dvh - 3.5rem)",
           minHeight: "300px",
         }}
       >

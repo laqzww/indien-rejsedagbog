@@ -3,6 +3,12 @@
 @tailwind utilities;
 
 @layer base {
+  /* Viewport height fallback for older browsers */
+  html {
+    height: 100dvh;
+    height: 100svh; /* Fallback for browsers without dvh */
+  }
+
   :root {
     /* India Travel Diary Color Palette */
     --saffron: #FF9933;
@@ -41,6 +47,8 @@
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-outfit), system-ui, sans-serif;
+    /* Prevent body from growing beyond viewport on map pages */
+    min-height: 0;
   }
 }
 
