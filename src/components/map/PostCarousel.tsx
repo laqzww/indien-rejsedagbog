@@ -59,14 +59,13 @@ export function JourneyCarousel({
   onClose,
   getPostsForMilestone,
 }: JourneyCarouselProps) {
-  // Milestone carousel
+  // Milestone carousel - always start at current milestone index
   const [milestoneEmblaRef, milestoneEmblaApi] = useEmblaCarousel({
     align: "center",
     containScroll: "trimSnaps",
     loop: false,
     skipSnaps: false,
     dragFree: false,
-    startIndex: activeMilestoneIndex,
   });
 
   // Post carousel
@@ -76,7 +75,6 @@ export function JourneyCarousel({
     loop: false,
     skipSnaps: false,
     dragFree: false,
-    startIndex: activePostIndex,
   });
 
   const [canScrollPrev, setCanScrollPrev] = useState(false);
@@ -85,52 +83,132 @@ export function JourneyCarousel({
   const [selectedPostIndex, setSelectedPostIndex] = useState(activePostIndex);
   
   // Track if we're programmatically scrolling to avoid feedback loops
-  const isProgrammaticScroll = useRef(false);
+  const isProgrammaticScrollRef = useRef(false);
+  // Track the previous view mode to detect changes
+  const prevViewModeRef = useRef(viewMode);
 
   // Get the active API based on view mode
   const activeApi = viewMode === "milestones" ? milestoneEmblaApi : postEmblaApi;
 
-  // Sync milestone carousel with external index
+  // Initialize milestone carousel position when API is ready
   useEffect(() => {
-    if (milestoneEmblaApi && activeMilestoneIndex !== selectedMilestoneIndex) {
-      isProgrammaticScroll.current = true;
-      milestoneEmblaApi.scrollTo(activeMilestoneIndex);
-      setTimeout(() => { isProgrammaticScroll.current = false; }, 100);
-    }
+    if (!milestoneEmblaApi) return;
+    
+    // On mount, scroll to the active milestone
+    isProgrammaticScrollRef.current = true;
+    milestoneEmblaApi.scrollTo(activeMilestoneIndex, false); // instant scroll (no animation)
+    setSelectedMilestoneIndex(activeMilestoneIndex);
+    
+    // Use requestAnimationFrame to reset the flag after embla has processed
+    requestAnimationFrame(() => {
+      isProgrammaticScrollRef.current = false;
+    });
+  }, [milestoneEmblaApi]); // Only on API init - activeMilestoneIndex is handled separately
+
+  // Sync milestone carousel when external index changes
+  useEffect(() => {
+    if (!milestoneEmblaApi) return;
+    if (activeMilestoneIndex === selectedMilestoneIndex) return;
+    
+    isProgrammaticScrollRef.current = true;
+    milestoneEmblaApi.scrollTo(activeMilestoneIndex);
+    setSelectedMilestoneIndex(activeMilestoneIndex);
+    
+    requestAnimationFrame(() => {
+      isProgrammaticScrollRef.current = false;
+    });
   }, [milestoneEmblaApi, activeMilestoneIndex, selectedMilestoneIndex]);
 
-  // Sync post carousel with external index
+  // Initialize post carousel position when API is ready
   useEffect(() => {
-    if (postEmblaApi && activePostIndex !== selectedPostIndex) {
-      isProgrammaticScroll.current = true;
-      postEmblaApi.scrollTo(activePostIndex);
-      setTimeout(() => { isProgrammaticScroll.current = false; }, 100);
+    if (!postEmblaApi) return;
+    
+    // On mount, scroll to the active post
+    isProgrammaticScrollRef.current = true;
+    postEmblaApi.scrollTo(activePostIndex, false); // instant scroll
+    setSelectedPostIndex(activePostIndex);
+    
+    requestAnimationFrame(() => {
+      isProgrammaticScrollRef.current = false;
+    });
+  }, [postEmblaApi]); // Only on API init
+
+  // Sync post carousel when external index changes OR when posts array changes
+  useEffect(() => {
+    if (!postEmblaApi) return;
+    if (activePostIndex === selectedPostIndex && posts.length > 0) return;
+    
+    isProgrammaticScrollRef.current = true;
+    // Reposition to the new active post index (clamped to valid range)
+    const validIndex = Math.min(activePostIndex, Math.max(0, posts.length - 1));
+    postEmblaApi.scrollTo(validIndex, false);
+    setSelectedPostIndex(validIndex);
+    
+    requestAnimationFrame(() => {
+      isProgrammaticScrollRef.current = false;
+    });
+  }, [postEmblaApi, activePostIndex, selectedPostIndex, posts.length]);
+
+  // Handle view mode changes - reset carousel position appropriately
+  useEffect(() => {
+    const prevMode = prevViewModeRef.current;
+    prevViewModeRef.current = viewMode;
+    
+    if (prevMode === viewMode) return;
+    
+    // When switching to posts view, scroll to first post
+    if (viewMode === "posts" && postEmblaApi) {
+      isProgrammaticScrollRef.current = true;
+      postEmblaApi.scrollTo(0, false);
+      setSelectedPostIndex(0);
+      requestAnimationFrame(() => {
+        isProgrammaticScrollRef.current = false;
+      });
     }
-  }, [postEmblaApi, activePostIndex, selectedPostIndex]);
+    
+    // When switching to milestones view, scroll to current milestone
+    if (viewMode === "milestones" && milestoneEmblaApi) {
+      isProgrammaticScrollRef.current = true;
+      milestoneEmblaApi.scrollTo(activeMilestoneIndex, false);
+      setSelectedMilestoneIndex(activeMilestoneIndex);
+      requestAnimationFrame(() => {
+        isProgrammaticScrollRef.current = false;
+      });
+    }
+    
+    // Update scroll buttons for new view
+    requestAnimationFrame(() => {
+      updateScrollState();
+    });
+  }, [viewMode, postEmblaApi, milestoneEmblaApi, activeMilestoneIndex]);
 
   // Handle milestone carousel scroll
   const onMilestoneSelect = useCallback(() => {
-    if (!milestoneEmblaApi || isProgrammaticScroll.current) return;
+    if (!milestoneEmblaApi || isProgrammaticScrollRef.current) return;
 
     const index = milestoneEmblaApi.selectedScrollSnap();
+    if (index === selectedMilestoneIndex) return;
+    
     setSelectedMilestoneIndex(index);
 
     if (milestones[index]) {
       onMilestoneChange(index, milestones[index]);
     }
-  }, [milestoneEmblaApi, milestones, onMilestoneChange]);
+  }, [milestoneEmblaApi, milestones, onMilestoneChange, selectedMilestoneIndex]);
 
   // Handle post carousel scroll
   const onPostSelect = useCallback(() => {
-    if (!postEmblaApi || isProgrammaticScroll.current) return;
+    if (!postEmblaApi || isProgrammaticScrollRef.current) return;
 
     const index = postEmblaApi.selectedScrollSnap();
+    if (index === selectedPostIndex) return;
+    
     setSelectedPostIndex(index);
 
     if (posts[index]) {
       onPostChange(index, posts[index]);
     }
-  }, [postEmblaApi, posts, onPostChange]);
+  }, [postEmblaApi, posts, onPostChange, selectedPostIndex]);
 
   // Update scroll state for active carousel
   const updateScrollState = useCallback(() => {
@@ -188,7 +266,8 @@ export function JourneyCarousel({
 
   // Toggle view mode by clicking on milestone badge
   const handleBadgeClick = useCallback(() => {
-    onViewModeChange(viewMode === "milestones" ? "posts" : "milestones");
+    const newMode = viewMode === "milestones" ? "posts" : "milestones";
+    onViewModeChange(newMode);
   }, [viewMode, onViewModeChange]);
 
   // Handle milestone card click - switch to posts view
@@ -276,7 +355,7 @@ export function JourneyCarousel({
           )} 
           ref={milestoneEmblaRef}
         >
-          <div className="flex gap-2 px-3 lg:px-12">
+          <div className="flex gap-3 px-4 lg:px-16">
             {milestones.map((milestone, index) => (
               <CompactMilestoneCard
                 key={milestone.id}
@@ -297,7 +376,7 @@ export function JourneyCarousel({
           )} 
           ref={postEmblaRef}
         >
-          <div className="flex gap-2 px-3 lg:px-12">
+          <div className="flex gap-3 px-4 lg:px-16">
             {posts.length > 0 ? (
               posts.map((post, index) => (
                 <CompactPostCard
@@ -336,7 +415,7 @@ export function JourneyCarousel({
   );
 }
 
-// Compact milestone card component
+// Milestone card component - larger and more prominent
 interface CompactMilestoneCardProps {
   milestone: Milestone;
   postCount: number;
@@ -349,32 +428,33 @@ function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: Compa
     <button
       onClick={onClick}
       className={cn(
-        "flex-shrink-0 w-[200px] sm:w-[220px] lg:w-[240px]",
-        "bg-white/95 backdrop-blur-sm rounded-lg overflow-hidden shadow-lg",
+        // Match post card sizes for consistent layout
+        "flex-shrink-0 w-[260px] sm:w-[300px] lg:w-[340px]",
+        "bg-white/95 backdrop-blur-sm rounded-xl overflow-hidden shadow-lg",
         "text-left transition-all duration-150",
-        "hover:bg-white hover:shadow-xl",
+        "hover:bg-white hover:shadow-xl hover:scale-[1.02]",
         "focus:outline-none focus:ring-2 focus:ring-saffron",
-        isActive && "ring-2 ring-saffron"
+        isActive && "ring-2 ring-saffron shadow-xl"
       )}
     >
-      <div className="flex items-center gap-3 p-2.5">
-        {/* Milestone number */}
+      <div className="flex items-center gap-4 p-4 h-[100px] sm:h-[110px]">
+        {/* Large milestone number badge */}
         <div 
-          className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+          className="w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center flex-shrink-0 shadow-md"
           style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
         >
-          <span className="text-white font-bold text-sm">{milestone.display_order + 1}</span>
+          <span className="text-white font-bold text-xl sm:text-2xl">{milestone.display_order + 1}</span>
         </div>
         
         {/* Content */}
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold text-gray-900 truncate">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate mb-1">
             {milestone.name}
           </h3>
-          <p className="text-xs text-gray-500 flex items-center gap-1">
-            <ImageIcon className="h-3 w-3" />
+          <p className="text-sm text-gray-500 flex items-center gap-1.5">
+            <ImageIcon className="h-4 w-4" />
             {postCount} opslag
-            <span className="text-saffron ml-1">→</span>
+            <span className="text-saffron font-medium ml-1">Tryk for at se →</span>
           </p>
         </div>
       </div>
@@ -382,7 +462,7 @@ function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: Compa
   );
 }
 
-// Compact post card component
+// Post card component with larger, more prominent image
 interface CompactPostCardProps {
   post: CarouselPost;
   isActive: boolean;
@@ -412,25 +492,27 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
   const thumbnailUrl = getThumbnailUrl();
   const isVideo = firstMedia?.type === "video";
 
-  const truncatedBody = post.body.length > 50 
-    ? post.body.slice(0, 50) + "..." 
+  const truncatedBody = post.body.length > 60 
+    ? post.body.slice(0, 60) + "..." 
     : post.body;
 
   return (
     <button
       onClick={onClick}
       className={cn(
-        "flex-shrink-0 w-[200px] sm:w-[220px] lg:w-[240px]",
-        "bg-white/95 backdrop-blur-sm rounded-lg overflow-hidden shadow-lg",
+        // Larger card sizes for better visibility
+        "flex-shrink-0 w-[260px] sm:w-[300px] lg:w-[340px]",
+        "bg-white/95 backdrop-blur-sm rounded-xl overflow-hidden shadow-lg",
         "text-left transition-all duration-150",
-        "hover:bg-white hover:shadow-xl",
+        "hover:bg-white hover:shadow-xl hover:scale-[1.02]",
         "focus:outline-none focus:ring-2 focus:ring-saffron",
-        isActive && "ring-2 ring-saffron"
+        isActive && "ring-2 ring-saffron shadow-xl"
       )}
     >
-      <div className="flex items-center gap-2.5 p-2">
-        {/* Thumbnail */}
-        <div className="relative w-14 h-14 rounded-md overflow-hidden flex-shrink-0 bg-muted">
+      {/* Horizontal layout with large image on left */}
+      <div className="flex h-[100px] sm:h-[110px]">
+        {/* Large thumbnail - takes significant portion of card */}
+        <div className="relative w-[100px] sm:w-[120px] h-full flex-shrink-0 bg-muted">
           {thumbnailUrl ? (
             <>
               <Image
@@ -438,24 +520,24 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
                 alt=""
                 fill
                 className="object-cover"
-                sizes="56px"
+                sizes="(max-width: 640px) 100px, 120px"
               />
               {isVideo && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                  <Play className="h-4 w-4 text-white fill-white" />
+                <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                  <Play className="h-8 w-8 text-white fill-white drop-shadow-lg" />
                 </div>
               )}
               {mediaCount > 1 && (
-                <div className="absolute bottom-0.5 right-0.5 flex gap-0.5">
+                <div className="absolute bottom-1.5 right-1.5 flex gap-1">
                   {imageCount > 1 && (
-                    <div className="flex items-center gap-0.5 px-1 py-0.5 bg-black/60 rounded text-white text-[10px]">
-                      <ImageIcon className="h-2 w-2" />
+                    <div className="flex items-center gap-0.5 px-1.5 py-0.5 bg-black/70 rounded text-white text-xs">
+                      <ImageIcon className="h-3 w-3" />
                       {imageCount}
                     </div>
                   )}
                   {videoCount > 0 && (
-                    <div className="flex items-center gap-0.5 px-1 py-0.5 bg-black/60 rounded text-white text-[10px]">
-                      <Film className="h-2 w-2" />
+                    <div className="flex items-center gap-0.5 px-1.5 py-0.5 bg-black/70 rounded text-white text-xs">
+                      <Film className="h-3 w-3" />
                       {videoCount}
                     </div>
                   )}
@@ -467,19 +549,19 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
               className="w-full h-full flex items-center justify-center"
               style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
             >
-              <span className="text-white text-lg">📝</span>
+              <span className="text-white text-2xl">📝</span>
             </div>
           )}
         </div>
         
-        {/* Content */}
-        <div className="flex-1 min-w-0 py-0.5">
-          <p className="text-xs text-gray-800 line-clamp-2 leading-snug mb-1">
+        {/* Content section */}
+        <div className="flex-1 min-w-0 p-3 flex flex-col justify-center">
+          <p className="text-sm text-gray-800 line-clamp-2 leading-snug mb-1.5">
             {truncatedBody}
           </p>
           {post.location_name && (
-            <p className="text-[10px] text-gray-500 flex items-center gap-0.5 truncate">
-              <MapPin className="h-2.5 w-2.5 text-india-green flex-shrink-0" />
+            <p className="text-xs text-gray-500 flex items-center gap-1 truncate">
+              <MapPin className="h-3 w-3 text-india-green flex-shrink-0" />
               <span className="truncate">{post.location_name}</span>
             </p>
           )}
@@ -494,20 +576,21 @@ function EmptyPostsCard({ milestoneName }: { milestoneName: string }) {
   return (
     <div
       className={cn(
-        "flex-shrink-0 w-[200px] sm:w-[220px] lg:w-[240px]",
-        "bg-white/90 backdrop-blur-sm rounded-lg overflow-hidden shadow-lg",
-        "flex items-center justify-center p-4 text-center"
+        // Match other card sizes
+        "flex-shrink-0 w-[260px] sm:w-[300px] lg:w-[340px]",
+        "bg-white/90 backdrop-blur-sm rounded-xl overflow-hidden shadow-lg",
+        "flex items-center justify-center p-4 text-center h-[100px] sm:h-[110px]"
       )}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         <div 
-          className="w-8 h-8 rounded-full flex items-center justify-center"
+          className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
           style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
         >
-          <ImageIcon className="h-4 w-4 text-white" />
+          <ImageIcon className="h-5 w-5 text-white" />
         </div>
-        <p className="text-gray-500 text-xs">
-          Ingen opslag for <span className="font-medium">{milestoneName}</span>
+        <p className="text-gray-500 text-sm">
+          Ingen opslag for <span className="font-semibold">{milestoneName}</span> endnu
         </p>
       </div>
     </div>

@@ -188,9 +188,11 @@ export function HomeClient({
     setActiveMilestone(milestone);
     setActiveMilestoneIndex(milestoneIndex >= 0 ? milestoneIndex : 0);
     setShowCarousel(true);
-    setCarouselViewMode("posts"); // Start in posts view when clicking a milestone
+    // Always start in milestones view when clicking a milestone - this allows 
+    // browsing between areas first, then drilling into posts
+    setCarouselViewMode("milestones");
     
-    // Use provided posts or find them
+    // Use provided posts or find them (for when user switches to posts view)
     const posts = milestonePosts ?? getPostsForMilestone(milestone);
     setCarouselPosts(posts);
     if (posts.length > 0) {
