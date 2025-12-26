@@ -105,16 +105,7 @@ export function HomeClient({
   const [activeMilestoneIndex, setActiveMilestoneIndex] = useState(0);
   const [showCarousel, setShowCarousel] = useState(false);
   
-  // Track if map has ever been shown - once shown, keep it mounted
-  const [mapHasBeenShown, setMapHasBeenShown] = useState(initialView === "map");
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  
-  // Update mapHasBeenShown when switching to map view
-  useEffect(() => {
-    if (activeView === "map" && !mapHasBeenShown) {
-      setMapHasBeenShown(true);
-    }
-  }, [activeView, mapHasBeenShown]);
   
   // Handler for view changes - updates URL instead of local state
   // This ensures URL stays in sync and enables browser back/forward navigation
@@ -292,9 +283,6 @@ export function HomeClient({
     setMapKey((k) => k + 1);
   }, []);
 
-  // Should we render the map? Only if it's active or has been shown before
-  const shouldRenderMap = activeView === "map" || mapHasBeenShown;
-
   return (
     <div className="h-screen bg-white flex flex-col overflow-hidden">
       <Header
@@ -326,19 +314,11 @@ export function HomeClient({
         </div>
       )}
 
-      {/* Map View - Render if active OR if it has been shown before (for faster switching back) */}
-      {shouldRenderMap && (
+      {/* Map View - Only render when active for reliable Mapbox initialization */}
+      {activeView === "map" && (
         <div 
           ref={mapContainerRef}
           className="flex-1 flex flex-col lg:flex-row overflow-hidden"
-          style={{
-            // When not active, move off-screen but keep dimensions (for Mapbox)
-            position: activeView !== "map" ? "absolute" : undefined,
-            left: activeView !== "map" ? "-9999px" : undefined,
-            top: activeView !== "map" ? "0" : undefined,
-            width: activeView !== "map" ? "100%" : undefined,
-            height: activeView !== "map" ? "100%" : undefined,
-          }}
         >
           {/* Desktop Timeline Sidebar */}
           <aside className="hidden lg:block w-80 border-r border-border overflow-y-auto bg-white flex-shrink-0">
@@ -382,7 +362,6 @@ export function HomeClient({
                   focusLat={focusLat}
                   focusLng={focusLng}
                   focusZoom={focusZoom}
-                  isVisible={activeView === "map"}
                   activeMilestone={activeMilestone}
                   highlightPostId={highlightPostId}
                 />

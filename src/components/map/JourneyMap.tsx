@@ -22,8 +22,6 @@ interface JourneyMapProps {
   focusLat?: number;
   focusLng?: number;
   focusZoom?: number; // defaults to 14 (neighborhood level)
-  // Visibility prop - when true, map is visible and should resize
-  isVisible?: boolean;
   // Active milestone for carousel integration
   activeMilestone?: Milestone | null;
   // Highlight a specific post on the map
@@ -74,7 +72,6 @@ export function JourneyMap({
   focusLat,
   focusLng,
   focusZoom = 14, // Default to neighborhood level
-  isVisible = true,
   activeMilestone,
   highlightPostId,
 }: JourneyMapProps) {
@@ -256,25 +253,6 @@ export function JourneyMap({
 
   // Track previous focus coordinates to detect changes
   const prevFocusRef = useRef<{ lat?: number; lng?: number; zoom?: number }>({});
-
-  // Handle visibility changes - resize map when it becomes visible
-  useEffect(() => {
-    const mapInstance = map.current;
-    if (!mapInstance || !isLoaded) return;
-
-    if (isVisible) {
-      // Multiple resize calls with increasing delays to ensure it works
-      // This handles cases where the container dimensions aren't immediately available
-      const timeouts = [0, 50, 100, 200, 500].map((delay) =>
-        setTimeout(() => {
-          if (map.current) {
-            map.current.resize();
-          }
-        }, delay)
-      );
-      return () => timeouts.forEach(clearTimeout);
-    }
-  }, [isVisible, isLoaded]);
 
   // Handle dynamic focus changes (fly to new location when focus changes)
   useEffect(() => {
