@@ -29,11 +29,18 @@ export function Timeline({
     return "current";
   };
 
+  // Sort milestones by display_order for consistent numbering
+  const sortedMilestones = [...milestones].sort(
+    (a, b) => a.display_order - b.display_order
+  );
+
   return (
     <div className="space-y-1">
-      {milestones.map((milestone, index) => {
+      {sortedMilestones.map((milestone, index) => {
         const status = getMilestoneStatus(milestone);
         const isActive = activeMilestone?.id === milestone.id;
+        // Milestone number is display_order + 1 (display_order is 0-indexed in DB)
+        const milestoneNumber = milestone.display_order + 1;
 
         return (
           <button
@@ -59,9 +66,9 @@ export function Timeline({
                     : "bg-muted text-muted-foreground"
                 )}
               >
-                {index + 1}
+                {milestoneNumber}
               </div>
-              {index < milestones.length - 1 && (
+              {index < sortedMilestones.length - 1 && (
                 <div
                   className={cn(
                     "w-0.5 h-8 mt-1",
