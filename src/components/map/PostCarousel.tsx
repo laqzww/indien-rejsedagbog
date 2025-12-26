@@ -415,7 +415,7 @@ export function JourneyCarousel({
   );
 }
 
-// Milestone card component - larger and more prominent
+// Milestone card component - matches post card dimensions
 interface CompactMilestoneCardProps {
   milestone: Milestone;
   postCount: number;
@@ -428,41 +428,46 @@ function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: Compa
     <button
       onClick={onClick}
       className={cn(
-        // Match post card sizes for consistent layout
-        "flex-shrink-0 w-[260px] sm:w-[300px] lg:w-[340px]",
-        "bg-white/95 backdrop-blur-sm rounded-xl overflow-hidden shadow-lg",
-        "text-left transition-all duration-150",
-        "hover:bg-white hover:shadow-xl hover:scale-[1.02]",
-        "focus:outline-none focus:ring-2 focus:ring-saffron",
-        isActive && "ring-2 ring-saffron shadow-xl"
+        // Same width as post cards for consistent layout
+        "flex-shrink-0 w-[280px] sm:w-[300px] lg:w-[320px]",
+        "bg-white rounded-xl overflow-hidden shadow-xl",
+        "text-left transition-all duration-200",
+        "hover:scale-[1.02] hover:shadow-2xl",
+        "focus:outline-none focus:ring-2 focus:ring-saffron focus:ring-offset-2",
+        isActive && "ring-2 ring-saffron"
       )}
     >
-      <div className="flex items-center gap-4 p-4 h-[100px] sm:h-[110px]">
-        {/* Large milestone number badge */}
-        <div 
-          className="w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center flex-shrink-0 shadow-md"
-          style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
-        >
-          <span className="text-white font-bold text-xl sm:text-2xl">{milestone.display_order + 1}</span>
+      {/* Gradient header area - same height as post image */}
+      <div 
+        className="relative h-[120px] flex items-center justify-center"
+        style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
+      >
+        {/* Large milestone number */}
+        <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center border-4 border-white/40">
+          <span className="text-white font-bold text-4xl drop-shadow-lg">{milestone.display_order + 1}</span>
         </div>
-        
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate mb-1">
-            {milestone.name}
-          </h3>
-          <p className="text-sm text-gray-500 flex items-center gap-1.5">
-            <ImageIcon className="h-4 w-4" />
+      </div>
+      
+      {/* Content below - same structure as post card */}
+      <div className="p-3">
+        <h3 className="text-base font-semibold text-gray-900 truncate mb-2">
+          {milestone.name}
+        </h3>
+        <div className="flex items-center gap-3 text-xs text-gray-500">
+          <span className="flex items-center gap-1">
+            <ImageIcon className="h-3 w-3" />
             {postCount} opslag
-            <span className="text-saffron font-medium ml-1">Tryk for at se →</span>
-          </p>
+          </span>
+          <span className="text-saffron font-medium whitespace-nowrap ml-auto">
+            Se opslag →
+          </span>
         </div>
       </div>
     </button>
   );
 }
 
-// Post card component with larger, more prominent image
+// Post card component - vertical layout with large image on top
 interface CompactPostCardProps {
   post: CarouselPost;
   isActive: boolean;
@@ -492,105 +497,115 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
   const thumbnailUrl = getThumbnailUrl();
   const isVideo = firstMedia?.type === "video";
 
-  const truncatedBody = post.body.length > 60 
-    ? post.body.slice(0, 60) + "..." 
+  const truncatedBody = post.body.length > 80 
+    ? post.body.slice(0, 80) + "..." 
     : post.body;
 
   return (
     <button
       onClick={onClick}
       className={cn(
-        // Larger card sizes for better visibility
-        "flex-shrink-0 w-[260px] sm:w-[300px] lg:w-[340px]",
-        "bg-white/95 backdrop-blur-sm rounded-xl overflow-hidden shadow-lg",
-        "text-left transition-all duration-150",
-        "hover:bg-white hover:shadow-xl hover:scale-[1.02]",
-        "focus:outline-none focus:ring-2 focus:ring-saffron",
-        isActive && "ring-2 ring-saffron shadow-xl"
+        // Card sizes - original format
+        "flex-shrink-0 w-[280px] sm:w-[300px] lg:w-[320px]",
+        "bg-white rounded-xl overflow-hidden shadow-xl",
+        "text-left transition-all duration-200",
+        "hover:scale-[1.02] hover:shadow-2xl",
+        "focus:outline-none focus:ring-2 focus:ring-saffron focus:ring-offset-2",
+        isActive && "ring-2 ring-saffron"
       )}
     >
-      {/* Horizontal layout with large image on left */}
-      <div className="flex h-[100px] sm:h-[110px]">
-        {/* Large thumbnail - takes significant portion of card */}
-        <div className="relative w-[100px] sm:w-[120px] h-full flex-shrink-0 bg-muted">
-          {thumbnailUrl ? (
-            <>
-              <Image
-                src={thumbnailUrl}
-                alt=""
-                fill
-                className="object-cover"
-                sizes="(max-width: 640px) 100px, 120px"
-              />
-              {isVideo && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                  <Play className="h-8 w-8 text-white fill-white drop-shadow-lg" />
+      {/* Large image/video thumbnail on top */}
+      <div className="relative h-[120px] bg-muted">
+        {thumbnailUrl ? (
+          <>
+            <Image
+              src={thumbnailUrl}
+              alt=""
+              fill
+              className="object-cover"
+              sizes="320px"
+            />
+            {/* Video play overlay */}
+            {isVideo && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="p-2.5 bg-black/50 rounded-full">
+                  <Play className="h-5 w-5 text-white fill-white" />
                 </div>
-              )}
-              {mediaCount > 1 && (
-                <div className="absolute bottom-1.5 right-1.5 flex gap-1">
-                  {imageCount > 1 && (
-                    <div className="flex items-center gap-0.5 px-1.5 py-0.5 bg-black/70 rounded text-white text-xs">
-                      <ImageIcon className="h-3 w-3" />
-                      {imageCount}
-                    </div>
-                  )}
-                  {videoCount > 0 && (
-                    <div className="flex items-center gap-0.5 px-1.5 py-0.5 bg-black/70 rounded text-white text-xs">
-                      <Film className="h-3 w-3" />
-                      {videoCount}
-                    </div>
-                  )}
-                </div>
-              )}
-            </>
-          ) : (
-            <div 
-              className="w-full h-full flex items-center justify-center"
-              style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
-            >
-              <span className="text-white text-2xl">📝</span>
-            </div>
-          )}
-        </div>
-        
-        {/* Content section */}
-        <div className="flex-1 min-w-0 p-3 flex flex-col justify-center">
-          <p className="text-sm text-gray-800 line-clamp-2 leading-snug mb-1.5">
-            {truncatedBody}
-          </p>
+              </div>
+            )}
+            {/* Media count badge */}
+            {mediaCount > 1 && (
+              <div className="absolute top-2 right-2 flex gap-1">
+                {imageCount > 0 && (
+                  <div className="flex items-center gap-1 px-1.5 py-0.5 bg-black/60 rounded-full text-white text-xs">
+                    <ImageIcon className="h-3 w-3" />
+                    {imageCount}
+                  </div>
+                )}
+                {videoCount > 0 && (
+                  <div className="flex items-center gap-1 px-1.5 py-0.5 bg-black/60 rounded-full text-white text-xs">
+                    <Film className="h-3 w-3" />
+                    {videoCount}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        ) : (
+          <div 
+            className="w-full h-full flex items-center justify-center"
+            style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
+          >
+            <span className="text-white text-3xl">📝</span>
+          </div>
+        )}
+      </div>
+
+      {/* Content below image */}
+      <div className="p-3">
+        <p className="text-sm text-gray-800 line-clamp-2 mb-2 leading-snug">
+          {truncatedBody}
+        </p>
+        <div className="flex items-center gap-3 text-xs text-gray-500">
           {post.location_name && (
-            <p className="text-xs text-gray-500 flex items-center gap-1 truncate">
+            <span className="flex items-center gap-1 truncate flex-1">
               <MapPin className="h-3 w-3 text-india-green flex-shrink-0" />
               <span className="truncate">{post.location_name}</span>
-            </p>
+            </span>
           )}
+          <span className="text-saffron font-medium whitespace-nowrap">
+            Læs mere →
+          </span>
         </div>
       </div>
     </button>
   );
 }
 
-// Empty state when milestone has no posts
+// Empty state when milestone has no posts - matches card dimensions
 function EmptyPostsCard({ milestoneName }: { milestoneName: string }) {
   return (
     <div
       className={cn(
-        // Match other card sizes
-        "flex-shrink-0 w-[260px] sm:w-[300px] lg:w-[340px]",
-        "bg-white/90 backdrop-blur-sm rounded-xl overflow-hidden shadow-lg",
-        "flex items-center justify-center p-4 text-center h-[100px] sm:h-[110px]"
+        // Same width as other cards
+        "flex-shrink-0 w-[280px] sm:w-[300px] lg:w-[320px]",
+        "bg-white rounded-xl overflow-hidden shadow-xl"
       )}
     >
-      <div className="flex items-center gap-3">
-        <div 
-          className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
-          style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
-        >
-          <ImageIcon className="h-5 w-5 text-white" />
+      {/* Gradient header - same as milestone card */}
+      <div 
+        className="relative h-[120px] flex items-center justify-center"
+        style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
+      >
+        <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+          <ImageIcon className="h-8 w-8 text-white" />
         </div>
-        <p className="text-gray-500 text-sm">
-          Ingen opslag for <span className="font-semibold">{milestoneName}</span> endnu
+      </div>
+      
+      {/* Content */}
+      <div className="p-3 text-center">
+        <p className="text-sm text-gray-500">
+          Ingen opslag for <span className="font-semibold text-gray-700">{milestoneName}</span> endnu
         </p>
       </div>
     </div>
