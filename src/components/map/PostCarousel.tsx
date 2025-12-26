@@ -124,6 +124,8 @@ export function JourneyCarousel({
   const isProgrammaticScrollRef = useRef(false);
   // Track the previous view mode to detect changes
   const prevViewModeRef = useRef(viewMode);
+  // Track the last externally set milestone index to detect external changes
+  const lastExternalMilestoneIndexRef = useRef(activeMilestoneIndex);
   
   // Generate a stable key for the posts array based on post IDs
   // This changes when posts actually change (not just when length changes)
@@ -133,34 +135,38 @@ export function JourneyCarousel({
   // Get the active API based on view mode
   const activeApi = viewMode === "milestones" ? milestoneEmblaApi : postEmblaApi;
 
-  // Initialize milestone carousel position when API is ready
+  // Sync milestone carousel when external index changes OR on initial mount
+  // IMPORTANT: We track the last external index to detect genuine parent-driven changes
+  // This prevents feedback loops where internal carousel events trigger re-syncs
   useEffect(() => {
     if (!milestoneEmblaApi) return;
     
-    // On mount, scroll to the active milestone
-    isProgrammaticScrollRef.current = true;
-    milestoneEmblaApi.scrollTo(activeMilestoneIndex, false); // instant scroll (no animation)
-    setSelectedMilestoneIndex(activeMilestoneIndex);
+    // Check if this is a genuine external change (prop changed from parent)
+    const isExternalChange = activeMilestoneIndex !== lastExternalMilestoneIndexRef.current;
     
-    // Use requestAnimationFrame to reset the flag after embla has processed
-    requestAnimationFrame(() => {
-      isProgrammaticScrollRef.current = false;
-    });
-  }, [milestoneEmblaApi]); // Only on API init - activeMilestoneIndex is handled separately
-
-  // Sync milestone carousel when external index changes
-  useEffect(() => {
-    if (!milestoneEmblaApi) return;
-    if (activeMilestoneIndex === selectedMilestoneIndex) return;
+    // Always update the ref to track current external value
+    lastExternalMilestoneIndexRef.current = activeMilestoneIndex;
+    
+    // Only sync if the external index actually changed AND differs from current carousel position
+    if (!isExternalChange) return;
+    
+    // Get the actual current position of the carousel
+    const currentEmblaIndex = milestoneEmblaApi.selectedScrollSnap();
+    if (activeMilestoneIndex === currentEmblaIndex) {
+      // Carousel is already at the right position, just sync state
+      setSelectedMilestoneIndex(activeMilestoneIndex);
+      return;
+    }
     
     isProgrammaticScrollRef.current = true;
     milestoneEmblaApi.scrollTo(activeMilestoneIndex);
     setSelectedMilestoneIndex(activeMilestoneIndex);
     
-    requestAnimationFrame(() => {
+    // Use a longer delay to ensure Embla has finished processing before allowing user events
+    setTimeout(() => {
       isProgrammaticScrollRef.current = false;
-    });
-  }, [milestoneEmblaApi, activeMilestoneIndex, selectedMilestoneIndex]);
+    }, 150);
+  }, [milestoneEmblaApi, activeMilestoneIndex]);
 
   // Initialize post carousel position when API is ready
   useEffect(() => {
@@ -171,10 +177,10 @@ export function JourneyCarousel({
     postEmblaApi.scrollTo(activePostIndex, false); // instant scroll
     setSelectedPostIndex(activePostIndex);
     
-    requestAnimationFrame(() => {
+    setTimeout(() => {
       isProgrammaticScrollRef.current = false;
-    });
-  }, [postEmblaApi]); // Only on API init
+    }, 150);
+  }, [postEmblaApi]); // Only on API init - activePostIndex handled by sync effect
 
   // Sync post carousel when external index changes
   useEffect(() => {
@@ -187,9 +193,9 @@ export function JourneyCarousel({
     postEmblaApi.scrollTo(validIndex, false);
     setSelectedPostIndex(validIndex);
     
-    requestAnimationFrame(() => {
+    setTimeout(() => {
       isProgrammaticScrollRef.current = false;
-    });
+    }, 150);
   }, [postEmblaApi, activePostIndex, selectedPostIndex, posts.length]);
 
   // CRITICAL: Reinitialize post carousel when posts array changes
@@ -211,9 +217,9 @@ export function JourneyCarousel({
     postEmblaApi.scrollTo(0, false);
     setSelectedPostIndex(0);
     
-    requestAnimationFrame(() => {
+    setTimeout(() => {
       isProgrammaticScrollRef.current = false;
-    });
+    }, 150);
   }, [postEmblaApi, postsKey]);
 
   // Handle view mode changes - reset carousel position appropriately
@@ -228,9 +234,9 @@ export function JourneyCarousel({
       isProgrammaticScrollRef.current = true;
       postEmblaApi.scrollTo(0, false);
       setSelectedPostIndex(0);
-      requestAnimationFrame(() => {
+      setTimeout(() => {
         isProgrammaticScrollRef.current = false;
-      });
+      }, 150);
     }
     
     // When switching to milestones view, scroll to current milestone
@@ -238,9 +244,10 @@ export function JourneyCarousel({
       isProgrammaticScrollRef.current = true;
       milestoneEmblaApi.scrollTo(activeMilestoneIndex, false);
       setSelectedMilestoneIndex(activeMilestoneIndex);
-      requestAnimationFrame(() => {
+      lastExternalMilestoneIndexRef.current = activeMilestoneIndex;
+      setTimeout(() => {
         isProgrammaticScrollRef.current = false;
-      });
+      }, 150);
     }
     
     // Update scroll buttons for new view
