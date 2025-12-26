@@ -33,7 +33,7 @@ interface LocationResult {
 
 interface MilestoneFormProps {
   milestone?: Milestone;
-  onSubmit: (data: Omit<Milestone, "id" | "created_at">, coverImageFile?: File) => Promise<boolean>;
+  onSubmit: (data: Omit<Milestone, "id" | "created_at">, coverImageFile?: File) => Promise<true | string>;
   onCancel: () => void;
   title: string;
 }
@@ -266,9 +266,17 @@ export function MilestoneForm({
       cover_image_path: coverImagePath,
     };
 
-    const success = await onSubmit(data, coverImageFile || undefined);
-    
-    if (!success) {
+    try {
+      const result = await onSubmit(data, coverImageFile || undefined);
+      
+      if (result !== true) {
+        // onSubmit returned false or an error message
+        setError(typeof result === "string" ? result : "Der opstod en fejl under gemning");
+        setIsSubmitting(false);
+      }
+    } catch (err) {
+      console.error("Submit failed:", err);
+      setError("Der opstod en uventet fejl. Prøv igen.");
       setIsSubmitting(false);
     }
   };

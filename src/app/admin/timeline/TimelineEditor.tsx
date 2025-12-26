@@ -32,7 +32,7 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
   const [isReordering, setIsReordering] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleCreate = async (data: Omit<Milestone, "id" | "created_at">, coverImageFile?: File) => {
+  const handleCreate = async (data: Omit<Milestone, "id" | "created_at">, coverImageFile?: File): Promise<true | string> => {
     setError(null);
     const supabase = createClient();
 
@@ -53,8 +53,9 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
       .single();
 
     if (insertError) {
-      setError("Kunne ikke oprette destinationen: " + insertError.message);
-      return false;
+      const errorMsg = "Kunne ikke oprette destinationen: " + insertError.message;
+      setError(errorMsg);
+      return errorMsg;
     }
 
     // If cover image file is provided, upload it and update the milestone
@@ -85,8 +86,8 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
     return true;
   };
 
-  const handleUpdate = async (data: Omit<Milestone, "id" | "created_at">, coverImageFile?: File) => {
-    if (!editingMilestone) return false;
+  const handleUpdate = async (data: Omit<Milestone, "id" | "created_at">, coverImageFile?: File): Promise<true | string> => {
+    if (!editingMilestone) return "Ingen destination valgt";
     setError(null);
     const supabase = createClient();
 
@@ -104,8 +105,9 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
         finalCoverPath = uploadResult.path;
       } catch (uploadError) {
         console.error("Failed to upload cover image:", uploadError);
-        setError("Kunne ikke uploade cover-billedet");
-        return false;
+        const errorMsg = "Kunne ikke uploade cover-billedet";
+        setError(errorMsg);
+        return errorMsg;
       }
     } else if (data.cover_image_path === null && editingMilestone.cover_image_path) {
       // Cover was removed, delete the old file
@@ -123,8 +125,9 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
       .eq("id", editingMilestone.id);
 
     if (updateError) {
-      setError("Kunne ikke opdatere destinationen: " + updateError.message);
-      return false;
+      const errorMsg = "Kunne ikke opdatere destinationen: " + updateError.message;
+      setError(errorMsg);
+      return errorMsg;
     }
 
     setMilestones(
@@ -220,6 +223,7 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
   if (isCreating) {
     return (
       <MilestoneForm
+        key="new"
         onSubmit={handleCreate}
         onCancel={() => setIsCreating(false)}
         title="Tilføj destination"
@@ -230,6 +234,7 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
   if (editingMilestone) {
     return (
       <MilestoneForm
+        key={editingMilestone.id}
         milestone={editingMilestone}
         onSubmit={handleUpdate}
         onCancel={() => setEditingMilestone(null)}
