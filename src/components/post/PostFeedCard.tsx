@@ -110,7 +110,17 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
             <span className="text-sm font-semibold text-foreground leading-tight">
               {post.profile?.display_name || "Tommy & Amalie"}
             </span>
-            {post.location_name && (
+            {post.location_name && post.lat && post.lng && (
+              <Link
+                href={`/?view=map&lat=${post.lat}&lng=${post.lng}&focusPost=${post.id}`}
+                className="text-xs text-muted-foreground flex items-center gap-0.5 leading-tight hover:text-india-green hover:underline transition-colors group"
+              >
+                <MapPin className="h-3 w-3" />
+                <span>{post.location_name}</span>
+                <ChevronRight className="h-3 w-3 opacity-0 -ml-0.5 group-hover:opacity-100 transition-opacity" />
+              </Link>
+            )}
+            {post.location_name && (!post.lat || !post.lng) && (
               <span className="text-xs text-muted-foreground flex items-center gap-0.5 leading-tight">
                 <MapPin className="h-3 w-3" />
                 {post.location_name}
@@ -295,27 +305,6 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
           </div>
         )}
 
-        {/* Location map preview */}
-        {post.lat && post.lng && (
-          <Link
-            href={`/?view=map&lat=${post.lat}&lng=${post.lng}&focusPost=${post.id}`}
-            className="block mt-2 rounded-lg overflow-hidden border border-border hover:border-saffron transition-colors"
-          >
-            <div className="relative h-24 bg-muted">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/pin-s-marker+FF9933(${post.lng},${post.lat})/${post.lng},${post.lat},11,0/400x150@2x?access_token=${process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}`}
-                alt=""
-                className="w-full h-full object-cover"
-                loading="lazy"
-              />
-              <div className="absolute bottom-1.5 right-1.5 px-2 py-0.5 bg-white/90 rounded text-[10px] font-medium text-foreground flex items-center gap-1">
-                <MapPin className="h-2.5 w-2.5" />
-                Se på kort
-              </div>
-            </div>
-          </Link>
-        )}
       </div>
     </article>
   );
