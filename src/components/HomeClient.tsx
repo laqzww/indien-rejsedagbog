@@ -513,13 +513,13 @@ export function HomeClient({
               </div>
             )}
 
-            {/* Map style toggle button */}
+            {/* Map style toggle button - positioned below Mapbox zoom controls */}
             <button
               onClick={handleToggleMapStyle}
-              className="absolute top-16 right-3 z-20 bg-white rounded-md shadow-lg p-2 hover:bg-gray-50 transition-colors border border-gray-200"
+              className="absolute top-[88px] md:top-[78px] right-[10px] z-20 bg-white rounded-md shadow-lg p-1.5 hover:bg-gray-50 transition-colors border border-gray-200"
               title={mapStyle === "streets" ? "Skift til satellit" : "Skift til gadekort"}
             >
-              <Layers className="h-5 w-5 text-gray-700" />
+              <Layers className="h-4 w-4 text-gray-700" />
             </button>
 
             {/* Legend */}
