@@ -92,6 +92,11 @@ export function JourneyCarousel({
   const isProgrammaticScrollRef = useRef(false);
   // Track the previous view mode to detect changes
   const prevViewModeRef = useRef(viewMode);
+  
+  // Generate a stable key for the posts array based on post IDs
+  // This changes when posts actually change (not just when length changes)
+  const postsKey = posts.map(p => p.id).join(",");
+  const prevPostsKeyRef = useRef(postsKey);
 
   // Get the active API based on view mode
   const activeApi = viewMode === "milestones" ? milestoneEmblaApi : postEmblaApi;
@@ -139,7 +144,7 @@ export function JourneyCarousel({
     });
   }, [postEmblaApi]); // Only on API init
 
-  // Sync post carousel when external index changes OR when posts array changes
+  // Sync post carousel when external index changes
   useEffect(() => {
     if (!postEmblaApi) return;
     if (activePostIndex === selectedPostIndex && posts.length > 0) return;
@@ -154,6 +159,30 @@ export function JourneyCarousel({
       isProgrammaticScrollRef.current = false;
     });
   }, [postEmblaApi, activePostIndex, selectedPostIndex, posts.length]);
+
+  // CRITICAL: Reinitialize post carousel when posts array changes
+  // This is necessary because the posts carousel is hidden (display: none) while
+  // in milestone view, so Embla doesn't automatically detect DOM changes.
+  // Without this, swiping between milestones causes stale posts to be displayed.
+  useEffect(() => {
+    if (!postEmblaApi) return;
+    
+    // Check if posts actually changed (not just on initial mount)
+    if (prevPostsKeyRef.current === postsKey) return;
+    prevPostsKeyRef.current = postsKey;
+    
+    // Reinitialize Embla to recalculate slides
+    postEmblaApi.reInit();
+    
+    // Reset to first post when posts change
+    isProgrammaticScrollRef.current = true;
+    postEmblaApi.scrollTo(0, false);
+    setSelectedPostIndex(0);
+    
+    requestAnimationFrame(() => {
+      isProgrammaticScrollRef.current = false;
+    });
+  }, [postEmblaApi, postsKey]);
 
   // Handle view mode changes - reset carousel position appropriately
   useEffect(() => {
