@@ -81,7 +81,8 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
       }
     }
 
-    setMilestones([...milestones, newMilestone]);
+    // Use callback form to ensure we're working with the latest state
+    setMilestones((prevMilestones) => [...prevMilestones, newMilestone]);
     setIsCreating(false);
     return true;
   };
@@ -119,10 +120,12 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
       }
     }
 
-    const { error: updateError } = await supabase
+    const { data: updatedMilestone, error: updateError } = await supabase
       .from("milestones")
       .update({ ...data, cover_image_path: finalCoverPath })
-      .eq("id", editingMilestone.id);
+      .eq("id", editingMilestone.id)
+      .select()
+      .single();
 
     if (updateError) {
       const errorMsg = "Kunne ikke opdatere destinationen: " + updateError.message;
@@ -130,9 +133,16 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
       return errorMsg;
     }
 
-    setMilestones(
-      milestones.map((m) =>
-        m.id === editingMilestone.id ? { ...m, ...data, cover_image_path: finalCoverPath } : m
+    if (!updatedMilestone) {
+      const errorMsg = "Opdatering mislykkedes - ingen data returneret. Tjek at du har rettigheder til at redigere.";
+      setError(errorMsg);
+      return errorMsg;
+    }
+
+    // Use callback form to ensure we're working with the latest state
+    setMilestones((prevMilestones) =>
+      prevMilestones.map((m) =>
+        m.id === editingMilestone.id ? updatedMilestone : m
       )
     );
     setEditingMilestone(null);
