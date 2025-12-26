@@ -117,6 +117,7 @@ export type Database = {
       milestones: {
         Row: {
           arrival_date: string | null
+          cover_image_path: string | null
           created_at: string
           departure_date: string | null
           description: string | null
@@ -128,6 +129,7 @@ export type Database = {
         }
         Insert: {
           arrival_date?: string | null
+          cover_image_path?: string | null
           created_at?: string
           departure_date?: string | null
           description?: string | null
@@ -139,6 +141,7 @@ export type Database = {
         }
         Update: {
           arrival_date?: string | null
+          cover_image_path?: string | null
           created_at?: string
           departure_date?: string | null
           description?: string | null

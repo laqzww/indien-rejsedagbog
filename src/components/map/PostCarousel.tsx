@@ -3,10 +3,16 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import Image from "next/image";
 import useEmblaCarousel from "embla-carousel-react";
-import { MapPin, ImageIcon, Film, Play, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { MapPin, ImageIcon, Film, Play, ChevronLeft, ChevronRight, X, MapPinIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getMediaUrl } from "@/lib/upload";
 import type { Milestone } from "@/types/database";
+
+// Helper to get cover image URL for milestone
+function getMilestoneCoverUrl(milestone: Milestone): string | null {
+  if (!milestone.cover_image_path) return null;
+  return getMediaUrl(milestone.cover_image_path);
+}
 
 // Post type for carousel
 export interface CarouselPost {
@@ -424,6 +430,8 @@ interface CompactMilestoneCardProps {
 }
 
 function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: CompactMilestoneCardProps) {
+  const coverUrl = getMilestoneCoverUrl(milestone);
+  
   return (
     <button
       onClick={onClick}
@@ -437,22 +445,55 @@ function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: Compa
         isActive && "ring-2 ring-saffron"
       )}
     >
-      {/* Gradient header area - same height as post image */}
+      {/* Header area - cover image or gradient fallback */}
       <div 
         className="relative h-[120px] flex items-center justify-center"
-        style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
+        style={!coverUrl ? { background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" } : undefined}
       >
-        {/* Large milestone number */}
-        <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center border-4 border-white/40">
-          <span className="text-white font-bold text-4xl drop-shadow-lg">{milestone.display_order + 1}</span>
-        </div>
+        {coverUrl ? (
+          <>
+            {/* Cover image */}
+            <Image
+              src={coverUrl}
+              alt={milestone.name}
+              fill
+              className="object-cover"
+              sizes="320px"
+            />
+            {/* Dark overlay for better text visibility */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+            {/* Milestone number badge */}
+            <div className="absolute top-3 left-3 w-10 h-10 rounded-full bg-saffron text-white flex items-center justify-center font-bold text-lg shadow-lg border-2 border-white">
+              {milestone.display_order + 1}
+            </div>
+            {/* Location name overlay at bottom */}
+            <div className="absolute bottom-3 left-3 right-3">
+              <div className="flex items-center gap-1.5 text-white/90 text-sm">
+                <MapPinIcon className="h-4 w-4 flex-shrink-0" />
+                <span className="truncate font-medium drop-shadow-lg">{milestone.name}</span>
+              </div>
+            </div>
+          </>
+        ) : (
+          /* Fallback: Large milestone number on gradient */
+          <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center border-4 border-white/40">
+            <span className="text-white font-bold text-4xl drop-shadow-lg">{milestone.display_order + 1}</span>
+          </div>
+        )}
       </div>
       
       {/* Content below - same structure as post card */}
       <div className="p-3">
-        <h3 className="text-base font-semibold text-gray-900 truncate mb-2">
-          {milestone.name}
-        </h3>
+        {!coverUrl && (
+          <h3 className="text-base font-semibold text-gray-900 truncate mb-2">
+            {milestone.name}
+          </h3>
+        )}
+        {coverUrl && milestone.description && (
+          <p className="text-sm text-gray-600 line-clamp-2 mb-2">
+            {milestone.description}
+          </p>
+        )}
         <div className="flex items-center gap-3 text-xs text-gray-500">
           <span className="flex items-center gap-1">
             <ImageIcon className="h-3 w-3" />

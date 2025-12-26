@@ -3,22 +3,22 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   PlusCircle,
   MapPin,
   Calendar,
-  GripVertical,
   Pencil,
   Trash2,
   ChevronUp,
   ChevronDown,
   Loader2,
-  Save,
+  ImageIcon,
 } from "lucide-react";
 import type { Milestone } from "@/types/database";
 import { MilestoneForm } from "./MilestoneForm";
 import { cn } from "@/lib/utils";
+import { uploadMilestoneCover, deleteMilestoneCover } from "@/lib/upload";
 
 interface TimelineEditorProps {
   initialMilestones: Milestone[];
@@ -32,7 +32,7 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
   const [isReordering, setIsReordering] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleCreate = async (data: Omit<Milestone, "id" | "created_at">) => {
+  const handleCreate = async (data: Omit<Milestone, "id" | "created_at">, coverImageFile?: File) => {
     setError(null);
     const supabase = createClient();
 
@@ -41,11 +41,13 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
       ? Math.max(...milestones.map(m => m.display_order)) 
       : -1;
 
+    // First create the milestone without cover image path
     const { data: newMilestone, error: insertError } = await supabase
       .from("milestones")
       .insert({
         ...data,
         display_order: maxOrder + 1,
+        cover_image_path: null, // Set initially, update after upload
       })
       .select()
       .single();
@@ -55,19 +57,69 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
       return false;
     }
 
+    // If cover image file is provided, upload it and update the milestone
+    if (coverImageFile && newMilestone) {
+      try {
+        const uploadResult = await uploadMilestoneCover(coverImageFile, newMilestone.id);
+        
+        // Update milestone with cover image path
+        const { error: updateError } = await supabase
+          .from("milestones")
+          .update({ cover_image_path: uploadResult.path })
+          .eq("id", newMilestone.id);
+
+        if (updateError) {
+          console.error("Failed to update cover image path:", updateError);
+          // Don't fail the whole operation, just log the error
+        } else {
+          newMilestone.cover_image_path = uploadResult.path;
+        }
+      } catch (uploadError) {
+        console.error("Failed to upload cover image:", uploadError);
+        // Don't fail the whole operation, milestone was created successfully
+      }
+    }
+
     setMilestones([...milestones, newMilestone]);
     setIsCreating(false);
     return true;
   };
 
-  const handleUpdate = async (data: Omit<Milestone, "id" | "created_at">) => {
+  const handleUpdate = async (data: Omit<Milestone, "id" | "created_at">, coverImageFile?: File) => {
     if (!editingMilestone) return false;
     setError(null);
     const supabase = createClient();
 
+    let finalCoverPath = data.cover_image_path;
+
+    // If a new cover image is provided, upload it
+    if (coverImageFile) {
+      try {
+        // Delete old cover if it exists
+        if (editingMilestone.cover_image_path) {
+          await deleteMilestoneCover(editingMilestone.cover_image_path).catch(() => {});
+        }
+        
+        const uploadResult = await uploadMilestoneCover(coverImageFile, editingMilestone.id);
+        finalCoverPath = uploadResult.path;
+      } catch (uploadError) {
+        console.error("Failed to upload cover image:", uploadError);
+        setError("Kunne ikke uploade cover-billedet");
+        return false;
+      }
+    } else if (data.cover_image_path === null && editingMilestone.cover_image_path) {
+      // Cover was removed, delete the old file
+      try {
+        await deleteMilestoneCover(editingMilestone.cover_image_path);
+      } catch (deleteError) {
+        console.error("Failed to delete old cover image:", deleteError);
+        // Don't fail the operation
+      }
+    }
+
     const { error: updateError } = await supabase
       .from("milestones")
-      .update(data)
+      .update({ ...data, cover_image_path: finalCoverPath })
       .eq("id", editingMilestone.id);
 
     if (updateError) {
@@ -77,7 +129,7 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
 
     setMilestones(
       milestones.map((m) =>
-        m.id === editingMilestone.id ? { ...m, ...data } : m
+        m.id === editingMilestone.id ? { ...m, ...data, cover_image_path: finalCoverPath } : m
       )
     );
     setEditingMilestone(null);
@@ -271,6 +323,12 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
                         <MapPin className="h-3.5 w-3.5" />
                         {milestone.lat.toFixed(4)}, {milestone.lng.toFixed(4)}
                       </span>
+                      {milestone.cover_image_path && (
+                        <span className="flex items-center gap-1 text-india-green">
+                          <ImageIcon className="h-3.5 w-3.5" />
+                          Cover
+                        </span>
+                      )}
                     </div>
 
                     {milestone.description && (

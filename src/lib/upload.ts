@@ -66,3 +66,53 @@ export function getFileType(file: File): "image" | "video" {
   return "image";
 }
 
+/**
+ * Upload a cover image for a milestone
+ * Stores in: milestones/{milestoneId}/cover.{ext}
+ */
+export async function uploadMilestoneCover(
+  file: File,
+  milestoneId: string
+): Promise<UploadResult> {
+  const supabase = createClient();
+  
+  // Get file extension
+  const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+  const path = `milestones/${milestoneId}/cover.${ext}`;
+  
+  // Delete existing cover if any (to allow replacement)
+  await supabase.storage.from("media").remove([path]);
+  
+  const { error } = await supabase.storage
+    .from("media")
+    .upload(path, file, {
+      cacheControl: "3600",
+      upsert: true,
+    });
+
+  if (error) {
+    throw new Error(`Upload failed: ${error.message}`);
+  }
+
+  const { data: { publicUrl } } = supabase.storage
+    .from("media")
+    .getPublicUrl(path);
+
+  return { path, publicUrl };
+}
+
+/**
+ * Delete a milestone cover image
+ */
+export async function deleteMilestoneCover(path: string): Promise<void> {
+  const supabase = createClient();
+  
+  const { error } = await supabase.storage
+    .from("media")
+    .remove([path]);
+
+  if (error) {
+    throw new Error(`Delete failed: ${error.message}`);
+  }
+}
+
