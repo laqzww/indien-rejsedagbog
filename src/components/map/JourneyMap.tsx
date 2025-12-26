@@ -677,7 +677,7 @@ export function JourneyMap({
   return (
     <div
       ref={mapContainer}
-      className="absolute inset-0"
+      className="w-full h-full"
     />
   );
 }

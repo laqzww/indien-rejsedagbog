@@ -34,10 +34,10 @@ export function createPostMarkerHTML(post: MapPost, isMobile: boolean): string {
   const firstMedia = sortedMedia[0];
   const mediaCount = sortedMedia.length;
 
-  // Sizes based on device - large thumbnails for better visibility
-  const size = isMobile ? 72 : 60;
-  const badgeSize = isMobile ? 22 : 20;
-  const iconSize = isMobile ? 20 : 18;
+  // Sizes based on device
+  const size = isMobile ? 52 : 44;
+  const badgeSize = isMobile ? 20 : 18;
+  const iconSize = isMobile ? 16 : 14;
 
   // Get thumbnail URL
   const getThumbnailUrl = () => {
@@ -63,8 +63,8 @@ export function createPostMarkerHTML(post: MapPost, isMobile: boolean): string {
     width: ${size}px;
     height: ${size}px;
     border-radius: 50%;
-    border: 4px solid white;
-    box-shadow: 0 6px 16px rgba(0,0,0,0.35), 0 3px 6px rgba(0,0,0,0.25);
+    border: 3px solid white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.2);
     cursor: pointer;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
     position: relative;
@@ -118,8 +118,8 @@ export function createPostMarkerHTML(post: MapPost, isMobile: boolean): string {
             transform: translate(-50%, -50%);
             background: rgba(0,0,0,0.6);
             border-radius: 50%;
-            width: ${iconSize + 12}px;
-            height: ${iconSize + 12}px;
+            width: ${iconSize + 8}px;
+            height: ${iconSize + 8}px;
             display: flex;
             align-items: center;
             justify-content: center;
