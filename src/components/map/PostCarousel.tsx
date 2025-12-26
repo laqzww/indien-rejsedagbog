@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import Image from "next/image";
 import useEmblaCarousel from "embla-carousel-react";
-import { MapPin, ImageIcon, Film, Play, ChevronLeft, ChevronRight, X, MapPinIcon } from "lucide-react";
+import { MapPin, ImageIcon, Film, Play, ChevronLeft, ChevronRight, X, MapPinIcon, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getMediaUrl } from "@/lib/upload";
 import type { Milestone } from "@/types/database";
@@ -12,6 +12,38 @@ import type { Milestone } from "@/types/database";
 function getMilestoneCoverUrl(milestone: Milestone): string | null {
   if (!milestone.cover_image_path) return null;
   return getMediaUrl(milestone.cover_image_path);
+}
+
+// Helper to format date range for milestone
+function formatDateRange(arrival: string | null, departure: string | null): string | null {
+  if (!arrival) return null;
+  
+  const arrDate = new Date(arrival);
+  const options: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" };
+
+  if (!departure) {
+    return arrDate.toLocaleDateString("da-DK", options);
+  }
+
+  const depDate = new Date(departure);
+  return `${arrDate.toLocaleDateString("da-DK", options)} – ${depDate.toLocaleDateString("da-DK", options)}`;
+}
+
+// Helper to get milestone status
+type MilestoneStatus = "completed" | "current" | "upcoming";
+
+function getMilestoneStatus(milestone: Milestone): MilestoneStatus {
+  const today = new Date();
+  
+  if (!milestone.arrival_date) return "upcoming";
+  const arrivalDate = new Date(milestone.arrival_date);
+  const departureDate = milestone.departure_date
+    ? new Date(milestone.departure_date)
+    : null;
+
+  if (arrivalDate > today) return "upcoming";
+  if (departureDate && departureDate < today) return "completed";
+  return "current";
 }
 
 // Post type for carousel
@@ -431,6 +463,15 @@ interface CompactMilestoneCardProps {
 
 function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: CompactMilestoneCardProps) {
   const coverUrl = getMilestoneCoverUrl(milestone);
+  const dateRange = formatDateRange(milestone.arrival_date, milestone.departure_date);
+  const status = getMilestoneStatus(milestone);
+  
+  // Status indicator colors
+  const statusBgColor = status === "completed" 
+    ? "bg-india-green" 
+    : status === "current" 
+    ? "bg-saffron animate-pulse" 
+    : "bg-gray-400";
   
   return (
     <button
@@ -462,9 +503,14 @@ function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: Compa
             />
             {/* Dark overlay for better text visibility */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
-            {/* Milestone number badge */}
-            <div className="absolute top-3 left-3 w-10 h-10 rounded-full bg-saffron text-white flex items-center justify-center font-bold text-lg shadow-lg border-2 border-white">
-              {milestone.display_order + 1}
+            {/* Milestone number badge with status indicator */}
+            <div className="absolute top-3 left-3 flex items-center gap-2">
+              <div className={cn(
+                "w-10 h-10 rounded-full text-white flex items-center justify-center font-bold text-lg shadow-lg border-2 border-white",
+                statusBgColor
+              )}>
+                {milestone.display_order + 1}
+              </div>
             </div>
             {/* Location name overlay at bottom */}
             <div className="absolute bottom-3 left-3 right-3">
@@ -475,8 +521,15 @@ function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: Compa
             </div>
           </>
         ) : (
-          /* Fallback: Large milestone number on gradient */
-          <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center border-4 border-white/40">
+          /* Fallback: Large milestone number on gradient with status */
+          <div className={cn(
+            "w-20 h-20 rounded-full flex items-center justify-center border-4 border-white/40",
+            status === "completed" 
+              ? "bg-india-green/80" 
+              : status === "current" 
+              ? "bg-white/20 backdrop-blur-sm animate-pulse" 
+              : "bg-white/20 backdrop-blur-sm"
+          )}>
             <span className="text-white font-bold text-4xl drop-shadow-lg">{milestone.display_order + 1}</span>
           </div>
         )}
@@ -485,7 +538,7 @@ function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: Compa
       {/* Content below - same structure as post card */}
       <div className="p-3">
         {!coverUrl && (
-          <h3 className="text-base font-semibold text-gray-900 truncate mb-2">
+          <h3 className="text-base font-semibold text-gray-900 truncate mb-1">
             {milestone.name}
           </h3>
         )}
@@ -493,6 +546,13 @@ function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: Compa
           <p className="text-sm text-gray-600 line-clamp-2 mb-2">
             {milestone.description}
           </p>
+        )}
+        {/* Date range - always show if available */}
+        {dateRange && (
+          <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-2">
+            <Calendar className="h-3 w-3" />
+            <span>{dateRange}</span>
+          </div>
         )}
         <div className="flex items-center gap-3 text-xs text-gray-500">
           <span className="flex items-center gap-1">
