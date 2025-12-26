@@ -28,6 +28,12 @@ const JourneyMap = dynamic(
   }
 );
 
+// Height of the carousel overlay in pixels
+// Used to adjust map extent calculations so the visible area is above the carousel
+// Calculation: header (~40px) + card (120px image + 70px content) + padding (~20px) ≈ 250px
+// Adding buffer for safety
+const CAROUSEL_HEIGHT = 280;
+
 interface JourneyPost {
   id: string;
   body: string;
@@ -454,6 +460,7 @@ export function HomeClient({
                   focusZoom={focusZoom}
                   activeMilestone={activeMilestone}
                   highlightPostId={highlightPostId}
+                  extentBottomOffset={CAROUSEL_HEIGHT}
                 />
 
                 {/* Journey Carousel - shows milestones or posts (no pseudo-milestones) */}
