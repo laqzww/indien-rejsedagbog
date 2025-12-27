@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,6 +31,21 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [isReordering, setIsReordering] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Use a ref to always have access to the latest editingMilestone value
+  // This avoids stale closure issues in handleUpdate
+  const editingMilestoneRef = useRef<Milestone | null>(null);
+
+  // Keep the ref in sync with the state
+  useEffect(() => {
+    editingMilestoneRef.current = editingMilestone;
+  }, [editingMilestone]);
+
+  // Helper to set editing milestone - updates both state and ref synchronously
+  const setEditingMilestoneWithRef = (milestone: Milestone | null) => {
+    editingMilestoneRef.current = milestone;
+    setEditingMilestone(milestone);
+  };
 
   const handleCreate = async (data: Omit<Milestone, "id" | "created_at">, coverImageFile?: File): Promise<true | string> => {
     setError(null);
@@ -88,7 +103,10 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
   };
 
   const handleUpdate = async (data: Omit<Milestone, "id" | "created_at">, coverImageFile?: File): Promise<true | string> => {
-    if (!editingMilestone) return "Ingen destination valgt";
+    // Use ref to avoid stale closure issues - always get the latest value
+    const currentEditingMilestone = editingMilestoneRef.current;
+    
+    if (!currentEditingMilestone) return "Ingen destination valgt";
     setError(null);
     const supabase = createClient();
 
@@ -98,11 +116,11 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
     if (coverImageFile) {
       try {
         // Delete old cover if it exists
-        if (editingMilestone.cover_image_path) {
-          await deleteMilestoneCover(editingMilestone.cover_image_path).catch(() => {});
+        if (currentEditingMilestone.cover_image_path) {
+          await deleteMilestoneCover(currentEditingMilestone.cover_image_path).catch(() => {});
         }
         
-        const uploadResult = await uploadMilestoneCover(coverImageFile, editingMilestone.id);
+        const uploadResult = await uploadMilestoneCover(coverImageFile, currentEditingMilestone.id);
         finalCoverPath = uploadResult.path;
       } catch (uploadError) {
         console.error("Failed to upload cover image:", uploadError);
@@ -110,10 +128,10 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
         setError(errorMsg);
         return errorMsg;
       }
-    } else if (data.cover_image_path === null && editingMilestone.cover_image_path) {
+    } else if (data.cover_image_path === null && currentEditingMilestone.cover_image_path) {
       // Cover was removed, delete the old file
       try {
-        await deleteMilestoneCover(editingMilestone.cover_image_path);
+        await deleteMilestoneCover(currentEditingMilestone.cover_image_path);
       } catch (deleteError) {
         console.error("Failed to delete old cover image:", deleteError);
         // Don't fail the operation
@@ -123,7 +141,7 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
     const { data: updatedMilestone, error: updateError } = await supabase
       .from("milestones")
       .update({ ...data, cover_image_path: finalCoverPath })
-      .eq("id", editingMilestone.id)
+      .eq("id", currentEditingMilestone.id)
       .select()
       .single();
 
@@ -142,10 +160,10 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
     // Use callback form to ensure we're working with the latest state
     setMilestones((prevMilestones) =>
       prevMilestones.map((m) =>
-        m.id === editingMilestone.id ? updatedMilestone : m
+        m.id === currentEditingMilestone.id ? updatedMilestone : m
       )
     );
-    setEditingMilestone(null);
+    setEditingMilestoneWithRef(null);
     return true;
   };
 
@@ -247,7 +265,7 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
         key={editingMilestone.id}
         milestone={editingMilestone}
         onSubmit={handleUpdate}
-        onCancel={() => setEditingMilestone(null)}
+        onCancel={() => setEditingMilestoneWithRef(null)}
         title="Rediger destination"
       />
     );
@@ -359,7 +377,7 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-muted-foreground hover:text-saffron"
-                      onClick={() => setEditingMilestone(milestone)}
+                      onClick={() => setEditingMilestoneWithRef(milestone)}
                       disabled={isDeleting !== null || isReordering !== null}
                     >
                       <Pencil className="h-4 w-4" />
