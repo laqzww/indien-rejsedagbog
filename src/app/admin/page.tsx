@@ -77,8 +77,8 @@ export default async function AdminPage() {
                 <ImageIcon className="h-8 w-8" />
               </div>
               <div>
-                <h2 className="text-xl font-semibold text-navy">Migrer thumbnails</h2>
-                <p className="text-muted-foreground">Generer karrusel-thumbnails til ældre billeder</p>
+                <h2 className="text-xl font-semibold text-navy">Generer thumbnails</h2>
+                <p className="text-muted-foreground">Opret hurtige forhåndsvisninger til kortet</p>
               </div>
             </CardContent>
           </Card>

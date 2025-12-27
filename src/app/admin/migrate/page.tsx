@@ -104,7 +104,7 @@ export default function MigratePage() {
       errorsTotal: 0,
       currentBatch: 0,
       error: null,
-      log: ["Starter migrering..."],
+      log: ["Starter generering af thumbnails..."],
     }));
     
     const BATCH_SIZE = 5; // Process 5 images at a time to avoid timeouts
@@ -178,8 +178,8 @@ export default function MigratePage() {
       }
     }
     
-    addLog("✅ Migrering afsluttet!");
-    addLog(`Resultat: ${totalProcessed} behandlet, ${totalSkipped} sprunget over, ${totalErrors} fejl`);
+    addLog("✅ Thumbnails oprettet!");
+    addLog(`Resultat: ${totalProcessed} nye thumbnails, ${totalSkipped} havde allerede, ${totalErrors} fejl`);
     
     setState(prev => ({
       ...prev,
@@ -202,9 +202,9 @@ export default function MigratePage() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-navy">Migrer Karrusel-Thumbnails</h1>
+          <h1 className="text-2xl font-bold text-navy">Generer Karrusel-Thumbnails</h1>
           <p className="text-muted-foreground">
-            Generer optimerede thumbnails til eksisterende billeder
+            Opret hurtige forhåndsvisninger til rejsekortet
           </p>
         </div>
       </div>
@@ -219,21 +219,37 @@ export default function MigratePage() {
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-muted-foreground">
           <p>
-            Dette værktøj genererer små, optimerede thumbnails (maks 640x640px) til alle 
-            eksisterende billeder i databasen. Disse thumbnails bruges i rejsekortet 
+            Dette værktøj opretter små, hurtige thumbnails (maks 640x640px) til alle 
+            eksisterende billeder. Disse thumbnails bruges i rejsekortet 
             karrusellen for hurtigere indlæsning.
           </p>
+          
+          {/* Reassurance box */}
+          <div className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800">
+            <CheckCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium">Dine originale billeder røres ikke</p>
+              <p className="text-green-700">
+                Processen opretter <strong>nye ekstra filer</strong> ved siden af originalbillederne. 
+                F.eks. bliver <code className="bg-green-100 px-1 rounded">billede.jpg</code> til en 
+                ekstra fil kaldet <code className="bg-green-100 px-1 rounded">billede_carousel.jpg</code>.
+                Originalen bruges stadig til opslag og galleri.
+              </p>
+            </div>
+          </div>
+
           <p>
             <strong>Bemærk:</strong> Nye billeder får automatisk genereret thumbnails ved upload.
-            Du behøver kun køre dette én gang for at migrere eksisterende billeder.
+            Du behøver kun køre dette én gang for eksisterende billeder.
           </p>
+          
           <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800">
             <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-medium">Kør kun på et stille tidspunkt</p>
+              <p className="font-medium">Kør gerne på et stille tidspunkt</p>
               <p className="text-amber-700">
-                Processen bruger båndbredde og serverressourcer. 
-                Det anbefales at køre den når der ikke er mange besøgende.
+                Processen bruger lidt båndbredde og serverressourcer, 
+                så det kan være en god idé at køre den når der ikke er mange besøgende.
               </p>
             </div>
           </div>
@@ -245,10 +261,10 @@ export default function MigratePage() {
         <CardHeader>
           <CardTitle>Status</CardTitle>
           <CardDescription>
-            {state.status === "idle" && "Klik 'Tjek status' for at se hvad der skal behandles"}
+            {state.status === "idle" && "Klik 'Tjek status' for at se hvilke billeder der mangler thumbnails"}
             {state.status === "checking" && "Tjekker status..."}
-            {state.status === "running" && `Kører batch ${state.currentBatch}...`}
-            {state.status === "completed" && "Migrering afsluttet!"}
+            {state.status === "running" && `Opretter thumbnails (batch ${state.currentBatch})...`}
+            {state.status === "completed" && "Thumbnails oprettet!"}
             {state.status === "error" && "Der opstod en fejl"}
           </CardDescription>
         </CardHeader>
@@ -307,11 +323,11 @@ export default function MigratePage() {
             <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-green-800 mb-6">
               <div className="flex items-center gap-2">
                 <CheckCircle className="h-5 w-5" />
-                <span className="font-medium">Migrering gennemført!</span>
+                <span className="font-medium">Thumbnails oprettet!</span>
               </div>
               <p className="mt-1 text-sm">
-                {state.processedTotal} billeder fik nye thumbnails, 
-                {state.skippedTotal} havde allerede thumbnails.
+                {state.processedTotal} nye thumbnails oprettet, 
+                {" "}{state.skippedTotal} billeder havde allerede thumbnails.
               </p>
             </div>
           )}
@@ -340,12 +356,12 @@ export default function MigratePage() {
               {state.status === "running" ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Kører...
+                  Opretter thumbnails...
                 </>
               ) : (
                 <>
                   <Play className="h-4 w-4" />
-                  Start migrering
+                  Opret thumbnails
                 </>
               )}
             </Button>
