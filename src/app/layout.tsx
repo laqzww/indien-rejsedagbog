@@ -48,7 +48,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${outfit.variable} ${jetbrainsMono.variable} ${tillana.variable} antialiased h-dvh h-[100svh] overflow-hidden`}
+        className={`${outfit.variable} ${jetbrainsMono.variable} ${tillana.variable} antialiased min-h-dvh min-h-[100svh]`}
       >
         {children}
       </body>
