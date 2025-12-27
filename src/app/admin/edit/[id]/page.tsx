@@ -346,25 +346,14 @@ export default function EditPostPage() {
       // This is the field used for display, so we always want it to reflect the user's choice
       // Use refs to avoid stale closure issues (similar to existingMediaRef pattern)
       const currentPostDate = postDateRef.current;
-      const currentOriginalPostDate = originalPostDateRef.current;
       
       // Build the new captured_at value:
-      // Use the selected date with the original time-of-day (if available)
-      // This preserves the time component while allowing the date to be changed
+      // Always use noon (12:00) to avoid timezone edge cases when converting to UTC
+      // This ensures the date stays correct regardless of timezone
       const newCapturedAt = (() => {
         const newDate = new Date(currentPostDate);
-        // If we have an original date, preserve its time component
-        if (currentOriginalPostDate) {
-          newDate.setHours(
-            currentOriginalPostDate.getHours(),
-            currentOriginalPostDate.getMinutes(),
-            currentOriginalPostDate.getSeconds(),
-            currentOriginalPostDate.getMilliseconds()
-          );
-        } else {
-          // If no original date, set to noon to avoid timezone edge cases
-          newDate.setHours(12, 0, 0, 0);
-        }
+        // Always set to noon to prevent UTC conversion from shifting the day
+        newDate.setHours(12, 0, 0, 0);
         return newDate.toISOString();
       })();
 
