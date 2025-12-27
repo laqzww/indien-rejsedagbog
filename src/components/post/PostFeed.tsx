@@ -146,7 +146,7 @@ interface MilestoneSectionProps {
 }
 
 function MilestoneSection({ group, index, forceExpanded }: MilestoneSectionProps) {
-  const [isExpanded, setIsExpanded] = useState(index === 0 || forceExpanded); // First milestone or forced expanded by default
+  const [isExpanded, setIsExpanded] = useState(true); // All milestones expanded by default
   const { showHeaders } = useContext(ScrollContext);
 
   // Expand when forceExpanded becomes true
