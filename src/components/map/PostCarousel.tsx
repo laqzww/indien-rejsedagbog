@@ -516,7 +516,7 @@ function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: Compa
         // Same width as post cards for consistent layout
         "flex-shrink-0 w-[280px] sm:w-[300px] lg:w-[320px]",
         "bg-white rounded-xl overflow-hidden shadow-xl",
-        "text-left transition-all duration-200",
+        "text-left transition-all duration-200 flex flex-col",
         "hover:scale-[1.02] hover:shadow-2xl",
         "focus:outline-none focus:ring-2 focus:ring-saffron focus:ring-offset-2",
         isActive && "ring-2 ring-saffron"
@@ -524,7 +524,10 @@ function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: Compa
     >
       {/* Header area - cover image or gradient fallback */}
       <div 
-        className="relative h-[120px] flex items-center justify-center"
+        className={cn(
+          "relative h-[120px] flex-shrink-0",
+          !coverUrl && "flex items-center justify-center"
+        )}
         style={!coverUrl ? { background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" } : undefined}
       >
         {coverUrl ? (
@@ -648,14 +651,14 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
         // Card sizes - original format
         "flex-shrink-0 w-[280px] sm:w-[300px] lg:w-[320px]",
         "bg-white rounded-xl overflow-hidden shadow-xl",
-        "text-left transition-all duration-200",
+        "text-left transition-all duration-200 flex flex-col",
         "hover:scale-[1.02] hover:shadow-2xl",
         "focus:outline-none focus:ring-2 focus:ring-saffron focus:ring-offset-2",
         isActive && "ring-2 ring-saffron"
       )}
     >
       {/* Large image/video thumbnail on top */}
-      <div className="relative h-[120px] bg-muted">
+      <div className="relative h-[120px] flex-shrink-0 bg-muted">
         {firstMedia ? (
           <>
             {/* Image or video thumbnail */}
@@ -674,7 +677,7 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
                 preload="metadata"
                 muted
                 playsInline
-                className="w-full h-full object-cover"
+                className="absolute inset-0 w-full h-full object-cover"
               />
             ) : null}
             
@@ -707,7 +710,7 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
         ) : (
           /* No media - show gradient with text icon */
           <div 
-            className="w-full h-full flex items-center justify-center"
+            className="absolute inset-0 flex items-center justify-center"
             style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
           >
             <span className="text-white text-3xl">📝</span>
@@ -743,12 +746,12 @@ function EmptyPostsCard({ milestoneName }: { milestoneName: string }) {
       className={cn(
         // Same width as other cards
         "flex-shrink-0 w-[280px] sm:w-[300px] lg:w-[320px]",
-        "bg-white rounded-xl overflow-hidden shadow-xl"
+        "bg-white rounded-xl overflow-hidden shadow-xl flex flex-col"
       )}
     >
       {/* Gradient header - same as milestone card */}
       <div 
-        className="relative h-[120px] flex items-center justify-center"
+        className="relative h-[120px] flex-shrink-0 flex items-center justify-center"
         style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
       >
         <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
