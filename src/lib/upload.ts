@@ -68,17 +68,20 @@ export function getFileType(file: File): "image" | "video" {
 
 /**
  * Upload a cover image for a milestone
- * Stores in: milestones/{milestoneId}/cover.{ext}
+ * Stores in: {userId}/milestones/{milestoneId}/cover.{ext}
+ * Note: Path must start with userId to satisfy Supabase Storage RLS policies
  */
 export async function uploadMilestoneCover(
   file: File,
-  milestoneId: string
+  milestoneId: string,
+  userId: string
 ): Promise<UploadResult> {
   const supabase = createClient();
   
   // Get file extension
   const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-  const path = `milestones/${milestoneId}/cover.${ext}`;
+  // Path must start with userId to satisfy storage RLS policies (same as post uploads)
+  const path = `${userId}/milestones/${milestoneId}/cover.${ext}`;
   
   // Delete existing cover if any (to allow replacement)
   await supabase.storage.from("media").remove([path]);

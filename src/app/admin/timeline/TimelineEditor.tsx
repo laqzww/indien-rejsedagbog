@@ -51,6 +51,14 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
     setError(null);
     const supabase = createClient();
 
+    // Get current user for storage path
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      const errorMsg = "Du skal være logget ind";
+      setError(errorMsg);
+      return errorMsg;
+    }
+
     // Set display_order to be after last milestone
     const maxOrder = milestones.length > 0 
       ? Math.max(...milestones.map(m => m.display_order)) 
@@ -76,7 +84,7 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
     // If cover image file is provided, upload it and update the milestone
     if (coverImageFile && newMilestone) {
       try {
-        const uploadResult = await uploadMilestoneCover(coverImageFile, newMilestone.id);
+        const uploadResult = await uploadMilestoneCover(coverImageFile, newMilestone.id, user.id);
         
         // Update milestone with cover image path
         const { error: updateError } = await supabase
@@ -110,6 +118,14 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
     setError(null);
     const supabase = createClient();
 
+    // Get current user for storage path
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      const errorMsg = "Du skal være logget ind";
+      setError(errorMsg);
+      return errorMsg;
+    }
+
     let finalCoverPath = data.cover_image_path;
 
     // If a new cover image is provided, upload it
@@ -120,7 +136,7 @@ export function TimelineEditor({ initialMilestones }: TimelineEditorProps) {
           await deleteMilestoneCover(currentEditingMilestone.cover_image_path).catch(() => {});
         }
         
-        const uploadResult = await uploadMilestoneCover(coverImageFile, currentEditingMilestone.id);
+        const uploadResult = await uploadMilestoneCover(coverImageFile, currentEditingMilestone.id, user.id);
         finalCoverPath = uploadResult.path;
       } catch (uploadError) {
         console.error("Failed to upload cover image:", uploadError);
