@@ -223,40 +223,6 @@ export function JourneyCarousel({
     }, 150);
   }, [postEmblaApi, postsKey]);
 
-  // Handle view mode changes - reset carousel position appropriately
-  useEffect(() => {
-    const prevMode = prevViewModeRef.current;
-    prevViewModeRef.current = viewMode;
-    
-    if (prevMode === viewMode) return;
-    
-    // When switching to posts view, scroll to first post
-    if (viewMode === "posts" && postEmblaApi) {
-      isProgrammaticScrollRef.current = true;
-      postEmblaApi.scrollTo(0, false);
-      setSelectedPostIndex(0);
-      setTimeout(() => {
-        isProgrammaticScrollRef.current = false;
-      }, 150);
-    }
-    
-    // When switching to milestones view, scroll to current milestone
-    if (viewMode === "milestones" && milestoneEmblaApi) {
-      isProgrammaticScrollRef.current = true;
-      milestoneEmblaApi.scrollTo(activeMilestoneIndex, false);
-      setSelectedMilestoneIndex(activeMilestoneIndex);
-      lastExternalMilestoneIndexRef.current = activeMilestoneIndex;
-      setTimeout(() => {
-        isProgrammaticScrollRef.current = false;
-      }, 150);
-    }
-    
-    // Update scroll buttons for new view
-    requestAnimationFrame(() => {
-      updateScrollState();
-    });
-  }, [viewMode, postEmblaApi, milestoneEmblaApi, activeMilestoneIndex]);
-
   // Handle milestone carousel scroll
   const onMilestoneSelect = useCallback(() => {
     if (!milestoneEmblaApi || isProgrammaticScrollRef.current) return;
@@ -291,6 +257,40 @@ export function JourneyCarousel({
     setCanScrollPrev(activeApi.canScrollPrev());
     setCanScrollNext(activeApi.canScrollNext());
   }, [activeApi]);
+
+  // Handle view mode changes - reset carousel position appropriately
+  useEffect(() => {
+    const prevMode = prevViewModeRef.current;
+    prevViewModeRef.current = viewMode;
+    
+    if (prevMode === viewMode) return;
+    
+    // When switching to posts view, scroll to first post
+    if (viewMode === "posts" && postEmblaApi) {
+      isProgrammaticScrollRef.current = true;
+      postEmblaApi.scrollTo(0, false);
+      setSelectedPostIndex(0);
+      setTimeout(() => {
+        isProgrammaticScrollRef.current = false;
+      }, 150);
+    }
+    
+    // When switching to milestones view, scroll to current milestone
+    if (viewMode === "milestones" && milestoneEmblaApi) {
+      isProgrammaticScrollRef.current = true;
+      milestoneEmblaApi.scrollTo(activeMilestoneIndex, false);
+      setSelectedMilestoneIndex(activeMilestoneIndex);
+      lastExternalMilestoneIndexRef.current = activeMilestoneIndex;
+      setTimeout(() => {
+        isProgrammaticScrollRef.current = false;
+      }, 150);
+    }
+    
+    // Update scroll buttons for new view
+    requestAnimationFrame(() => {
+      updateScrollState();
+    });
+  }, [viewMode, postEmblaApi, milestoneEmblaApi, activeMilestoneIndex, updateScrollState]);
 
   // Setup milestone carousel listeners
   useEffect(() => {
@@ -499,6 +499,9 @@ interface CompactMilestoneCardProps {
 }
 
 function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: CompactMilestoneCardProps) {
+  const [imageError, setImageError] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
+  
   const coverUrl = getMilestoneCoverUrl(milestone);
   const dateRange = formatDateRange(milestone.arrival_date, milestone.departure_date);
   const status = getMilestoneStatus(milestone);
@@ -509,6 +512,9 @@ function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: Compa
     : status === "current" 
     ? "bg-saffron animate-pulse" 
     : "bg-gray-400";
+  
+  // Show gradient fallback if no cover image or if image failed to load
+  const showGradientFallback = !coverUrl || imageError;
   
   return (
     <button
@@ -526,41 +532,12 @@ function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: Compa
       {/* Header area - cover image or gradient fallback */}
       <div 
         className={cn(
-          "relative h-[120px] flex-shrink-0",
-          !coverUrl && "flex items-center justify-center"
+          "relative h-[120px] flex-shrink-0 overflow-hidden",
+          showGradientFallback && "flex items-center justify-center"
         )}
-        style={!coverUrl ? { background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" } : undefined}
+        style={showGradientFallback ? { background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" } : undefined}
       >
-        {coverUrl ? (
-          <>
-            {/* Cover image */}
-            <Image
-              src={coverUrl}
-              alt={milestone.name}
-              fill
-              className="object-cover"
-              sizes="320px"
-            />
-            {/* Dark overlay for better text visibility */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
-            {/* Milestone number badge with status indicator */}
-            <div className="absolute top-3 left-3 flex items-center gap-2">
-              <div className={cn(
-                "w-10 h-10 rounded-full text-white flex items-center justify-center font-bold text-lg shadow-lg border-2 border-white",
-                statusBgColor
-              )}>
-                {milestone.display_order + 1}
-              </div>
-            </div>
-            {/* Location name overlay at bottom */}
-            <div className="absolute bottom-3 left-3 right-3">
-              <div className="flex items-center gap-1.5 text-white/90 text-sm">
-                <MapPinIcon className="h-4 w-4 flex-shrink-0" />
-                <span className="truncate font-medium drop-shadow-lg">{milestone.name}</span>
-              </div>
-            </div>
-          </>
-        ) : (
+        {showGradientFallback ? (
           /* Fallback: Large milestone number on gradient with status */
           <div className={cn(
             "w-20 h-20 rounded-full flex items-center justify-center border-4 border-white/40",
@@ -572,17 +549,59 @@ function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: Compa
           )}>
             <span className="text-white font-bold text-4xl drop-shadow-lg">{milestone.display_order + 1}</span>
           </div>
-        )}
+        ) : coverUrl ? (
+          <>
+            {/* Loading skeleton */}
+            {imageLoading && (
+              <div className="absolute inset-0 bg-gray-200 animate-pulse" />
+            )}
+            
+            {/* Cover image */}
+            <Image
+              src={coverUrl}
+              alt={milestone.name}
+              fill
+              className={cn(
+                "object-cover transition-opacity duration-300",
+                imageLoading ? "opacity-0" : "opacity-100"
+              )}
+              sizes="320px"
+              onLoad={() => setImageLoading(false)}
+              onError={() => {
+                setImageError(true);
+                setImageLoading(false);
+              }}
+            />
+            {/* Dark overlay for better text visibility */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+            {/* Milestone number badge with status indicator */}
+            <div className="absolute top-3 left-3 flex items-center gap-2 z-10">
+              <div className={cn(
+                "w-10 h-10 rounded-full text-white flex items-center justify-center font-bold text-lg shadow-lg border-2 border-white",
+                statusBgColor
+              )}>
+                {milestone.display_order + 1}
+              </div>
+            </div>
+            {/* Location name overlay at bottom */}
+            <div className="absolute bottom-3 left-3 right-3 z-10">
+              <div className="flex items-center gap-1.5 text-white/90 text-sm">
+                <MapPinIcon className="h-4 w-4 flex-shrink-0" />
+                <span className="truncate font-medium drop-shadow-lg">{milestone.name}</span>
+              </div>
+            </div>
+          </>
+        ) : null}
       </div>
       
       {/* Content below - same structure as post card */}
       <div className="p-3">
-        {!coverUrl && (
+        {showGradientFallback && (
           <h3 className="text-base font-semibold text-gray-900 truncate mb-1">
             {milestone.name}
           </h3>
         )}
-        {coverUrl && milestone.description && (
+        {!showGradientFallback && milestone.description && (
           <p className="text-sm text-gray-600 line-clamp-2 mb-2">
             {milestone.description}
           </p>
@@ -616,6 +635,9 @@ interface CompactPostCardProps {
 }
 
 function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
+  const [imageError, setImageError] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
+  
   const sortedMedia = [...post.media].sort(
     (a, b) => a.display_order - b.display_order
   );
@@ -649,6 +671,9 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
     ? post.body.slice(0, 80) + "..." 
     : post.body;
 
+  // Show gradient fallback if no media, image error, or video without thumbnail
+  const showGradientFallback = !firstMedia || (imageError && !isVideo);
+
   return (
     <button
       onClick={onClick}
@@ -663,33 +688,50 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
       )}
     >
       {/* Large image/video thumbnail on top */}
-      <div className="relative h-[120px] flex-shrink-0 bg-muted">
-        {firstMedia ? (
+      <div className="relative h-[120px] flex-shrink-0 bg-muted overflow-hidden">
+        {showGradientFallback ? (
+          /* No media or error - show gradient with text icon */
+          <div 
+            className="absolute inset-0 flex items-center justify-center"
+            style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
+          >
+            <span className="text-white text-3xl">📝</span>
+          </div>
+        ) : firstMedia ? (
           <>
+            {/* Loading skeleton - shown while image is loading */}
+            {imageLoading && thumbnailUrl && (
+              <div className="absolute inset-0 bg-gray-200 animate-pulse" />
+            )}
+            
             {/* Image or video thumbnail */}
-            {thumbnailUrl ? (
+            {thumbnailUrl && !imageError ? (
               <Image
                 src={thumbnailUrl}
                 alt=""
                 fill
-                className="object-cover"
+                className={cn(
+                  "object-cover transition-opacity duration-300",
+                  imageLoading ? "opacity-0" : "opacity-100"
+                )}
                 sizes="320px"
+                onLoad={() => setImageLoading(false)}
+                onError={() => {
+                  setImageError(true);
+                  setImageLoading(false);
+                }}
               />
             ) : isVideo ? (
-              /* Fallback for videos without thumbnail: use video first frame */
+              /* Fallback for videos without thumbnail or failed load: use video first frame */
               <video
                 src={`${getMediaUrl(firstMedia.storage_path)}#t=0.001`}
                 preload="metadata"
                 muted
                 playsInline
                 className="absolute inset-0 w-full h-full object-cover"
+                onLoadedData={() => setImageLoading(false)}
               />
             ) : null}
-            
-            {/* Day badge - top left corner */}
-            <div className="absolute top-2 left-2 px-2 py-0.5 bg-black/50 backdrop-blur-sm rounded-full text-white text-xs font-medium">
-              Dag {dayNumber}
-            </div>
             
             {/* Video play overlay */}
             {isVideo && (
@@ -717,19 +759,12 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
               </div>
             )}
           </>
-        ) : (
-          /* No media - show gradient with text icon */
-          <div 
-            className="absolute inset-0 flex items-center justify-center"
-            style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
-          >
-            {/* Day badge - top left corner (no media version) */}
-            <div className="absolute top-2 left-2 px-2 py-0.5 bg-black/50 backdrop-blur-sm rounded-full text-white text-xs font-medium">
-              Dag {dayNumber}
-            </div>
-            <span className="text-white text-3xl">📝</span>
-          </div>
-        )}
+        ) : null}
+        
+        {/* Day badge - always visible on top */}
+        <div className="absolute top-2 left-2 px-2 py-0.5 bg-black/50 backdrop-blur-sm rounded-full text-white text-xs font-medium z-10">
+          Dag {dayNumber}
+        </div>
       </div>
 
       {/* Content below image */}
