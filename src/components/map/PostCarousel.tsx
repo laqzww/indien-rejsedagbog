@@ -620,11 +620,15 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
   const imageCount = sortedMedia.filter((m) => m.type === "image").length;
   const videoCount = sortedMedia.filter((m) => m.type === "video").length;
 
+  const isVideo = firstMedia?.type === "video";
+
   const getThumbnailUrl = () => {
     if (!firstMedia) return null;
-    if (firstMedia.type === "video" && firstMedia.thumbnail_path) {
+    // For videos, use thumbnail_path if available
+    if (isVideo && firstMedia.thumbnail_path) {
       return getMediaUrl(firstMedia.thumbnail_path);
     }
+    // For images, use the storage_path directly
     if (firstMedia.type === "image") {
       return getMediaUrl(firstMedia.storage_path);
     }
@@ -632,7 +636,6 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
   };
 
   const thumbnailUrl = getThumbnailUrl();
-  const isVideo = firstMedia?.type === "video";
 
   const truncatedBody = post.body.length > 80 
     ? post.body.slice(0, 80) + "..." 
@@ -653,15 +656,28 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
     >
       {/* Large image/video thumbnail on top */}
       <div className="relative h-[120px] bg-muted">
-        {thumbnailUrl ? (
+        {firstMedia ? (
           <>
-            <Image
-              src={thumbnailUrl}
-              alt=""
-              fill
-              className="object-cover"
-              sizes="320px"
-            />
+            {/* Image or video thumbnail */}
+            {thumbnailUrl ? (
+              <Image
+                src={thumbnailUrl}
+                alt=""
+                fill
+                className="object-cover"
+                sizes="320px"
+              />
+            ) : isVideo ? (
+              /* Fallback for videos without thumbnail: use video first frame */
+              <video
+                src={`${getMediaUrl(firstMedia.storage_path)}#t=0.001`}
+                preload="metadata"
+                muted
+                playsInline
+                className="w-full h-full object-cover"
+              />
+            ) : null}
+            
             {/* Video play overlay */}
             {isVideo && (
               <div className="absolute inset-0 flex items-center justify-center">
@@ -689,6 +705,7 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
             )}
           </>
         ) : (
+          /* No media - show gradient with text icon */
           <div 
             className="w-full h-full flex items-center justify-center"
             style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
