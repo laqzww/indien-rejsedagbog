@@ -53,6 +53,45 @@ export function getMediaUrl(path: string): string {
   return `${supabaseUrl}/storage/v1/object/public/media/${path}`;
 }
 
+/**
+ * Get the carousel thumbnail URL for an image.
+ * Carousel thumbnails are stored with a _carousel suffix before the extension.
+ * Example: "user/post/image.jpg" → "user/post/image_carousel.jpg"
+ * 
+ * @param storagePath - The original storage path of the image
+ * @returns URL for the carousel thumbnail
+ */
+export function getCarouselThumbnailUrl(storagePath: string): string {
+  // Insert _carousel before the file extension
+  const lastDotIndex = storagePath.lastIndexOf(".");
+  if (lastDotIndex === -1) {
+    // No extension found, just append _carousel
+    return getMediaUrl(`${storagePath}_carousel`);
+  }
+  
+  const pathWithoutExt = storagePath.slice(0, lastDotIndex);
+  const ext = storagePath.slice(lastDotIndex);
+  return getMediaUrl(`${pathWithoutExt}_carousel${ext}`);
+}
+
+/**
+ * Get the carousel thumbnail storage path from the original image path.
+ * Used during upload to determine the path for the carousel thumbnail.
+ * 
+ * @param originalPath - The original storage path
+ * @returns Storage path for the carousel thumbnail
+ */
+export function getCarouselThumbnailPath(originalPath: string): string {
+  const lastDotIndex = originalPath.lastIndexOf(".");
+  if (lastDotIndex === -1) {
+    return `${originalPath}_carousel`;
+  }
+  
+  const pathWithoutExt = originalPath.slice(0, lastDotIndex);
+  const ext = originalPath.slice(lastDotIndex);
+  return `${pathWithoutExt}_carousel${ext}`;
+}
+
 export function generateFilename(originalName: string, index: number): string {
   const ext = originalName.split(".").pop()?.toLowerCase() || "jpg";
   const timestamp = Date.now();

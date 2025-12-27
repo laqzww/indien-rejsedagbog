@@ -5,7 +5,7 @@ import Image from "next/image";
 import useEmblaCarousel from "embla-carousel-react";
 import { MapPin, ImageIcon, Film, Play, ChevronLeft, ChevronRight, X, MapPinIcon, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getMediaUrl } from "@/lib/upload";
+import { getMediaUrl, getCarouselThumbnailUrl } from "@/lib/upload";
 import { getDayNumber } from "@/lib/journey";
 import type { Milestone } from "@/types/database";
 
@@ -637,6 +637,7 @@ interface CompactPostCardProps {
 function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
+  const [usingFallback, setUsingFallback] = useState(false);
   
   const sortedMedia = [...post.media].sort(
     (a, b) => a.display_order - b.display_order
@@ -652,27 +653,54 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
   const postDate = post.captured_at || post.created_at;
   const dayNumber = getDayNumber(postDate);
 
-  const getThumbnailUrl = () => {
+  // Get the carousel thumbnail URL (optimized small version)
+  const getCarouselThumbUrl = () => {
     if (!firstMedia) return null;
+    
     // For videos, use thumbnail_path if available
     if (isVideo && firstMedia.thumbnail_path) {
       return getMediaUrl(firstMedia.thumbnail_path);
     }
-    // For images, use the storage_path directly
+    
+    // For images, try to use the optimized carousel thumbnail first
     if (firstMedia.type === "image") {
-      return getMediaUrl(firstMedia.storage_path);
+      return getCarouselThumbnailUrl(firstMedia.storage_path);
     }
+    
     return null;
   };
+  
+  // Get fallback URL (full image) for when carousel thumbnail fails
+  const getFallbackUrl = () => {
+    if (!firstMedia || firstMedia.type !== "image") return null;
+    return getMediaUrl(firstMedia.storage_path);
+  };
 
-  const thumbnailUrl = getThumbnailUrl();
+  const carouselThumbUrl = getCarouselThumbUrl();
+  const fallbackUrl = getFallbackUrl();
+  
+  // Use fallback URL if carousel thumbnail failed, otherwise use carousel thumbnail
+  const thumbnailUrl = usingFallback ? fallbackUrl : carouselThumbUrl;
 
   const truncatedBody = post.body.length > 80 
     ? post.body.slice(0, 80) + "..." 
     : post.body;
 
-  // Show gradient fallback if no media, image error, or video without thumbnail
+  // Show gradient fallback if no media, or if both carousel thumb AND fallback failed
   const showGradientFallback = !firstMedia || (imageError && !isVideo);
+  
+  // Handle image load error - try fallback before showing gradient
+  const handleImageError = () => {
+    if (!usingFallback && fallbackUrl) {
+      // First error: try loading full image as fallback
+      setUsingFallback(true);
+      setImageLoading(true);
+    } else {
+      // Fallback also failed, show gradient
+      setImageError(true);
+      setImageLoading(false);
+    }
+  };
 
   return (
     <button
@@ -716,10 +744,7 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
                 )}
                 sizes="320px"
                 onLoad={() => setImageLoading(false)}
-                onError={() => {
-                  setImageError(true);
-                  setImageLoading(false);
-                }}
+                onError={handleImageError}
               />
             ) : isVideo ? (
               /* Fallback for videos without thumbnail or failed load: use video first frame */

@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { Camera, X, Loader2, MapPinOff, Film } from "lucide-react";
 import { isHeicFile, convertHeicToJpeg } from "@/lib/heic";
 import { extractExifData, type ExifData } from "@/lib/exif";
-import { compressImage, shouldCompress, formatFileSize } from "@/lib/image-compression";
+import { compressImage, shouldCompress, formatFileSize, generateCarouselThumbnail } from "@/lib/image-compression";
 import { generateVideoThumbnail } from "@/lib/video-thumbnail";
 import { MediaSortable, type SortableMediaItem } from "./MediaSortable";
 import { MAX_FILE_SIZE_MB, MAX_FILE_SIZE_BYTES, formatBytes } from "@/lib/resumable-upload";
@@ -28,6 +28,10 @@ export interface MediaFile {
   thumbnailBlob?: Blob; // JPEG thumbnail for video first frame
   thumbnailWidth?: number;
   thumbnailHeight?: number;
+  // Carousel thumbnail - small optimized version for journey carousel cards
+  carouselThumbnailBlob?: Blob;
+  carouselThumbnailWidth?: number;
+  carouselThumbnailHeight?: number;
 }
 
 interface MediaUploadProps {
@@ -133,6 +137,23 @@ export function MediaUpload({
             // Small file, no compression needed
             mediaFile.uploadBlob = file;
             mediaFile.preview = URL.createObjectURL(file);
+          }
+          
+          // STEP 4: Generate carousel thumbnail (small version for journey carousel cards)
+          // This runs in parallel with main compression for better performance
+          try {
+            const sourceBlob = mediaFile.uploadBlob || blobToCompress;
+            const carouselThumb = await generateCarouselThumbnail(sourceBlob);
+            mediaFile.carouselThumbnailBlob = carouselThumb.blob;
+            mediaFile.carouselThumbnailWidth = carouselThumb.width;
+            mediaFile.carouselThumbnailHeight = carouselThumb.height;
+            
+            console.log(
+              `Carousel thumbnail for ${file.name}: ${carouselThumb.width}x${carouselThumb.height} (${formatFileSize(carouselThumb.blob.size)})`
+            );
+          } catch (thumbError) {
+            console.warn("Carousel thumbnail generation failed:", thumbError);
+            // Continue without carousel thumbnail - will fall back to full image
           }
         } catch (error) {
           console.error("Compression failed:", error);
