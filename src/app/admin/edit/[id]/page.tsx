@@ -342,35 +342,31 @@ export default function EditPostPage() {
         message: "Opdaterer opslag...",
       });
 
-      // Calculate new date values if date was changed
-      // If user changed the date, use selected date with original time-of-day
-      // We update captured_at (which is used for display) and keep created_at as-is
+      // Always update captured_at with the selected date
+      // This is the field used for display, so we always want it to reflect the user's choice
       // Use refs to avoid stale closure issues (similar to existingMediaRef pattern)
-      let newCapturedAt: string | undefined;
       const currentPostDate = postDateRef.current;
       const currentOriginalPostDate = originalPostDateRef.current;
       
-      // Calculate isCustomDate using ref values to ensure we have the latest
-      const dateWasChanged = (() => {
-        if (!currentOriginalPostDate) return false;
-        const original = new Date(currentOriginalPostDate);
-        original.setHours(0, 0, 0, 0);
-        const selected = new Date(currentPostDate);
-        selected.setHours(0, 0, 0, 0);
-        return original.getTime() !== selected.getTime();
-      })();
-      
-      if (dateWasChanged && currentOriginalPostDate) {
-        const originalTime = currentOriginalPostDate;
+      // Build the new captured_at value:
+      // Use the selected date with the original time-of-day (if available)
+      // This preserves the time component while allowing the date to be changed
+      const newCapturedAt = (() => {
         const newDate = new Date(currentPostDate);
-        newDate.setHours(
-          originalTime.getHours(),
-          originalTime.getMinutes(),
-          originalTime.getSeconds(),
-          originalTime.getMilliseconds()
-        );
-        newCapturedAt = newDate.toISOString();
-      }
+        // If we have an original date, preserve its time component
+        if (currentOriginalPostDate) {
+          newDate.setHours(
+            currentOriginalPostDate.getHours(),
+            currentOriginalPostDate.getMinutes(),
+            currentOriginalPostDate.getSeconds(),
+            currentOriginalPostDate.getMilliseconds()
+          );
+        } else {
+          // If no original date, set to noon to avoid timezone edge cases
+          newDate.setHours(12, 0, 0, 0);
+        }
+        return newDate.toISOString();
+      })();
 
       const { error: updateError } = await supabase
         .from("posts")
@@ -381,8 +377,8 @@ export default function EditPostPage() {
           lng: location?.lng || null,
           location_name: location?.name || null,
           updated_at: new Date().toISOString(),
-          // Update captured_at if date was changed (this is the field used for display)
-          ...(newCapturedAt && { captured_at: newCapturedAt }),
+          // Always set captured_at to ensure the date is saved correctly
+          captured_at: newCapturedAt,
         })
         .eq("id", postId)
         .eq("author_id", user.id); // Extra safety check
