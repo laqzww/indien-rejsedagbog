@@ -36,9 +36,12 @@ function formatDateDanish(date: Date): string {
   });
 }
 
-// Helper to get date string for input (YYYY-MM-DD)
+// Helper to get date string for input (YYYY-MM-DD) using local timezone
 function toDateInputValue(date: Date): string {
-  return date.toISOString().split("T")[0];
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 export default function NewPostPage() {
