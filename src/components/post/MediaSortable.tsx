@@ -64,7 +64,7 @@ function SortableItem({ item, index, isOverlay = false, disabled = false }: Sort
       ref={setNodeRef}
       style={style}
       className={cn(
-        "relative aspect-square rounded-lg overflow-hidden bg-muted group touch-none",
+        "relative aspect-square rounded-lg overflow-hidden bg-muted group",
         isDragging && "opacity-50 z-50",
         isOverlay && "shadow-2xl ring-2 ring-saffron scale-105",
         isCover && !isDragging && "ring-2 ring-saffron ring-offset-2",
