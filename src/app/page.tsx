@@ -63,6 +63,7 @@ export default async function HomePage({ searchParams }: PageProps) {
   const groupedPosts = groupPostsByMilestoneAndDay(posts, milestones || []);
 
   // Fetch posts with location for map (including media details for thumbnail markers)
+  // Order by captured_at (ascending) so earliest posts appear on the left in the carousel
   const { data: mapPostsRaw } = await supabase
     .from("posts")
     .select(`
@@ -76,7 +77,8 @@ export default async function HomePage({ searchParams }: PageProps) {
       media (id, type, storage_path, thumbnail_path, display_order)
     `)
     .not("lat", "is", null)
-    .order("created_at", { ascending: false });
+    .order("captured_at", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: true });
 
   const mapPosts = mapPostsRaw ? JSON.parse(JSON.stringify(mapPostsRaw)) : [];
 
