@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { generateFilename, getFileType, deleteMedia, getMediaUrl } from "@/lib/upload";
+import { generateFilename, getFileType, deleteMedia, getMediaUrl, getCarouselThumbnailPath } from "@/lib/upload";
 import { uploadFilesInParallel, calculateOverallProgress, type UploadProgress, type UploadItem, type ParallelUploadResult } from "@/lib/parallel-upload";
 import { MediaUpload, type MediaFile } from "@/components/post/MediaUpload";
 import { MediaSortable, type SortableMediaItem } from "@/components/post/MediaSortable";
@@ -477,9 +477,10 @@ export default function EditPostPage() {
         });
 
         // Prepare upload items - use uploadBlob (compressed) when available
-        // Also include thumbnail uploads for videos
+        // Also include thumbnail uploads for videos and carousel thumbnails for images
         const uploadItems: UploadItem[] = [];
         const thumbnailMap = new Map<string, string>(); // mediaFile.id -> thumbnail upload id
+        const carouselThumbMap = new Map<string, string>(); // mediaFile.id -> carousel thumbnail upload id
         
         newFiles.forEach((mediaFile, i) => {
           const filename = generateFilename(mediaFile.file.name, startOrder + i);
@@ -516,6 +517,21 @@ export default function EditPostPage() {
             });
             
             thumbnailMap.set(mediaFile.id, thumbId);
+          }
+          
+          // Add carousel thumbnail upload for images (small optimized version)
+          if (type === "image" && mediaFile.carouselThumbnailBlob) {
+            const carouselThumbId = `${mediaFile.id}-carousel`;
+            const carouselThumbPath = getCarouselThumbnailPath(path);
+            
+            uploadItems.push({
+              id: carouselThumbId,
+              file: mediaFile.carouselThumbnailBlob,
+              path: carouselThumbPath,
+              isVideo: false,
+            });
+            
+            carouselThumbMap.set(mediaFile.id, carouselThumbId);
           }
         });
 
