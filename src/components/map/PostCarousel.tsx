@@ -6,6 +6,7 @@ import useEmblaCarousel from "embla-carousel-react";
 import { MapPin, ImageIcon, Film, Play, ChevronLeft, ChevronRight, X, MapPinIcon, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getMediaUrl } from "@/lib/upload";
+import { getDayNumber } from "@/lib/journey";
 import type { Milestone } from "@/types/database";
 
 // Helper to get cover image URL for milestone
@@ -624,6 +625,10 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
   const videoCount = sortedMedia.filter((m) => m.type === "video").length;
 
   const isVideo = firstMedia?.type === "video";
+  
+  // Calculate day number from post date
+  const postDate = post.captured_at || post.created_at;
+  const dayNumber = getDayNumber(postDate);
 
   const getThumbnailUrl = () => {
     if (!firstMedia) return null;
@@ -681,6 +686,11 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
               />
             ) : null}
             
+            {/* Day badge - top left corner */}
+            <div className="absolute top-2 left-2 px-2 py-0.5 bg-black/50 backdrop-blur-sm rounded-full text-white text-xs font-medium">
+              Dag {dayNumber}
+            </div>
+            
             {/* Video play overlay */}
             {isVideo && (
               <div className="absolute inset-0 flex items-center justify-center">
@@ -713,6 +723,10 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
             className="absolute inset-0 flex items-center justify-center"
             style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
           >
+            {/* Day badge - top left corner (no media version) */}
+            <div className="absolute top-2 left-2 px-2 py-0.5 bg-black/50 backdrop-blur-sm rounded-full text-white text-xs font-medium">
+              Dag {dayNumber}
+            </div>
             <span className="text-white text-3xl">📝</span>
           </div>
         )}

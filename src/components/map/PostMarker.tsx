@@ -1,7 +1,6 @@
 "use client";
 
 import { getMediaUrl } from "@/lib/upload";
-import { getDayNumber } from "@/lib/journey";
 
 // Post type for map markers
 export interface MapPost {
@@ -29,23 +28,15 @@ const PIN_COLOR_DARK = "#6B1030";
  * Creates the HTML content for a traditional pin marker
  * Uses a teardrop/pin shape with deep red color
  * The pin is designed with the anchor point at the bottom tip
- * Includes a subtle day number badge in the top-left corner
  */
-export function createPostMarkerHTML(post: MapPost, isMobile: boolean): string {
+export function createPostMarkerHTML(_post: MapPost, isMobile: boolean): string {
   // Sizes based on device - pin dimensions
   const pinWidth = isMobile ? 28 : 24;
   const pinHeight = isMobile ? 38 : 32;
   const dotSize = isMobile ? 10 : 8;
-  
-  // Calculate day number from post date
-  const postDate = post.captured_at || post.created_at;
-  const dayNumber = getDayNumber(postDate);
-  
-  // Day badge sizing - small and subtle
-  const badgeSize = isMobile ? 16 : 14;
-  const fontSize = isMobile ? 9 : 8;
 
-  // Pin with subtle day badge positioned in top-left
+  // Simple clean pin with just a white dot in center
+  // All other indicators are shown in the carousel
   return `
     <div class="post-marker-pin" style="
       position: relative;
@@ -53,26 +44,6 @@ export function createPostMarkerHTML(post: MapPost, isMobile: boolean): string {
       height: ${pinHeight}px;
       cursor: pointer;
     ">
-      <!-- Day badge - positioned top-left, slightly outside the pin -->
-      <div class="post-marker-day-badge" style="
-        position: absolute;
-        top: -4px;
-        left: -6px;
-        width: ${badgeSize}px;
-        height: ${badgeSize}px;
-        background: rgba(0, 0, 128, 0.9);
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: ${fontSize}px;
-        font-weight: 600;
-        color: white;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.3);
-        border: 1px solid rgba(255,255,255,0.5);
-        z-index: 1;
-        pointer-events: none;
-      ">${dayNumber}</div>
       <svg 
         width="${pinWidth}" 
         height="${pinHeight}" 
