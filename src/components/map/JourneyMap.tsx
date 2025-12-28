@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import mapboxgl from "mapbox-gl";
 import type { Milestone } from "@/types/database";
 import { findMilestoneForDate } from "@/lib/journey";
+import { declutterMilestoneMarkers } from "@/lib/map-declutter";
 import {
   createPostMarkerHTML,
   injectPostMarkerStyles,
@@ -94,6 +95,10 @@ export function JourneyMap({
   const map = useRef<mapboxgl.Map | null>(null);
   const milestoneMarkersRef = useRef<mapboxgl.Marker[]>([]);
   const postMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  // Track milestone IDs and original coordinates for decluttering
+  const milestoneIdsRef = useRef<string[]>([]);
+  const milestoneOriginalLngLatsRef = useRef<[number, number][]>([]);
+  const declutterCleanupRef = useRef<(() => void) | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
   // Track which milestone is currently active and whether we're zoomed in or out
@@ -102,8 +107,15 @@ export function JourneyMap({
 
   // Cleanup function to remove all markers
   const cleanupMarkers = useCallback(() => {
+    // Clean up declutter state
+    if (declutterCleanupRef.current) {
+      declutterCleanupRef.current();
+      declutterCleanupRef.current = null;
+    }
     milestoneMarkersRef.current.forEach((marker) => marker.remove());
     milestoneMarkersRef.current = [];
+    milestoneIdsRef.current = [];
+    milestoneOriginalLngLatsRef.current = [];
     postMarkersRef.current.forEach((marker) => marker.remove());
     postMarkersRef.current = [];
   }, []);
@@ -115,6 +127,40 @@ export function JourneyMap({
       const el = marker.getElement();
       el.style.display = shouldShow ? "block" : "none";
     });
+  }, []);
+
+  // Run decluttering on milestone markers to prevent overlap
+  const updateMilestoneDecluttering = useCallback(() => {
+    const mapInstance = map.current;
+    if (!mapInstance) return;
+    
+    const markers = milestoneMarkersRef.current;
+    const milestoneIds = milestoneIdsRef.current;
+    const originalLngLats = milestoneOriginalLngLatsRef.current;
+    
+    // Ensure we have matching data
+    if (markers.length === 0 || markers.length !== milestoneIds.length || markers.length !== originalLngLats.length) {
+      return;
+    }
+    
+    // Clean up previous declutter state
+    if (declutterCleanupRef.current) {
+      declutterCleanupRef.current();
+    }
+    
+    // Run decluttering and store cleanup function
+    declutterCleanupRef.current = declutterMilestoneMarkers(
+      mapInstance,
+      markers,
+      milestoneIds,
+      originalLngLats,
+      {
+        minDistance: 45, // Minimum 45px between marker centers
+        maxOffset: 50,   // Max 50px offset from original position
+        iterations: 20,  // More iterations for better settling
+        forceStrength: 0.4,
+      }
+    );
   }, []);
 
   // Zoom to stage extent when a milestone is clicked (with toggle behavior)
@@ -608,12 +654,18 @@ export function JourneyMap({
       (a, b) => a.display_order - b.display_order
     );
     
+    // Reset tracking arrays for decluttering
+    milestoneIdsRef.current = [];
+    milestoneOriginalLngLatsRef.current = [];
+    
     sortedMilestones.forEach((milestone) => {
       // Milestone number is display_order + 1 (display_order is 0-indexed in DB)
       const milestoneNumber = milestone.display_order + 1;
       const el = document.createElement("div");
       el.className = "milestone-marker";
       el.style.cursor = "pointer";
+      // Add transition for smooth declutter animation
+      el.style.transition = "transform 0.3s ease-out";
       el.innerHTML = `
         <div class="${markerSize} rounded-full bg-saffron text-white flex items-center justify-center font-bold shadow-lg border-2 border-white cursor-pointer hover:scale-110 transition-transform" style="background-color: #FF9933;">
           ${milestoneNumber}
@@ -638,6 +690,9 @@ export function JourneyMap({
         .addTo(mapInstance);
 
       milestoneMarkersRef.current.push(marker);
+      // Track ID and original coordinates for decluttering
+      milestoneIdsRef.current.push(milestone.id);
+      milestoneOriginalLngLatsRef.current.push([milestone.lng, milestone.lat]);
 
       el.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -649,12 +704,25 @@ export function JourneyMap({
       });
     });
 
-    // Add zoom listener to toggle post visibility
+    // Add zoom listener to toggle post visibility and update decluttering
     const handleZoom = () => {
       const zoom = mapInstance.getZoom();
       updatePostVisibility(zoom);
     };
     mapInstance.on("zoom", handleZoom);
+    
+    // Add zoomend/moveend listener for decluttering (update after zoom/pan settles)
+    const handleMoveEnd = () => {
+      updateMilestoneDecluttering();
+    };
+    mapInstance.on("zoomend", handleMoveEnd);
+    mapInstance.on("moveend", handleMoveEnd);
+    
+    // Initial decluttering after markers are added
+    // Use requestAnimationFrame to ensure markers are rendered
+    requestAnimationFrame(() => {
+      updateMilestoneDecluttering();
+    });
 
     // Handle POI focus or fit bounds
     if (hasFocusPoint) {
@@ -691,11 +759,13 @@ export function JourneyMap({
       });
     }
 
-    // Cleanup zoom listener on unmount
+    // Cleanup event listeners on unmount
     return () => {
       mapInstance.off("zoom", handleZoom);
+      mapInstance.off("zoomend", handleMoveEnd);
+      mapInstance.off("moveend", handleMoveEnd);
     };
-  }, [isLoaded, milestones, posts, onMilestoneClick, onPostClick, cleanupMarkers, updatePostVisibility, zoomToMilestoneStage, focusLat, focusLng, focusZoom, extentBottomOffset]);
+  }, [isLoaded, milestones, posts, onMilestoneClick, onPostClick, cleanupMarkers, updatePostVisibility, updateMilestoneDecluttering, zoomToMilestoneStage, focusLat, focusLng, focusZoom, extentBottomOffset]);
 
   // Fly to active milestone when carousel is first opened (e.g., "Se rejserute" button)
   // This handles the case where activeMilestone is set from HomeClient when opening the carousel
