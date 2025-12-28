@@ -147,7 +147,6 @@ interface MilestoneSectionProps {
 
 function MilestoneSection({ group, index, forceExpanded }: MilestoneSectionProps) {
   const [isExpanded, setIsExpanded] = useState(true); // All milestones expanded by default
-  const { showHeaders } = useContext(ScrollContext);
 
   // Expand when forceExpanded becomes true
   useEffect(() => {
@@ -156,56 +155,44 @@ function MilestoneSection({ group, index, forceExpanded }: MilestoneSectionProps
     }
   }, [forceExpanded]);
 
-  const totalPosts = group.days.reduce((sum, day) => sum + day.posts.length, 0);
-
   return (
     <section className="border-b border-border last:border-b-0">
-      {/* Milestone header - sticky, solid background, auto-hide when not scrolling (but visible at top) */}
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className={cn(
-          "w-full sticky top-0 z-20",
-          "bg-gradient-to-r from-[#fff5eb] to-[#f0f9ee]", // Solid pastel gradient (saffron-tinted to green-tinted)
-          "flex items-center justify-between px-4 py-3",
-          "hover:from-[#ffead6] hover:to-[#e5f5e1] transition-all duration-300",
-          "border-b border-border",
-          // Auto-hide when not scrolling (but always visible at top)
-          showHeaders 
-            ? "opacity-100 translate-y-0" 
-            : "opacity-0 -translate-y-full pointer-events-none"
-        )}
-      >
-        <div className="flex items-center gap-3">
-          {/* Milestone number badge */}
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-saffron to-saffron-dark text-white flex items-center justify-center text-sm font-bold shadow-sm">
-            {group.milestoneNumber}
-          </div>
-          <div className="text-left">
-            <h2 className="font-bold text-foreground text-base leading-tight">
-              {group.milestoneName}
-            </h2>
-            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-              <Calendar className="h-3 w-3" />
-              {group.days.length} {group.days.length === 1 ? "dag" : "dage"} · {totalPosts} {totalPosts === 1 ? "opslag" : "opslag"}
-            </p>
-          </div>
-        </div>
-
-        <div className={cn(
-          "transition-transform duration-200",
-          isExpanded ? "rotate-180" : ""
-        )}>
-          <ChevronDown className="h-5 w-5 text-muted-foreground" />
-        </div>
-      </button>
-
-      {/* Days and posts */}
+      {/* Days and posts - each day has combined milestone+day header */}
       {isExpanded && (
-        <div className="animate-fade-in">
+        <div>
           {group.days.map((day) => (
-            <DaySection key={day.dayNumber} day={day} />
+            <DaySection 
+              key={day.dayNumber} 
+              day={day} 
+              milestoneNumber={group.milestoneNumber}
+              milestoneName={group.milestoneName}
+              onToggleExpanded={() => setIsExpanded(!isExpanded)}
+            />
           ))}
         </div>
+      )}
+      
+      {/* Collapsed state - show compact milestone header */}
+      {!isExpanded && (
+        <button
+          onClick={() => setIsExpanded(true)}
+          className={cn(
+            "w-full flex items-center justify-between px-3 py-1.5",
+            "bg-gradient-to-r from-[#fff5eb] to-[#f0f9ee]",
+            "hover:from-[#ffead6] hover:to-[#e5f5e1] transition-all"
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-saffron to-saffron-dark text-white flex items-center justify-center text-xs font-bold">
+              {group.milestoneNumber}
+            </div>
+            <span className="text-sm font-medium text-foreground">{group.milestoneName}</span>
+            <span className="text-xs text-muted-foreground">
+              ({group.days.reduce((sum, day) => sum + day.posts.length, 0)} opslag)
+            </span>
+          </div>
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+        </button>
       )}
     </section>
   );
@@ -213,31 +200,45 @@ function MilestoneSection({ group, index, forceExpanded }: MilestoneSectionProps
 
 interface DaySectionProps {
   day: DayGroup;
+  milestoneNumber: string;
+  milestoneName: string;
+  onToggleExpanded: () => void;
 }
 
-function DaySection({ day }: DaySectionProps) {
+function DaySection({ day, milestoneNumber, milestoneName, onToggleExpanded }: DaySectionProps) {
   const { showHeaders } = useContext(ScrollContext);
   
   return (
     <div>
-      {/* Day header - solid background, auto-hide when not scrolling (but visible at top) */}
+      {/* Combined milestone + day header - compact single bar */}
       <div 
         className={cn(
-          "sticky top-[57px] z-10 bg-white px-4 py-2 border-b border-border/50",
+          "sticky top-0 z-10 bg-gradient-to-r from-[#fff5eb] to-[#f0f9ee] border-b border-border/50",
           "transition-all duration-300",
-          // Auto-hide when not scrolling (but always visible at top)
           showHeaders 
             ? "opacity-100 translate-y-0" 
             : "opacity-0 -translate-y-full pointer-events-none"
         )}
       >
-        <div className="flex items-center gap-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-saffron" />
-          <h3 className="text-sm font-semibold text-foreground">
-            {day.label}
-          </h3>
-          <span className="text-xs text-muted-foreground">
-            ({day.posts.length} {day.posts.length === 1 ? "opslag" : "opslag"})
+        <div className="flex items-center justify-between px-3 py-1.5">
+          <div className="flex items-center gap-2 min-w-0">
+            {/* Compact milestone badge */}
+            <button
+              onClick={onToggleExpanded}
+              className="w-5 h-5 rounded-full bg-gradient-to-br from-saffron to-saffron-dark text-white flex items-center justify-center text-xs font-bold flex-shrink-0 hover:scale-110 transition-transform"
+            >
+              {milestoneNumber}
+            </button>
+            {/* Milestone name + day info */}
+            <div className="flex items-center gap-1.5 min-w-0 text-sm">
+              <span className="font-semibold text-foreground truncate">{milestoneName}</span>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-muted-foreground whitespace-nowrap">{day.label}</span>
+            </div>
+          </div>
+          {/* Post count */}
+          <span className="text-xs text-muted-foreground flex-shrink-0 ml-2">
+            {day.posts.length} {day.posts.length === 1 ? "opslag" : "opslag"}
           </span>
         </div>
       </div>
