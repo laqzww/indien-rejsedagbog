@@ -78,40 +78,10 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
     }
   };
 
-  // Calculate dynamic aspect ratio based on active media dimensions
-  const getMediaAspectRatio = (media: { width: number | null; height: number | null }) => {
-    if (!media.width || !media.height) {
-      // Fallback to 4:5 if dimensions unknown
-      return { aspectRatio: "4/5", objectFit: "cover" as const };
-    }
-    
-    const ratio = media.width / media.height;
-    
-    // Portrait image (taller than wide)
-    if (ratio < 1) {
-      // For portrait images, use actual ratio but cap at 3:4 (0.75) to prevent extremely tall containers
-      // iPhone portrait is typically 3:4 (0.75) or 9:16 (0.5625)
-      const cappedRatio = Math.max(ratio, 0.75);
-      return { 
-        aspectRatio: `${media.width}/${Math.round(media.width / cappedRatio)}`,
-        objectFit: "contain" as const  // Show full image without cropping
-      };
-    }
-    
-    // Landscape image (wider than tall)
-    // Cap at 4:3 (1.33) to prevent very wide/short containers
-    const cappedRatio = Math.min(ratio, 1.33);
-    return { 
-      aspectRatio: `${Math.round(media.height * cappedRatio)}/${media.height}`,
-      objectFit: "cover" as const  // Fill container, some cropping acceptable
-    };
-  };
-  
-  // Get aspect ratio for current active media
-  const activeMedia = sortedMedia[activeIndex];
-  const { aspectRatio: mediaAspectRatio, objectFit: mediaObjectFit } = activeMedia 
-    ? getMediaAspectRatio(activeMedia)
-    : { aspectRatio: "4/5", objectFit: "cover" as const };
+  // Fixed square aspect ratio - stable container, no jumping when swiping
+  // All images use object-contain to show full image without cropping
+  // Landscape images will have letterbox (whitespace) which is acceptable
+  const MEDIA_ASPECT_RATIO = "1/1";  // Square format - compact and stable
 
   const postDate = new Date(post.captured_at || post.created_at);
   const formattedTime = postDate.toLocaleTimeString("da-DK", {
@@ -176,8 +146,8 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
       {hasMedia && (
         <div
           ref={containerRef}
-          className="relative bg-black transition-all duration-300"
-          style={{ aspectRatio: mediaAspectRatio }}
+          className="relative bg-black"
+          style={{ aspectRatio: MEDIA_ASPECT_RATIO }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -195,7 +165,7 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
                   src={getMediaUrl(media.storage_path)}
                   alt=""
                   fill
-                  className={mediaObjectFit === "contain" ? "object-contain" : "object-cover"}
+                  className="object-contain"
                   sizes="100vw"
                   priority={index === 0}
                 />
@@ -209,7 +179,7 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
                     autoPlay
                     preload="auto"
                     onCanPlay={() => handleVideoCanPlay(media.id)}
-                    className={`w-full h-full bg-black ${mediaObjectFit === "contain" ? "object-contain" : "object-cover"}`}
+                    className="w-full h-full bg-black object-contain"
                   />
                   {/* Loading overlay */}
                   {loadingVideos.has(media.id) && (
@@ -230,7 +200,7 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
                       src={getMediaUrl(media.thumbnail_path)}
                       alt=""
                       fill
-                      className={mediaObjectFit === "contain" ? "object-contain" : "object-cover"}
+                      className="object-contain"
                       sizes="100vw"
                       priority={index === 0}
                     />
@@ -240,7 +210,7 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
                       preload="metadata"
                       muted
                       playsInline
-                      className={`w-full h-full pointer-events-none ${mediaObjectFit === "contain" ? "object-contain" : "object-cover"}`}
+                      className="w-full h-full pointer-events-none object-contain"
                     />
                   )}
                   {/* Play button overlay */}
