@@ -99,6 +99,7 @@ export function JourneyMap({
   const milestoneIdsRef = useRef<string[]>([]);
   const milestoneOriginalLngLatsRef = useRef<[number, number][]>([]);
   const declutterCleanupRef = useRef<(() => void) | null>(null);
+  const declutterTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
   // Track which milestone is currently active and whether we're zoomed in or out
@@ -107,6 +108,11 @@ export function JourneyMap({
 
   // Cleanup function to remove all markers
   const cleanupMarkers = useCallback(() => {
+    // Clean up declutter timeout
+    if (declutterTimeoutRef.current) {
+      clearTimeout(declutterTimeoutRef.current);
+      declutterTimeoutRef.current = null;
+    }
     // Clean up declutter state
     if (declutterCleanupRef.current) {
       declutterCleanupRef.current();
@@ -129,38 +135,74 @@ export function JourneyMap({
     });
   }, []);
 
+  // Zoom level threshold - only declutter when zoomed out enough that markers might overlap
+  // At zoom level 8+, milestones are typically far enough apart geographically
+  const DECLUTTER_ZOOM_THRESHOLD = 8;
+
   // Run decluttering on milestone markers to prevent overlap
-  const updateMilestoneDecluttering = useCallback(() => {
+  const updateMilestoneDecluttering = useCallback((immediate = false) => {
     const mapInstance = map.current;
     if (!mapInstance) return;
     
-    const markers = milestoneMarkersRef.current;
-    const milestoneIds = milestoneIdsRef.current;
-    const originalLngLats = milestoneOriginalLngLatsRef.current;
-    
-    // Ensure we have matching data
-    if (markers.length === 0 || markers.length !== milestoneIds.length || markers.length !== originalLngLats.length) {
-      return;
+    // Clear any pending declutter
+    if (declutterTimeoutRef.current) {
+      clearTimeout(declutterTimeoutRef.current);
+      declutterTimeoutRef.current = null;
     }
     
-    // Clean up previous declutter state
-    if (declutterCleanupRef.current) {
-      declutterCleanupRef.current();
-    }
-    
-    // Run decluttering and store cleanup function
-    declutterCleanupRef.current = declutterMilestoneMarkers(
-      mapInstance,
-      markers,
-      milestoneIds,
-      originalLngLats,
-      {
-        minDistance: 45, // Minimum 45px between marker centers
-        maxOffset: 50,   // Max 50px offset from original position
-        iterations: 20,  // More iterations for better settling
-        forceStrength: 0.4,
+    const runDeclutter = () => {
+      const currentMap = map.current;
+      if (!currentMap) return;
+      
+      const markers = milestoneMarkersRef.current;
+      const milestoneIds = milestoneIdsRef.current;
+      const originalLngLats = milestoneOriginalLngLatsRef.current;
+      
+      // Ensure we have matching data
+      if (markers.length === 0 || markers.length !== milestoneIds.length || markers.length !== originalLngLats.length) {
+        return;
       }
-    );
+      
+      const currentZoom = currentMap.getZoom();
+      
+      // At higher zoom levels, reset offsets and skip decluttering
+      // Markers are geographically spread out enough at higher zooms
+      if (currentZoom >= DECLUTTER_ZOOM_THRESHOLD) {
+        // Reset all marker offsets smoothly
+        markers.forEach((marker) => marker.setOffset([0, 0]));
+        if (declutterCleanupRef.current) {
+          declutterCleanupRef.current = null;
+        }
+        return;
+      }
+      
+      // Clean up previous declutter state
+      if (declutterCleanupRef.current) {
+        declutterCleanupRef.current();
+      }
+      
+      // Run decluttering and store cleanup function
+      declutterCleanupRef.current = declutterMilestoneMarkers(
+        currentMap,
+        markers,
+        milestoneIds,
+        originalLngLats,
+        {
+          minDistance: 45, // Minimum 45px between marker centers
+          maxOffset: 50,   // Max 50px offset from original position
+          iterations: 20,  // More iterations for better settling
+          forceStrength: 0.4,
+        }
+      );
+    };
+    
+    if (immediate) {
+      runDeclutter();
+    } else {
+      // Debounce to avoid running during fly animations
+      // Wait 150ms after movement settles
+      declutterTimeoutRef.current = setTimeout(runDeclutter, 150);
+    }
   }, []);
 
   // Zoom to stage extent when a milestone is clicked (with toggle behavior)
@@ -712,16 +754,17 @@ export function JourneyMap({
     mapInstance.on("zoom", handleZoom);
     
     // Add zoomend/moveend listener for decluttering (update after zoom/pan settles)
+    // Uses debouncing internally to avoid running during fly animations
     const handleMoveEnd = () => {
-      updateMilestoneDecluttering();
+      updateMilestoneDecluttering(false); // debounced
     };
     mapInstance.on("zoomend", handleMoveEnd);
     mapInstance.on("moveend", handleMoveEnd);
     
-    // Initial decluttering after markers are added
+    // Initial decluttering after markers are added (immediate, no debounce)
     // Use requestAnimationFrame to ensure markers are rendered
     requestAnimationFrame(() => {
-      updateMilestoneDecluttering();
+      updateMilestoneDecluttering(true); // immediate
     });
 
     // Handle POI focus or fit bounds
