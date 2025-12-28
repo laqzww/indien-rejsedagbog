@@ -140,8 +140,6 @@ export function HomeClient({
 
   // Track if we've already initialized the carousel from focusPost to prevent duplicate init
   const initializedFocusPostRef = useRef<string | null>(null);
-  // Track if we've initialized the carousel for this map view session
-  const initializedMapViewRef = useRef(false);
 
   // Helper to get posts for a milestone
   const getPostsForMilestone = useCallback((milestone: Milestone): CarouselPost[] => {
@@ -153,41 +151,19 @@ export function HomeClient({
     });
   }, [mapPosts, milestones]);
 
-  // Auto-initialize carousel when entering map view (always show carousel with milestones)
+  // Reset carousel state when leaving map view
+  // Map now starts at "route overview" level (carousel closed) - user clicks "Se rejserute" to open
   useEffect(() => {
-    // Only run when entering map view
     if (activeView !== "map") {
-      // Reset the flag when leaving map view so it re-initializes on next visit
-      initializedMapViewRef.current = false;
-      return;
-    }
-    
-    // If we have a focusPost parameter, that takes precedence (handled by next effect)
-    if (urlFocusPost) return;
-    
-    // Only initialize once per map view session
-    if (initializedMapViewRef.current) return;
-    if (milestones.length === 0) return;
-    
-    // Mark as initialized for this session
-    initializedMapViewRef.current = true;
-    
-    // Initialize carousel with the first milestone in milestones view
-    const firstMilestone = milestones[0];
-    const milestonePosts = getPostsForMilestone(firstMilestone);
-    
-    setActiveMilestone(firstMilestone);
-    setActiveMilestoneIndex(0);
-    setCarouselPosts(milestonePosts);
-    setActivePostIndex(0);
-    if (milestonePosts.length > 0) {
-      setHighlightPostId(milestonePosts[0].id);
-    } else {
+      // Reset the flag when leaving map view so focusPost can re-initialize on next visit
+      initializedFocusPostRef.current = null;
+      // Close carousel when leaving map view
+      setShowCarousel(false);
+      setActiveMilestone(null);
+      setCarouselPosts([]);
       setHighlightPostId(null);
     }
-    setShowCarousel(true);
-    setCarouselViewMode("milestones"); // Start in milestones view to browse areas
-  }, [activeView, urlFocusPost, milestones, getPostsForMilestone]);
+  }, [activeView]);
 
   // Auto-initialize carousel when focusPost parameter is present and we're in map view
   useEffect(() => {
