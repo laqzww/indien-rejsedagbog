@@ -18,6 +18,14 @@ const DEFAULT_OPTIONS: Required<CompressionOptions> = {
   quality: 0.85,
 };
 
+// Carousel thumbnail options - optimized for small card display (320x120px cards)
+// We use 640px max to allow for 2x retina displays while keeping file size small
+const CAROUSEL_THUMBNAIL_OPTIONS: Required<CompressionOptions> = {
+  maxWidth: 640,
+  maxHeight: 640,
+  quality: 0.70, // Lower quality is fine for small thumbnails
+};
+
 /**
  * Compress an image using browser canvas
  * This should be called AFTER extracting EXIF data from the original file
@@ -82,6 +90,17 @@ export async function compressImage(
 
     img.src = url;
   });
+}
+
+/**
+ * Generate a small thumbnail optimized for carousel display
+ * Uses lower resolution and quality since carousel cards are small (320x120px)
+ * Returns a small JPEG thumbnail suitable for fast loading
+ */
+export async function generateCarouselThumbnail(
+  file: Blob
+): Promise<CompressionResult> {
+  return compressImage(file, CAROUSEL_THUMBNAIL_OPTIONS);
 }
 
 /**
