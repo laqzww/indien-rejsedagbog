@@ -28,11 +28,14 @@ const JourneyMap = dynamic(
   }
 );
 
-// Height of the carousel overlay in pixels
-// Used to adjust map extent calculations so the visible area is above the carousel
-// Calculation: header (~40px) + card (120px image + 70px content) + padding (~20px) ≈ 250px
-// Adding buffer for safety
+// Heights for bottom UI overlays in pixels
+// Used to adjust map extent calculations so the visible area is above the overlay
+
+// Carousel height: header (~40px) + card (120px image + 70px content) + padding (~20px) ≈ 250px + buffer
 const CAROUSEL_HEIGHT = 280;
+
+// "Se rejserute" button height: button (~44px) + padding (~32px)
+const BUTTON_HEIGHT = 80;
 
 interface JourneyPost {
   id: string;
@@ -475,7 +478,7 @@ export function HomeClient({
                   focusZoom={focusZoom}
                   activeMilestone={activeMilestone}
                   highlightPostId={highlightPostId}
-                  extentBottomOffset={CAROUSEL_HEIGHT}
+                  extentBottomOffset={showCarousel ? CAROUSEL_HEIGHT : BUTTON_HEIGHT}
                   mapStyle={mapStyle}
                 />
 
