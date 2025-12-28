@@ -135,11 +135,8 @@ export function JourneyMap({
     });
   }, []);
 
-  // Zoom level threshold - only declutter when zoomed out enough that markers might overlap
-  // At zoom level 8+, milestones are typically far enough apart geographically
-  const DECLUTTER_ZOOM_THRESHOLD = 8;
-
   // Run decluttering on milestone markers to prevent overlap
+  // Uses pixel-based overlap detection - only applies offsets when markers actually overlap
   const updateMilestoneDecluttering = useCallback((immediate = false) => {
     const mapInstance = map.current;
     if (!mapInstance) return;
@@ -163,25 +160,14 @@ export function JourneyMap({
         return;
       }
       
-      const currentZoom = currentMap.getZoom();
-      
-      // At higher zoom levels, reset offsets and skip decluttering
-      // Markers are geographically spread out enough at higher zooms
-      if (currentZoom >= DECLUTTER_ZOOM_THRESHOLD) {
-        // Reset all marker offsets smoothly
-        markers.forEach((marker) => marker.setOffset([0, 0]));
-        if (declutterCleanupRef.current) {
-          declutterCleanupRef.current = null;
-        }
-        return;
-      }
-      
       // Clean up previous declutter state
       if (declutterCleanupRef.current) {
         declutterCleanupRef.current();
       }
       
-      // Run decluttering and store cleanup function
+      // Run decluttering - the algorithm will check for actual pixel overlaps
+      // and only apply offsets when markers are within minDistance of each other
+      // If no overlaps are detected, all offsets are reset to [0, 0]
       declutterCleanupRef.current = declutterMilestoneMarkers(
         currentMap,
         markers,
