@@ -697,8 +697,9 @@ export function JourneyMap({
     };
   }, [isLoaded, milestones, posts, onMilestoneClick, onPostClick, cleanupMarkers, updatePostVisibility, zoomToMilestoneStage, focusLat, focusLng, focusZoom, extentBottomOffset]);
 
-  // Fly to active milestone when it changes from external source (e.g., "Se rejserute" button)
-  // This handles the case where activeMilestone is set from HomeClient, not from clicking on the map
+  // Fly to active milestone when carousel is first opened (e.g., "Se rejserute" button)
+  // This handles the case where activeMilestone is set from HomeClient when opening the carousel
+  // It does NOT trigger when swiping between milestones in an already-open carousel
   useEffect(() => {
     const mapInstance = map.current;
     if (!mapInstance || !isLoaded) return;
@@ -715,9 +716,16 @@ export function JourneyMap({
     // (zoomToMilestoneStage sets activeMilestoneRef.current when clicking on map)
     if (activeMilestoneRef.current === activeMilestone.id) return;
     
-    // Mark this milestone as active
+    // Only trigger flyTo if carousel was just opened (previous activeMilestone was null)
+    // If user is swiping between milestones in carousel, let the URL-based mechanism handle it
+    const carouselJustOpened = activeMilestoneRef.current === null;
+    
+    // Update ref to current milestone
     activeMilestoneRef.current = activeMilestone.id;
     isZoomedInRef.current = false; // Start in zoomed-out state
+    
+    // Only fly to milestone if carousel was just opened via "Se rejserute"
+    if (!carouselJustOpened) return;
     
     // Calculate padding based on container size
     const container = mapInstance.getContainer();
