@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MapPin, Calendar, ImageIcon, Film, Play } from "lucide-react";
 import { formatRelativeDate } from "@/lib/utils";
-import { getMediaUrl } from "@/lib/upload";
+import { getMediaUrl, getAvatarUrl } from "@/lib/upload";
 
 // Simplified type for serializable post data
 interface PostCardData {
@@ -135,7 +135,7 @@ export function PostCard({ post, index = 0 }: PostCardProps) {
           <div className="flex items-center gap-3 mb-3">
             <Avatar className="h-8 w-8">
               {post.profile?.avatar_url && (
-                <AvatarImage src={post.profile.avatar_url} alt="" />
+                <AvatarImage src={getAvatarUrl(post.profile.avatar_url)} alt="" />
               )}
               <AvatarFallback>
                 {post.profile?.display_name?.charAt(0) || "?"}

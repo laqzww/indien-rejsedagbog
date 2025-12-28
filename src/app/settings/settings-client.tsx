@@ -1,11 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { AlertCircle, CheckCircle, Loader2 } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { AlertCircle, CheckCircle, Loader2, Upload, Trash2, User } from "lucide-react";
+import { uploadAvatar, deleteAvatar, getAvatarUrl, isStoragePath } from "@/lib/upload";
+import { compressImage } from "@/lib/image-compression";
 
 type InitialProfile = {
   displayName: string;
@@ -15,6 +18,12 @@ type InitialProfile = {
 export function SettingsClient({ initialProfile }: { initialProfile: InitialProfile }) {
   const [displayName, setDisplayName] = useState(initialProfile.displayName);
   const [avatarUrl, setAvatarUrl] = useState(initialProfile.avatarUrl);
+  
+  // Avatar upload state
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -32,6 +41,56 @@ export function SettingsClient({ initialProfile }: { initialProfile: InitialProf
     return null;
   }, [newPassword, confirmPassword]);
 
+  // Handle file selection for avatar
+  const handleAvatarSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      setProfileMessage({ type: "error", text: "Vælg venligst en billedfil." });
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setProfileMessage({ type: "error", text: "Billedet er for stort. Maks 5MB." });
+      return;
+    }
+
+    setAvatarFile(file);
+    // Create preview URL
+    const previewUrl = URL.createObjectURL(file);
+    setAvatarPreview(previewUrl);
+    setProfileMessage(null);
+  };
+
+  // Remove selected avatar
+  const handleRemoveAvatar = async () => {
+    // If there's a pending file, just clear it
+    if (avatarFile) {
+      if (avatarPreview) {
+        URL.revokeObjectURL(avatarPreview);
+      }
+      setAvatarFile(null);
+      setAvatarPreview(null);
+      return;
+    }
+
+    // If there's an existing avatar, mark for deletion
+    if (avatarUrl) {
+      setAvatarUrl("");
+      setProfileMessage({ type: "success", text: "Profilbillede vil blive fjernet når du gemmer." });
+    }
+  };
+
+  // Get the current display URL for avatar
+  const currentAvatarDisplayUrl = useMemo(() => {
+    if (avatarPreview) return avatarPreview;
+    if (avatarUrl) return getAvatarUrl(avatarUrl);
+    return null;
+  }, [avatarPreview, avatarUrl]);
+
   const saveProfile = async () => {
     setProfileMessage(null);
     setSavingProfile(true);
@@ -45,16 +104,54 @@ export function SettingsClient({ initialProfile }: { initialProfile: InitialProf
       if (userError) throw userError;
       if (!user) throw new Error("Du er ikke logget ind");
 
+      let newAvatarPath = avatarUrl;
+
+      // If there's a new file to upload
+      if (avatarFile) {
+        setUploadingAvatar(true);
+        try {
+          // Compress the image first (max 400x400 for avatars)
+          const compressed = await compressImage(avatarFile, {
+            maxWidth: 400,
+            maxHeight: 400,
+            quality: 0.85,
+          });
+
+          // Upload the compressed image
+          const result = await uploadAvatar(compressed.blob, user.id, avatarFile.name);
+          newAvatarPath = result.path;
+
+          // Clean up preview
+          if (avatarPreview) {
+            URL.revokeObjectURL(avatarPreview);
+          }
+          setAvatarFile(null);
+          setAvatarPreview(null);
+        } finally {
+          setUploadingAvatar(false);
+        }
+      } else if (!avatarUrl && initialProfile.avatarUrl && isStoragePath(initialProfile.avatarUrl)) {
+        // Avatar was removed and was a storage path - delete from storage
+        try {
+          await deleteAvatar(initialProfile.avatarUrl);
+        } catch (err) {
+          console.warn("Could not delete old avatar:", err);
+        }
+        newAvatarPath = "";
+      }
+
       const { error } = await supabase
         .from("profiles")
         .update({
           display_name: displayName.trim() || null,
-          avatar_url: avatarUrl.trim() || null,
+          avatar_url: newAvatarPath.trim() || null,
         })
         .eq("id", user.id);
 
       if (error) throw error;
 
+      // Update local state with the new path
+      setAvatarUrl(newAvatarPath);
       setProfileMessage({ type: "success", text: "Profil gemt." });
     } catch (err) {
       const text = err instanceof Error ? err.message : "Noget gik galt";
@@ -116,16 +213,57 @@ export function SettingsClient({ initialProfile }: { initialProfile: InitialProf
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="avatarUrl" className="text-sm font-medium">
-              Avatar URL (valgfri)
+            <label className="text-sm font-medium">
+              Profilbillede (valgfri)
             </label>
-            <Input
-              id="avatarUrl"
-              value={avatarUrl}
-              onChange={(e) => setAvatarUrl(e.target.value)}
-              placeholder="https://..."
-              disabled={savingProfile}
-            />
+            <div className="flex items-center gap-4">
+              <Avatar className="h-20 w-20">
+                {currentAvatarDisplayUrl ? (
+                  <AvatarImage src={currentAvatarDisplayUrl} alt="Profilbillede" />
+                ) : null}
+                <AvatarFallback className="text-2xl bg-muted">
+                  <User className="h-10 w-10 text-muted-foreground" />
+                </AvatarFallback>
+              </Avatar>
+              
+              <div className="flex flex-col gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarSelect}
+                  className="hidden"
+                  disabled={savingProfile}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={savingProfile}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  {currentAvatarDisplayUrl ? "Skift billede" : "Upload billede"}
+                </Button>
+                
+                {(currentAvatarDisplayUrl || avatarFile) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRemoveAvatar}
+                    disabled={savingProfile}
+                    className="text-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Fjern billede
+                  </Button>
+                )}
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Maks 5MB. Billedet skaleres automatisk til 400x400px.
+            </p>
           </div>
 
           {profileMessage && (
@@ -148,8 +286,8 @@ export function SettingsClient({ initialProfile }: { initialProfile: InitialProf
           <Button onClick={saveProfile} disabled={savingProfile}>
             {savingProfile ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Gemmer...
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                {uploadingAvatar ? "Uploader billede..." : "Gemmer..."}
               </>
             ) : (
               "Gem profil"

@@ -1,6 +1,10 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
+import { getMediaUrl } from "@/lib/url-utils";
+
+// Re-export URL utilities for convenience (these work on both server and client)
+export { getMediaUrl, getAvatarUrl, isStoragePath } from "@/lib/url-utils";
 
 export interface UploadResult {
   path: string;
@@ -46,11 +50,6 @@ export async function deleteMedia(path: string): Promise<void> {
   if (error) {
     throw new Error(`Delete failed: ${error.message}`);
   }
-}
-
-export function getMediaUrl(path: string): string {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  return `${supabaseUrl}/storage/v1/object/public/media/${path}`;
 }
 
 /**
@@ -147,6 +146,59 @@ export async function uploadMilestoneCover(
  * Delete a milestone cover image
  */
 export async function deleteMilestoneCover(path: string): Promise<void> {
+  const supabase = createClient();
+  
+  const { error } = await supabase.storage
+    .from("media")
+    .remove([path]);
+
+  if (error) {
+    throw new Error(`Delete failed: ${error.message}`);
+  }
+}
+
+/**
+ * Upload a profile avatar image
+ * Stores in: {userId}/profile/avatar.{ext}
+ * Note: Path must start with userId to satisfy Supabase Storage RLS policies
+ */
+export async function uploadAvatar(
+  file: File | Blob,
+  userId: string,
+  originalFilename?: string
+): Promise<UploadResult> {
+  const supabase = createClient();
+  
+  // Get file extension from original filename or default to jpg
+  const ext = originalFilename?.split(".").pop()?.toLowerCase() || "jpg";
+  // Path must start with userId to satisfy storage RLS policies
+  const path = `${userId}/profile/avatar.${ext}`;
+  
+  // Delete existing avatar if any (to allow replacement)
+  await supabase.storage.from("media").remove([path]);
+  
+  const { error } = await supabase.storage
+    .from("media")
+    .upload(path, file, {
+      cacheControl: "3600",
+      upsert: true,
+    });
+
+  if (error) {
+    throw new Error(`Upload failed: ${error.message}`);
+  }
+
+  const { data: { publicUrl } } = supabase.storage
+    .from("media")
+    .getPublicUrl(path);
+
+  return { path, publicUrl };
+}
+
+/**
+ * Delete a profile avatar
+ */
+export async function deleteAvatar(path: string): Promise<void> {
   const supabase = createClient();
   
   const { error } = await supabase.storage
