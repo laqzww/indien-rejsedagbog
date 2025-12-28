@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import Image from "next/image";
 import useEmblaCarousel from "embla-carousel-react";
-import { MapPin, ImageIcon, Film, Play, ChevronLeft, ChevronRight, X, MapPinIcon, Calendar } from "lucide-react";
+import { MapPin, ImageIcon, Film, Play, ChevronLeft, ChevronRight, ChevronUp, X, MapPinIcon, Calendar, Route } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getMediaUrl } from "@/lib/upload";
 import { getDayNumber } from "@/lib/journey";
@@ -258,15 +258,20 @@ export function JourneyCarousel({
     setCanScrollNext(activeApi.canScrollNext());
   }, [activeApi]);
 
-  // Handle view mode changes - reset carousel position appropriately
+  // Handle view mode changes - reinit and position carousels appropriately
+  // CRITICAL: When carousels are hidden (display: none), Embla loses track of slides.
+  // We must call reInit() when switching views to recalculate slide positions.
   useEffect(() => {
     const prevMode = prevViewModeRef.current;
     prevViewModeRef.current = viewMode;
     
     if (prevMode === viewMode) return;
     
-    // When switching to posts view, scroll to first post
+    // When switching to posts view, reinit and scroll to first post
     if (viewMode === "posts" && postEmblaApi) {
+      // Reinitialize to recalculate slides after being hidden
+      postEmblaApi.reInit();
+      
       isProgrammaticScrollRef.current = true;
       postEmblaApi.scrollTo(0, false);
       setSelectedPostIndex(0);
@@ -275,12 +280,19 @@ export function JourneyCarousel({
       }, 150);
     }
     
-    // When switching to milestones view, scroll to current milestone
+    // When switching to milestones view, reinit and scroll to CURRENT milestone (not first!)
     if (viewMode === "milestones" && milestoneEmblaApi) {
+      // Reinitialize to recalculate slides after being hidden
+      milestoneEmblaApi.reInit();
+      
+      // Use the internal selectedMilestoneIndex which tracks where we actually are
+      // This preserves position when navigating back from posts view
+      const targetIndex = selectedMilestoneIndex;
+      
       isProgrammaticScrollRef.current = true;
-      milestoneEmblaApi.scrollTo(activeMilestoneIndex, false);
-      setSelectedMilestoneIndex(activeMilestoneIndex);
-      lastExternalMilestoneIndexRef.current = activeMilestoneIndex;
+      milestoneEmblaApi.scrollTo(targetIndex, false);
+      // Don't update selectedMilestoneIndex - we're using it as the source of truth
+      lastExternalMilestoneIndexRef.current = targetIndex;
       setTimeout(() => {
         isProgrammaticScrollRef.current = false;
       }, 150);
@@ -290,7 +302,7 @@ export function JourneyCarousel({
     requestAnimationFrame(() => {
       updateScrollState();
     });
-  }, [viewMode, postEmblaApi, milestoneEmblaApi, activeMilestoneIndex, updateScrollState]);
+  }, [viewMode, postEmblaApi, milestoneEmblaApi, selectedMilestoneIndex, updateScrollState]);
 
   // Setup milestone carousel listeners
   useEffect(() => {
@@ -339,11 +351,17 @@ export function JourneyCarousel({
     activeApi?.scrollNext();
   }, [activeApi]);
 
-  // Toggle view mode by clicking on milestone badge
+  // Navigate up in hierarchy by clicking on badge
+  // posts → milestones → route overview (close)
   const handleBadgeClick = useCallback(() => {
-    const newMode = viewMode === "milestones" ? "posts" : "milestones";
-    onViewModeChange(newMode);
-  }, [viewMode, onViewModeChange]);
+    if (viewMode === "posts") {
+      // Go up to milestones view (stay on current milestone)
+      onViewModeChange("milestones");
+    } else {
+      // In milestones view - go up to route overview (close carousel)
+      onClose();
+    }
+  }, [viewMode, onViewModeChange, onClose]);
 
   // Handle milestone card click - switch to posts view
   const handleMilestoneCardClick = useCallback(() => {
@@ -360,28 +378,43 @@ export function JourneyCarousel({
 
   return (
     <div className="absolute bottom-0 left-0 right-0 z-40 pb-3 pt-2">
-      {/* Minimal header - just milestone badge and close */}
+      {/* Navigation header with clear hierarchy indicator */}
       <div className="flex items-center justify-between px-3 mb-2">
+        {/* Back/up navigation button - always shows where you'll go */}
         <button
           onClick={handleBadgeClick}
-          className="flex items-center gap-2 group px-2 py-1 rounded-full bg-black/40 backdrop-blur-sm hover:bg-black/50 transition-colors"
-          title={viewMode === "milestones" ? "Vis opslag" : "Vis destinationer"}
+          className="flex items-center gap-1.5 group px-2.5 py-1.5 rounded-full bg-black/40 backdrop-blur-sm hover:bg-black/50 transition-colors"
+          title={viewMode === "milestones" ? "Se hele ruten" : "Se alle destinationer"}
         >
-          <div className="w-5 h-5 rounded-full bg-saffron text-white text-xs flex items-center justify-center font-bold">
-            {activeMilestone.display_order + 1}
-          </div>
-          <span className="text-white text-sm font-medium">
-            {viewMode === "milestones" 
-              ? `${selectedMilestoneIndex + 1}/${milestones.length}`
-              : activeMilestone.name
-            }
-          </span>
-          {viewMode === "posts" && posts.length > 0 && (
-            <span className="text-white/60 text-xs">
-              {selectedPostIndex + 1}/{posts.length}
-            </span>
+          <ChevronUp className="h-4 w-4 text-white/80 group-hover:text-white transition-colors" />
+          {viewMode === "milestones" ? (
+            // In milestones view - show "Ruteoversigt" to indicate going to route level
+            <>
+              <Route className="h-4 w-4 text-white/80" />
+              <span className="text-white text-sm font-medium">Ruteoversigt</span>
+              <span className="text-white/60 text-xs ml-1">
+                {selectedMilestoneIndex + 1}/{milestones.length}
+              </span>
+            </>
+          ) : (
+            // In posts view - show current milestone name to indicate going back to it
+            <>
+              <div className="w-5 h-5 rounded-full bg-saffron text-white text-xs flex items-center justify-center font-bold">
+                {activeMilestone.display_order + 1}
+              </div>
+              <span className="text-white text-sm font-medium">
+                {activeMilestone.name}
+              </span>
+              {posts.length > 0 && (
+                <span className="text-white/60 text-xs ml-1">
+                  {selectedPostIndex + 1}/{posts.length}
+                </span>
+              )}
+            </>
           )}
         </button>
+        
+        {/* Close button */}
         <button
           onClick={onClose}
           className="p-1.5 rounded-full bg-black/40 backdrop-blur-sm text-white hover:bg-black/50 transition-colors"
