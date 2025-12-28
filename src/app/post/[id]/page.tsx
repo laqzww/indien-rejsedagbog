@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, MapPin, Calendar, Share2, Pencil } from "lucide-react";
 import { DeletePostButton } from "@/components/post/DeletePostButton";
 import { formatDate } from "@/lib/utils";
+import { getAvatarUrl } from "@/lib/url-utils";
 import type { Metadata } from "next";
 import { getIsAuthor } from "@/lib/author";
 
@@ -99,7 +100,7 @@ export default async function PostPage({ params }: PageProps) {
             <div className="flex items-center gap-3">
               <Avatar className="h-12 w-12">
                 {post.profile?.avatar_url && (
-                  <AvatarImage src={post.profile.avatar_url} alt="" />
+                  <AvatarImage src={getAvatarUrl(post.profile.avatar_url)} alt="" />
                 )}
                 <AvatarFallback className="text-lg">
                   {post.profile?.display_name?.charAt(0) || "?"}
