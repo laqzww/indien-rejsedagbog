@@ -697,6 +697,95 @@ export function JourneyMap({
     };
   }, [isLoaded, milestones, posts, onMilestoneClick, onPostClick, cleanupMarkers, updatePostVisibility, zoomToMilestoneStage, focusLat, focusLng, focusZoom, extentBottomOffset]);
 
+  // Fly to active milestone when it changes from external source (e.g., "Se rejserute" button)
+  // This handles the case where activeMilestone is set from HomeClient, not from clicking on the map
+  useEffect(() => {
+    const mapInstance = map.current;
+    if (!mapInstance || !isLoaded) return;
+    
+    // Reset ref when carousel is closed (activeMilestone becomes null)
+    // This ensures "Se rejserute" can fly to the first milestone again
+    if (!activeMilestone) {
+      activeMilestoneRef.current = null;
+      isZoomedInRef.current = false;
+      return;
+    }
+    
+    // Skip if we already handled this milestone via map click
+    // (zoomToMilestoneStage sets activeMilestoneRef.current when clicking on map)
+    if (activeMilestoneRef.current === activeMilestone.id) return;
+    
+    // Mark this milestone as active
+    activeMilestoneRef.current = activeMilestone.id;
+    isZoomedInRef.current = false; // Start in zoomed-out state
+    
+    // Calculate padding based on container size
+    const container = mapInstance.getContainer();
+    const paddingPercent = 0.15;
+    const horizontalPadding = Math.round(container.clientWidth * paddingPercent);
+    const baseVerticalPadding = Math.round(container.clientHeight * paddingPercent);
+    const topPadding = baseVerticalPadding;
+    const bottomPadding = baseVerticalPadding + extentBottomOffset;
+    
+    // Find neighbor milestones for context
+    const sortedMilestones = [...milestones].sort(
+      (a, b) => a.display_order - b.display_order
+    );
+    const milestoneIndex = sortedMilestones.findIndex((m) => m.id === activeMilestone.id);
+    
+    // Collect neighbor points for bounds
+    const neighborPoints: [number, number][] = [];
+    if (milestoneIndex > 0) {
+      const prevMilestone = sortedMilestones[milestoneIndex - 1];
+      neighborPoints.push([prevMilestone.lng, prevMilestone.lat]);
+    }
+    if (milestoneIndex < sortedMilestones.length - 1) {
+      const nextMilestone = sortedMilestones[milestoneIndex + 1];
+      neighborPoints.push([nextMilestone.lng, nextMilestone.lat]);
+    }
+    
+    if (neighborPoints.length === 0) {
+      // Only one milestone - fly directly to it
+      mapInstance.flyTo({
+        center: [activeMilestone.lng, activeMilestone.lat],
+        zoom: 8,
+        duration: 800,
+      });
+    } else {
+      // Create bounds centered on milestone that includes neighbors
+      let maxLngDiff = 0;
+      let maxLatDiff = 0;
+      const center: [number, number] = [activeMilestone.lng, activeMilestone.lat];
+      
+      neighborPoints.forEach(([lng, lat]) => {
+        maxLngDiff = Math.max(maxLngDiff, Math.abs(lng - center[0]));
+        maxLatDiff = Math.max(maxLatDiff, Math.abs(lat - center[1]));
+      });
+      
+      const buffer = 1.1;
+      const bounds = new mapboxgl.LngLatBounds(
+        [center[0] - maxLngDiff * buffer, center[1] - maxLatDiff * buffer],
+        [center[0] + maxLngDiff * buffer, center[1] + maxLatDiff * buffer]
+      );
+      
+      mapInstance.fitBounds(bounds, {
+        padding: {
+          top: topPadding,
+          bottom: bottomPadding,
+          left: horizontalPadding,
+          right: horizontalPadding,
+        },
+        maxZoom: 10,
+        duration: 800,
+      });
+    }
+    
+    // Update post visibility after move
+    mapInstance.once("moveend", () => {
+      updatePostVisibility(mapInstance.getZoom());
+    });
+  }, [activeMilestone, isLoaded, milestones, extentBottomOffset, updatePostVisibility]);
+
   // Handle highlighting of active post in carousel
   // IMPORTANT: We only use CSS classes for highlighting, never inline transforms
   // Mapbox manages marker positioning via transforms internally, so modifying
