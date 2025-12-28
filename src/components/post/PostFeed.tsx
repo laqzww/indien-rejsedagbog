@@ -1,13 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef, createContext, useContext } from "react";
+import { useState, useEffect, useRef } from "react";
 import { PostFeedCard } from "./PostFeedCard";
 import { cn } from "@/lib/utils";
-import { ChevronDown, Calendar } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import type { MilestoneGroup, DayGroup } from "@/lib/journey";
-
-// Context to share scroll state and focus post between components
-const ScrollContext = createContext<{ showHeaders: boolean; focusPostId?: string }>({ showHeaders: true });
 
 interface PostFeedProps {
   groups: MilestoneGroup[];
@@ -15,9 +12,6 @@ interface PostFeedProps {
 }
 
 export function PostFeed({ groups, focusPostId }: PostFeedProps) {
-  const [isScrolling, setIsScrolling] = useState(false);
-  const [isAtTop, setIsAtTop] = useState(true);
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const hasScrolledToFocusRef = useRef(false);
 
@@ -32,60 +26,6 @@ export function PostFeed({ groups, focusPostId }: PostFeedProps) {
     }
     return null;
   })() : null;
-
-  useEffect(() => {
-    // Find the scrollable container (the parent with overflow-y-auto)
-    const findScrollContainer = (): HTMLElement | null => {
-      let el = containerRef.current?.parentElement;
-      while (el) {
-        const style = getComputedStyle(el);
-        if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
-          return el;
-        }
-        el = el.parentElement;
-      }
-      return null;
-    };
-
-    const scrollContainer = findScrollContainer();
-
-    const handleScroll = (e: Event) => {
-      const target = e.target as HTMLElement;
-      
-      // Check if we're at the top of the scroll container
-      const scrollTop = target.scrollTop ?? 0;
-      setIsAtTop(scrollTop < 10); // Consider "at top" if within 10px
-
-      // Show headers when scrolling starts
-      setIsScrolling(true);
-
-      // Clear existing timeout
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-
-      // Hide headers after scroll stops (1.5 second delay)
-      scrollTimeoutRef.current = setTimeout(() => {
-        setIsScrolling(false);
-      }, 1500);
-    };
-
-    // Listen to scroll on the main scrollable container
-    if (scrollContainer) {
-      scrollContainer.addEventListener("scroll", handleScroll);
-    }
-    window.addEventListener("scroll", handleScroll, true);
-
-    return () => {
-      if (scrollContainer) {
-        scrollContainer.removeEventListener("scroll", handleScroll);
-      }
-      window.removeEventListener("scroll", handleScroll, true);
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-    };
-  }, []);
 
   // Scroll to focus post when it changes
   useEffect(() => {
@@ -120,22 +60,17 @@ export function PostFeed({ groups, focusPostId }: PostFeedProps) {
     hasScrolledToFocusRef.current = false;
   }, [focusPostId]);
 
-  // Show headers when at top OR when actively scrolling
-  const showHeaders = isAtTop || isScrolling;
-
   return (
-    <ScrollContext.Provider value={{ showHeaders, focusPostId }}>
-      <div ref={containerRef} className="space-y-0">
-        {groups.map((group, index) => (
-          <MilestoneSection 
-            key={group.milestone?.id || "unknown"} 
-            group={group} 
-            index={index}
-            forceExpanded={focusMilestoneId === group.milestone?.id}
-          />
-        ))}
-      </div>
-    </ScrollContext.Provider>
+    <div ref={containerRef} className="space-y-0">
+      {groups.map((group, index) => (
+        <MilestoneSection 
+          key={group.milestone?.id || "unknown"} 
+          group={group} 
+          index={index}
+          forceExpanded={focusMilestoneId === group.milestone?.id}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -206,41 +141,29 @@ interface DaySectionProps {
 }
 
 function DaySection({ day, milestoneNumber, milestoneName, onToggleExpanded }: DaySectionProps) {
-  const { showHeaders } = useContext(ScrollContext);
-  
   return (
     <div>
-      {/* Combined milestone + day header - compact single bar */}
-      <div 
-        className={cn(
-          "sticky top-0 z-10 bg-gradient-to-r from-[#fff5eb] to-[#f0f9ee] border-b border-border/50",
-          "transition-all duration-300",
-          showHeaders 
-            ? "opacity-100 translate-y-0" 
-            : "opacity-0 -translate-y-full pointer-events-none"
-        )}
-      >
-        <div className="flex items-center justify-between px-3 py-1.5">
-          <div className="flex items-center gap-2 min-w-0">
-            {/* Compact milestone badge */}
-            <button
-              onClick={onToggleExpanded}
-              className="w-5 h-5 rounded-full bg-gradient-to-br from-saffron to-saffron-dark text-white flex items-center justify-center text-xs font-bold flex-shrink-0 hover:scale-110 transition-transform"
-            >
-              {milestoneNumber}
-            </button>
-            {/* Milestone name + day info */}
-            <div className="flex items-center gap-1.5 min-w-0 text-sm">
-              <span className="font-semibold text-foreground truncate">{milestoneName}</span>
-              <span className="text-muted-foreground">·</span>
-              <span className="text-muted-foreground whitespace-nowrap">{day.label}</span>
-            </div>
+      {/* Combined milestone + day header - compact, non-sticky */}
+      <div className="flex items-center justify-between px-3 py-1.5 bg-gradient-to-r from-[#fff5eb] to-[#f0f9ee] border-b border-border/50">
+        <div className="flex items-center gap-2 min-w-0">
+          {/* Compact milestone badge */}
+          <button
+            onClick={onToggleExpanded}
+            className="w-5 h-5 rounded-full bg-gradient-to-br from-saffron to-saffron-dark text-white flex items-center justify-center text-xs font-bold flex-shrink-0 hover:scale-110 transition-transform"
+          >
+            {milestoneNumber}
+          </button>
+          {/* Milestone name + day info */}
+          <div className="flex items-center gap-1.5 min-w-0 text-sm">
+            <span className="font-semibold text-foreground truncate">{milestoneName}</span>
+            <span className="text-muted-foreground">·</span>
+            <span className="text-muted-foreground whitespace-nowrap">{day.label}</span>
           </div>
-          {/* Post count */}
-          <span className="text-xs text-muted-foreground flex-shrink-0 ml-2">
-            {day.posts.length} {day.posts.length === 1 ? "opslag" : "opslag"}
-          </span>
         </div>
+        {/* Post count */}
+        <span className="text-xs text-muted-foreground flex-shrink-0 ml-2">
+          {day.posts.length} {day.posts.length === 1 ? "opslag" : "opslag"}
+        </span>
       </div>
 
       {/* Posts for this day */}
