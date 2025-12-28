@@ -269,10 +269,14 @@ export function JourneyCarousel({
     
     // When switching to posts view, reinit and scroll to first post
     if (viewMode === "posts" && postEmblaApi) {
+      // CRITICAL: Set flag BEFORE reInit to prevent event handlers from resetting state
+      // reInit() fires a 'reInit' event that triggers onPostSelect, which would otherwise
+      // detect position 0 and update state incorrectly
+      isProgrammaticScrollRef.current = true;
+      
       // Reinitialize to recalculate slides after being hidden
       postEmblaApi.reInit();
       
-      isProgrammaticScrollRef.current = true;
       postEmblaApi.scrollTo(0, false);
       setSelectedPostIndex(0);
       setTimeout(() => {
@@ -282,14 +286,19 @@ export function JourneyCarousel({
     
     // When switching to milestones view, reinit and scroll to CURRENT milestone (not first!)
     if (viewMode === "milestones" && milestoneEmblaApi) {
-      // Reinitialize to recalculate slides after being hidden
-      milestoneEmblaApi.reInit();
+      // CRITICAL: Set flag BEFORE reInit to prevent event handlers from resetting state
+      // reInit() fires a 'reInit' event that triggers onMilestoneSelect, which would otherwise
+      // detect position 0 (carousel resets on reInit) and call onMilestoneChange with milestone 0,
+      // causing the carousel to jump back to the first milestone instead of staying on the current one
+      isProgrammaticScrollRef.current = true;
       
       // Use the internal selectedMilestoneIndex which tracks where we actually are
       // This preserves position when navigating back from posts view
       const targetIndex = selectedMilestoneIndex;
       
-      isProgrammaticScrollRef.current = true;
+      // Reinitialize to recalculate slides after being hidden
+      milestoneEmblaApi.reInit();
+      
       milestoneEmblaApi.scrollTo(targetIndex, false);
       // Don't update selectedMilestoneIndex - we're using it as the source of truth
       lastExternalMilestoneIndexRef.current = targetIndex;
