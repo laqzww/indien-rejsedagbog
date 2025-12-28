@@ -78,10 +78,9 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
     }
   };
 
-  // Fixed 9:10 aspect ratio - stable container, no jumping when swiping
-  // Slightly shorter than 4:5 (0.9 vs 0.8) but still portrait-oriented
+  // Fixed 3:4 aspect ratio - matches iPhone portrait photos perfectly
   // All images use object-contain to show full image without cropping
-  const MEDIA_ASPECT_RATIO = "9/10";  // Compact portrait - gives more room for headers
+  const MEDIA_ASPECT_RATIO = "3/4";  // Taller portrait - minimizes whitespace for iPhone photos
 
   const postDate = new Date(post.captured_at || post.created_at);
   const formattedTime = postDate.toLocaleTimeString("da-DK", {
