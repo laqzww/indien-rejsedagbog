@@ -78,10 +78,10 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
     }
   };
 
-  // Fixed 4:5 aspect ratio - stable container, no jumping when swiping
+  // Fixed 9:10 aspect ratio - stable container, no jumping when swiping
+  // Slightly shorter than 4:5 (0.9 vs 0.8) but still portrait-oriented
   // All images use object-contain to show full image without cropping
-  // Landscape images will have letterbox (whitespace) which is acceptable
-  const MEDIA_ASPECT_RATIO = "4/5";  // Portrait format - matches Instagram style
+  const MEDIA_ASPECT_RATIO = "9/10";  // Compact portrait - gives more room for headers
 
   const postDate = new Date(post.captured_at || post.created_at);
   const formattedTime = postDate.toLocaleTimeString("da-DK", {
