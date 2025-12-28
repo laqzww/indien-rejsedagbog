@@ -561,7 +561,6 @@ function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: Compa
               src={coverUrl}
               alt={milestone.name}
               fill
-              unoptimized
               className={cn(
                 "object-cover transition-opacity duration-300",
                 imageLoading ? "opacity-0" : "opacity-100"
@@ -596,30 +595,30 @@ function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: Compa
       </div>
       
       {/* Content below - same structure as post card */}
-      <div className="p-3">
+      <div className="p-3 overflow-hidden min-w-0">
         {showGradientFallback && (
           <h3 className="text-base font-semibold text-gray-900 truncate mb-1">
             {milestone.name}
           </h3>
         )}
         {!showGradientFallback && milestone.description && (
-          <p className="text-sm text-gray-600 line-clamp-2 mb-2">
+          <p className="text-sm text-gray-600 line-clamp-2 mb-2 break-words">
             {milestone.description}
           </p>
         )}
         {/* Date range - always show if available */}
         {dateRange && (
           <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-2">
-            <Calendar className="h-3 w-3" />
-            <span>{dateRange}</span>
+            <Calendar className="h-3 w-3 flex-shrink-0" />
+            <span className="truncate">{dateRange}</span>
           </div>
         )}
-        <div className="flex items-center gap-3 text-xs text-gray-500">
-          <span className="flex items-center gap-1">
+        <div className="flex items-center gap-2 text-xs text-gray-500 min-w-0">
+          <span className="flex items-center gap-1 flex-shrink-0">
             <ImageIcon className="h-3 w-3" />
             {postCount} opslag
           </span>
-          <span className="text-saffron font-medium whitespace-nowrap ml-auto">
+          <span className="text-saffron font-medium whitespace-nowrap ml-auto flex-shrink-0">
             Se opslag →
           </span>
         </div>
@@ -718,7 +717,6 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
                 src={thumbnailUrl}
                 alt=""
                 fill
-                unoptimized
                 className={cn(
                   "object-cover transition-opacity duration-300",
                   imageLoading ? "opacity-0" : "opacity-100"
@@ -778,18 +776,18 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
       </div>
 
       {/* Content below image */}
-      <div className="p-3">
-        <p className="text-sm text-gray-800 line-clamp-2 mb-2 leading-snug">
+      <div className="p-3 overflow-hidden min-w-0">
+        <p className="text-sm text-gray-800 line-clamp-2 mb-2 leading-snug break-words">
           {truncatedBody}
         </p>
-        <div className="flex items-center gap-3 text-xs text-gray-500">
+        <div className="flex items-center gap-2 text-xs text-gray-500 min-w-0">
           {post.location_name && (
-            <span className="flex items-center gap-1 truncate flex-1">
+            <span className="flex items-center gap-1 min-w-0 flex-1 overflow-hidden">
               <MapPin className="h-3 w-3 text-india-green flex-shrink-0" />
               <span className="truncate">{post.location_name}</span>
             </span>
           )}
-          <span className="text-saffron font-medium whitespace-nowrap">
+          <span className="text-saffron font-medium whitespace-nowrap flex-shrink-0">
             Læs mere →
           </span>
         </div>
