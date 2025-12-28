@@ -514,8 +514,8 @@ function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: Compa
     <button
       onClick={onClick}
       className={cn(
-        // Same width as post cards for consistent layout
-        "flex-shrink-0 w-[280px] sm:w-[300px] lg:w-[320px]",
+        // Same width and height as post cards for consistent layout
+        "flex-shrink-0 w-[280px] sm:w-[300px] lg:w-[320px] h-[200px]",
         "bg-white rounded-xl overflow-hidden shadow-xl",
         "text-left transition-all duration-200 flex flex-col",
         "hover:scale-[1.02] hover:shadow-2xl",
@@ -575,21 +575,21 @@ function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: Compa
         )}
       </div>
       
-      {/* Content below - same structure as post card */}
-      <div className="p-3">
+      {/* Content below - compact to match post card height */}
+      <div className="p-3 flex-1 flex flex-col justify-between">
         {!coverUrl && (
-          <h3 className="text-base font-semibold text-gray-900 truncate mb-1">
+          <h3 className="text-sm font-semibold text-gray-900 truncate">
             {milestone.name}
           </h3>
         )}
-        {coverUrl && milestone.description && (
-          <p className="text-sm text-gray-600 line-clamp-2 mb-2">
-            {milestone.description}
-          </p>
+        {coverUrl && dateRange && (
+          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <Calendar className="h-3 w-3" />
+            <span>{dateRange}</span>
+          </div>
         )}
-        {/* Date range - always show if available */}
-        {dateRange && (
-          <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-2">
+        {!coverUrl && dateRange && (
+          <div className="flex items-center gap-1.5 text-xs text-gray-500">
             <Calendar className="h-3 w-3" />
             <span>{dateRange}</span>
           </div>
@@ -636,8 +636,8 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
     <button
       onClick={onClick}
       className={cn(
-        // Card sizes - original format
-        "flex-shrink-0 w-[280px] sm:w-[300px] lg:w-[320px]",
+        // Card sizes - fixed height to match milestone cards
+        "flex-shrink-0 w-[280px] sm:w-[300px] lg:w-[320px] h-[200px]",
         "bg-white rounded-xl overflow-hidden shadow-xl",
         "text-left transition-all duration-200 flex flex-col",
         "hover:scale-[1.02] hover:shadow-2xl",
@@ -746,8 +746,8 @@ function EmptyPostsCard({ milestoneName }: { milestoneName: string }) {
   return (
     <div
       className={cn(
-        // Same width as other cards
-        "flex-shrink-0 w-[280px] sm:w-[300px] lg:w-[320px]",
+        // Same width and height as other cards
+        "flex-shrink-0 w-[280px] sm:w-[300px] lg:w-[320px] h-[200px]",
         "bg-white rounded-xl overflow-hidden shadow-xl flex flex-col"
       )}
     >
@@ -762,7 +762,7 @@ function EmptyPostsCard({ milestoneName }: { milestoneName: string }) {
       </div>
       
       {/* Content */}
-      <div className="p-3 text-center">
+      <div className="p-3 flex-1 flex items-center justify-center text-center">
         <p className="text-sm text-gray-500">
           Ingen opslag for <span className="font-semibold text-gray-700">{milestoneName}</span> endnu
         </p>
