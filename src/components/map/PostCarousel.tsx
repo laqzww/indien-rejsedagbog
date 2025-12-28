@@ -499,9 +499,6 @@ interface CompactMilestoneCardProps {
 }
 
 function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: CompactMilestoneCardProps) {
-  const [imageError, setImageError] = useState(false);
-  const [imageLoading, setImageLoading] = useState(true);
-  
   const coverUrl = getMilestoneCoverUrl(milestone);
   const dateRange = formatDateRange(milestone.arrival_date, milestone.departure_date);
   const status = getMilestoneStatus(milestone);
@@ -512,9 +509,6 @@ function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: Compa
     : status === "current" 
     ? "bg-saffron animate-pulse" 
     : "bg-gray-400";
-  
-  // Show gradient fallback if no cover image or if image failed to load
-  const showGradientFallback = !coverUrl || imageError;
   
   return (
     <button
@@ -533,44 +527,19 @@ function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: Compa
       <div 
         className={cn(
           "relative h-[120px] flex-shrink-0 overflow-hidden",
-          showGradientFallback && "flex items-center justify-center"
+          !coverUrl && "flex items-center justify-center"
         )}
-        style={showGradientFallback ? { background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" } : undefined}
+        style={!coverUrl ? { background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" } : undefined}
       >
-        {showGradientFallback ? (
-          /* Fallback: Large milestone number on gradient with status */
-          <div className={cn(
-            "w-20 h-20 rounded-full flex items-center justify-center border-4 border-white/40",
-            status === "completed" 
-              ? "bg-india-green/80" 
-              : status === "current" 
-              ? "bg-white/20 backdrop-blur-sm animate-pulse" 
-              : "bg-white/20 backdrop-blur-sm"
-          )}>
-            <span className="text-white font-bold text-4xl drop-shadow-lg">{milestone.display_order + 1}</span>
-          </div>
-        ) : coverUrl ? (
+        {coverUrl ? (
           <>
-            {/* Loading skeleton */}
-            {imageLoading && (
-              <div className="absolute inset-0 bg-gray-200 animate-pulse" />
-            )}
-            
             {/* Cover image */}
             <Image
               src={coverUrl}
               alt={milestone.name}
               fill
-              className={cn(
-                "object-cover transition-opacity duration-300",
-                imageLoading ? "opacity-0" : "opacity-100"
-              )}
+              className="object-cover"
               sizes="320px"
-              onLoad={() => setImageLoading(false)}
-              onError={() => {
-                setImageError(true);
-                setImageLoading(false);
-              }}
             />
             {/* Dark overlay for better text visibility */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
@@ -591,34 +560,46 @@ function CompactMilestoneCard({ milestone, postCount, isActive, onClick }: Compa
               </div>
             </div>
           </>
-        ) : null}
+        ) : (
+          /* Fallback: Large milestone number on gradient with status */
+          <div className={cn(
+            "w-20 h-20 rounded-full flex items-center justify-center border-4 border-white/40",
+            status === "completed" 
+              ? "bg-india-green/80" 
+              : status === "current" 
+              ? "bg-white/20 backdrop-blur-sm animate-pulse" 
+              : "bg-white/20 backdrop-blur-sm"
+          )}>
+            <span className="text-white font-bold text-4xl drop-shadow-lg">{milestone.display_order + 1}</span>
+          </div>
+        )}
       </div>
       
       {/* Content below - same structure as post card */}
-      <div className="p-3 overflow-hidden min-w-0">
-        {showGradientFallback && (
+      <div className="p-3">
+        {!coverUrl && (
           <h3 className="text-base font-semibold text-gray-900 truncate mb-1">
             {milestone.name}
           </h3>
         )}
-        {!showGradientFallback && milestone.description && (
-          <p className="text-sm text-gray-600 line-clamp-2 mb-2 break-words">
+        {coverUrl && milestone.description && (
+          <p className="text-sm text-gray-600 line-clamp-2 mb-2">
             {milestone.description}
           </p>
         )}
         {/* Date range - always show if available */}
         {dateRange && (
           <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-2">
-            <Calendar className="h-3 w-3 flex-shrink-0" />
-            <span className="truncate">{dateRange}</span>
+            <Calendar className="h-3 w-3" />
+            <span>{dateRange}</span>
           </div>
         )}
-        <div className="flex items-center gap-2 text-xs text-gray-500 min-w-0">
-          <span className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-3 text-xs text-gray-500">
+          <span className="flex items-center gap-1">
             <ImageIcon className="h-3 w-3" />
             {postCount} opslag
           </span>
-          <span className="text-saffron font-medium whitespace-nowrap ml-auto flex-shrink-0">
+          <span className="text-saffron font-medium whitespace-nowrap ml-auto">
             Se opslag →
           </span>
         </div>
@@ -635,9 +616,6 @@ interface CompactPostCardProps {
 }
 
 function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
-  const [imageError, setImageError] = useState(false);
-  const [imageLoading, setImageLoading] = useState(true);
-  
   const sortedMedia = [...post.media].sort(
     (a, b) => a.display_order - b.display_order
   );
@@ -645,41 +623,14 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
   const mediaCount = sortedMedia.length;
   const imageCount = sortedMedia.filter((m) => m.type === "image").length;
   const videoCount = sortedMedia.filter((m) => m.type === "video").length;
-
-  const isVideo = firstMedia?.type === "video";
   
   // Calculate day number from post date
   const postDate = post.captured_at || post.created_at;
   const dayNumber = getDayNumber(postDate);
 
-  // Get image URL - use original image directly for reliability
-  const getThumbnailUrl = () => {
-    if (!firstMedia) return null;
-    
-    // For videos, use thumbnail_path if available
-    if (isVideo && firstMedia.thumbnail_path) {
-      return getMediaUrl(firstMedia.thumbnail_path);
-    }
-    
-    // For any media type with storage_path, use it
-    if (firstMedia.storage_path) {
-      return getMediaUrl(firstMedia.storage_path);
-    }
-    
-    return null;
-  };
-
-  const thumbnailUrl = getThumbnailUrl();
-
   const truncatedBody = post.body.length > 80 
     ? post.body.slice(0, 80) + "..." 
     : post.body;
-
-  // Show gradient fallback if:
-  // - No media at all
-  // - No valid thumbnail URL (missing storage_path)
-  // - Image failed to load (and not a video)
-  const showGradientFallback = !firstMedia || !thumbnailUrl || (imageError && !isVideo);
 
   return (
     <button
@@ -695,59 +646,45 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
       )}
     >
       {/* Large image/video thumbnail on top */}
-      <div className="relative h-[120px] flex-shrink-0 overflow-hidden" style={{ background: "#e5e5e5" }}>
-        {showGradientFallback ? (
-          /* No media or error - show gradient with text icon */
-          <div 
-            className="absolute inset-0 flex items-center justify-center"
-            style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
-          >
-            <span className="text-white text-3xl">📝</span>
-          </div>
-        ) : firstMedia ? (
+      <div className="relative h-[120px] flex-shrink-0 overflow-hidden bg-muted">
+        {firstMedia ? (
           <>
-            {/* Loading skeleton - shown while image is loading */}
-            {imageLoading && thumbnailUrl && (
-              <div className="absolute inset-0 bg-gray-200 animate-pulse" />
-            )}
-            
-            {/* Image or video thumbnail */}
-            {thumbnailUrl && !imageError ? (
+            {/* Image or video thumbnail - same approach as PostCard */}
+            {firstMedia.type === "image" ? (
               <Image
-                src={thumbnailUrl}
+                src={getMediaUrl(firstMedia.storage_path)}
                 alt=""
                 fill
-                className={cn(
-                  "object-cover transition-opacity duration-300",
-                  imageLoading ? "opacity-0" : "opacity-100"
-                )}
+                className="object-cover"
                 sizes="320px"
-                onLoad={() => setImageLoading(false)}
-                onError={() => {
-                  console.error("[PostCarousel] Image failed to load:", thumbnailUrl);
-                  setImageError(true);
-                  setImageLoading(false);
-                }}
               />
-            ) : isVideo ? (
-              /* Fallback for videos without thumbnail or failed load: use video first frame */
-              <video
-                src={`${getMediaUrl(firstMedia.storage_path)}#t=0.001`}
-                preload="metadata"
-                muted
-                playsInline
-                className="absolute inset-0 w-full h-full object-cover"
-                onLoadedData={() => setImageLoading(false)}
-              />
-            ) : null}
-            
-            {/* Video play overlay */}
-            {isVideo && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="p-2.5 bg-black/50 rounded-full">
-                  <Play className="h-5 w-5 text-white fill-white" />
+            ) : (
+              <>
+                {/* Video thumbnail - use stored thumbnail or fallback to video frame */}
+                {firstMedia.thumbnail_path ? (
+                  <Image
+                    src={getMediaUrl(firstMedia.thumbnail_path)}
+                    alt=""
+                    fill
+                    className="object-cover"
+                    sizes="320px"
+                  />
+                ) : (
+                  <video
+                    src={`${getMediaUrl(firstMedia.storage_path)}#t=0.001`}
+                    preload="metadata"
+                    muted
+                    playsInline
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                )}
+                {/* Video play overlay */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="p-2.5 bg-black/50 rounded-full">
+                    <Play className="h-5 w-5 text-white fill-white" />
+                  </div>
                 </div>
-              </div>
+              </>
             )}
             {/* Media count badge */}
             {mediaCount > 1 && (
@@ -767,7 +704,15 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
               </div>
             )}
           </>
-        ) : null}
+        ) : (
+          /* No media - show gradient with text icon */
+          <div 
+            className="absolute inset-0 flex items-center justify-center"
+            style={{ background: "linear-gradient(135deg, #FF9933 0%, #138808 100%)" }}
+          >
+            <span className="text-white text-3xl">📝</span>
+          </div>
+        )}
         
         {/* Day badge - always visible on top */}
         <div className="absolute top-2 left-2 px-2 py-0.5 bg-black/50 backdrop-blur-sm rounded-full text-white text-xs font-medium z-10">
@@ -776,18 +721,18 @@ function CompactPostCard({ post, isActive, onClick }: CompactPostCardProps) {
       </div>
 
       {/* Content below image */}
-      <div className="p-3 overflow-hidden min-w-0">
-        <p className="text-sm text-gray-800 line-clamp-2 mb-2 leading-snug break-words">
+      <div className="p-3">
+        <p className="text-sm text-gray-800 line-clamp-2 mb-2 leading-snug">
           {truncatedBody}
         </p>
-        <div className="flex items-center gap-2 text-xs text-gray-500 min-w-0">
+        <div className="flex items-center gap-3 text-xs text-gray-500">
           {post.location_name && (
-            <span className="flex items-center gap-1 min-w-0 flex-1 overflow-hidden">
+            <span className="flex items-center gap-1 truncate flex-1">
               <MapPin className="h-3 w-3 text-india-green flex-shrink-0" />
               <span className="truncate">{post.location_name}</span>
             </span>
           )}
-          <span className="text-saffron font-medium whitespace-nowrap flex-shrink-0">
+          <span className="text-saffron font-medium whitespace-nowrap">
             Læs mere →
           </span>
         </div>
