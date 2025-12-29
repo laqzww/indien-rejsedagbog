@@ -175,17 +175,28 @@ function calculateDeclutterOffsets(
 
 /**
  * Apply calculated offsets to markers using Mapbox's setOffset method
+ * Only updates markers whose offsets have actually changed to avoid unnecessary repaints
  */
 function applyOffsetsToMarkers(
   markers: MarkerWithMilestone[],
   offsets: Map<string, { x: number; y: number }>
 ): void {
   markers.forEach((m) => {
-    const offset = offsets.get(m.milestoneId);
-    if (offset) {
-      m.marker.setOffset([offset.x, offset.y]);
+    const newOffset = offsets.get(m.milestoneId);
+    const currentOffset = m.marker.getOffset();
+    
+    if (newOffset) {
+      // Only update if offset has changed significantly (> 0.5px difference)
+      const dx = Math.abs(newOffset.x - currentOffset.x);
+      const dy = Math.abs(newOffset.y - currentOffset.y);
+      if (dx > 0.5 || dy > 0.5) {
+        m.marker.setOffset([newOffset.x, newOffset.y]);
+      }
     } else {
-      m.marker.setOffset([0, 0]);
+      // Reset to [0, 0] only if not already there
+      if (currentOffset.x !== 0 || currentOffset.y !== 0) {
+        m.marker.setOffset([0, 0]);
+      }
     }
   });
 }
@@ -233,8 +244,13 @@ export function declutterMilestoneMarkers(
 
   // Check if decluttering is needed
   if (!hasOverlappingMarkers(markerData, map, fullConfig.minDistance)) {
-    // No overlaps - reset all offsets
-    markers.forEach((marker) => marker.setOffset([0, 0]));
+    // No overlaps - reset offsets only if they're not already at [0, 0]
+    markers.forEach((marker) => {
+      const currentOffset = marker.getOffset();
+      if (currentOffset.x !== 0 || currentOffset.y !== 0) {
+        marker.setOffset([0, 0]);
+      }
+    });
     return () => {
       markers.forEach((marker) => marker.setOffset([0, 0]));
     };

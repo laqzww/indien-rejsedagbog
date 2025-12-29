@@ -692,8 +692,6 @@ export function JourneyMap({
       const el = document.createElement("div");
       el.className = "milestone-marker";
       el.style.cursor = "pointer";
-      // Add transition for smooth declutter animation
-      el.style.transition = "transform 0.3s ease-out";
       el.innerHTML = `
         <div class="${markerSize} rounded-full bg-saffron text-white flex items-center justify-center font-bold shadow-lg border-2 border-white cursor-pointer hover:scale-110 transition-transform" style="background-color: #FF9933;">
           ${milestoneNumber}
