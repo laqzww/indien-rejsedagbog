@@ -7,7 +7,7 @@ import { Header } from "./Header";
 import { PostFeed } from "./post/PostFeed";
 import { EmptyFeed } from "./post/EmptyFeed";
 // Timeline sidebar removed - now using carousel for all milestone browsing
-import { JourneyCarousel, type CarouselPost, type CarouselViewMode } from "./map/PostCarousel";
+import { JourneyCarousel, type CarouselPost, type CarouselMedia, type CarouselViewMode } from "./map/PostCarousel";
 import type { MapStyle } from "./map/JourneyMap";
 import { Button } from "./ui/button";
 import { Route, Map as MapIcon, RefreshCw, Layers } from "lucide-react";
@@ -37,6 +37,17 @@ const CAROUSEL_HEIGHT = 280;
 // "Se rejserute" button height: button (~44px) + padding (~32px)
 const BUTTON_HEIGHT = 80;
 
+// Media type with location data for individual media markers
+export interface JourneyMedia {
+  id: string;
+  type: string;
+  storage_path: string;
+  thumbnail_path: string | null;
+  display_order: number;
+  lat: number | null;
+  lng: number | null;
+}
+
 interface JourneyPost {
   id: string;
   body: string;
@@ -45,13 +56,7 @@ interface JourneyPost {
   location_name: string | null;
   created_at: string;
   captured_at: string | null;
-  media: {
-    id: string;
-    type: string;
-    storage_path: string;
-    thumbnail_path: string | null;
-    display_order: number;
-  }[];
+  media: JourneyMedia[];
 }
 
 interface HomeClientProps {
@@ -115,6 +120,12 @@ export function HomeClient({
   const [activeMilestoneIndex, setActiveMilestoneIndex] = useState(0);
   const [showCarousel, setShowCarousel] = useState(false);
   
+  // Media level state (for the third carousel level)
+  const [activePost, setActivePost] = useState<CarouselPost | null>(null);
+  const [mediaItems, setMediaItems] = useState<CarouselMedia[]>([]);
+  const [activeMediaIndex, setActiveMediaIndex] = useState(0);
+  const [highlightMediaId, setHighlightMediaId] = useState<string | null>(null);
+  
   const mapContainerRef = useRef<HTMLDivElement>(null);
   
   // Handler for view changes - updates URL instead of local state
@@ -162,6 +173,11 @@ export function HomeClient({
       setActiveMilestone(null);
       setCarouselPosts([]);
       setHighlightPostId(null);
+      // Reset media state
+      setActivePost(null);
+      setMediaItems([]);
+      setActiveMediaIndex(0);
+      setHighlightMediaId(null);
     }
   }, [activeView]);
 
@@ -261,6 +277,11 @@ export function HomeClient({
     setActivePostIndex(0);
     setActiveMilestoneIndex(0);
     setCarouselViewMode("posts");
+    // Reset media state
+    setActivePost(null);
+    setMediaItems([]);
+    setActiveMediaIndex(0);
+    setHighlightMediaId(null);
     
     // Clear focus coordinates
     const params = new URLSearchParams(searchParams.toString());
@@ -328,26 +349,127 @@ export function HomeClient({
   const handleViewModeChange = useCallback((mode: CarouselViewMode) => {
     setCarouselViewMode(mode);
     
-    // When switching to posts view, update map to first post location
-    if (mode === "posts" && carouselPosts.length > 0) {
-      const firstPost = carouselPosts[0];
-      if (firstPost.lat && firstPost.lng) {
-        const params = new URLSearchParams(searchParams.toString());
-        params.set("lat", firstPost.lat.toString());
-        params.set("lng", firstPost.lng.toString());
-        params.set("zoom", "16"); // Very close zoom for seeing the local area
-        router.replace(`/?${params.toString()}`, { scroll: false });
+    // When switching to posts view, update map to first post location and clear media state
+    if (mode === "posts") {
+      // Clear media state when going back to posts
+      setActivePost(null);
+      setMediaItems([]);
+      setActiveMediaIndex(0);
+      setHighlightMediaId(null);
+      
+      if (carouselPosts.length > 0) {
+        const firstPost = carouselPosts[0];
+        if (firstPost.lat && firstPost.lng) {
+          const params = new URLSearchParams(searchParams.toString());
+          params.set("lat", firstPost.lat.toString());
+          params.set("lng", firstPost.lng.toString());
+          params.set("zoom", "16"); // Very close zoom for seeing the local area
+          router.replace(`/?${params.toString()}`, { scroll: false });
+        }
       }
     }
     // When switching to milestones view, zoom out to show the milestone
     else if (mode === "milestones" && activeMilestone) {
+      // Clear media state when going to milestones
+      setActivePost(null);
+      setMediaItems([]);
+      setActiveMediaIndex(0);
+      setHighlightMediaId(null);
+      
       const params = new URLSearchParams(searchParams.toString());
       params.set("lat", activeMilestone.lat.toString());
       params.set("lng", activeMilestone.lng.toString());
       params.set("zoom", "8"); // More zoomed out
       router.replace(`/?${params.toString()}`, { scroll: false });
     }
-  }, [carouselPosts, activeMilestone, router, searchParams]);
+    // When switching to media view, set up media state from current post
+    else if (mode === "media") {
+      const currentPost = carouselPosts[activePostIndex];
+      if (currentPost) {
+        // Sort media by display_order (same as in feed/gallery)
+        const sortedMedia = [...currentPost.media].sort(
+          (a, b) => a.display_order - b.display_order
+        );
+        
+        setActivePost(currentPost);
+        setMediaItems(sortedMedia);
+        setActiveMediaIndex(0);
+        
+        // Highlight first media and zoom to its location
+        if (sortedMedia.length > 0) {
+          const firstMedia = sortedMedia[0];
+          setHighlightMediaId(firstMedia.id);
+          
+          // Use media's location if available, otherwise post's location
+          const lat = firstMedia.lat ?? currentPost.lat;
+          const lng = firstMedia.lng ?? currentPost.lng;
+          
+          if (lat && lng) {
+            const params = new URLSearchParams(searchParams.toString());
+            params.set("lat", lat.toString());
+            params.set("lng", lng.toString());
+            params.set("zoom", "17"); // Very close for media-level detail
+            router.replace(`/?${params.toString()}`, { scroll: false });
+          }
+        }
+      }
+    }
+  }, [carouselPosts, activePostIndex, activeMilestone, router, searchParams]);
+
+  // Handle media change in carousel (when swiping between media items)
+  const handleCarouselMediaChange = useCallback((index: number, media: CarouselMedia) => {
+    setActiveMediaIndex(index);
+    setHighlightMediaId(media.id);
+    
+    // Zoom map to media location (or post location if media doesn't have GPS)
+    const lat = media.lat ?? activePost?.lat;
+    const lng = media.lng ?? activePost?.lng;
+    
+    if (lat && lng) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("lat", lat.toString());
+      params.set("lng", lng.toString());
+      params.set("zoom", "17"); // Very close for media-level detail
+      router.replace(`/?${params.toString()}`, { scroll: false });
+    }
+  }, [activePost, router, searchParams]);
+
+  // Handle media click in carousel - navigate to full post view
+  const handleMediaClick = useCallback((media: CarouselMedia) => {
+    // Navigate to feed view and scroll to the post containing this media
+    if (activePost) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("view", "feed");
+      params.set("post", activePost.id);
+      params.delete("lat");
+      params.delete("lng");
+      params.delete("zoom");
+      router.push(`/?${params.toString()}`, { scroll: false });
+    }
+  }, [activePost, router, searchParams]);
+
+  // Handle media marker click on map - switch to media in carousel
+  const handleMapMediaClick = useCallback((media: CarouselMedia, post: CarouselPost) => {
+    // Find the index of the media in the current media items
+    const mediaIndex = mediaItems.findIndex(m => m.id === media.id);
+    
+    if (mediaIndex >= 0) {
+      setActiveMediaIndex(mediaIndex);
+      setHighlightMediaId(media.id);
+      
+      // Zoom to media location
+      const lat = media.lat ?? post.lat;
+      const lng = media.lng ?? post.lng;
+      
+      if (lat && lng) {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set("lat", lat.toString());
+        params.set("lng", lng.toString());
+        params.set("zoom", "17");
+        router.replace(`/?${params.toString()}`, { scroll: false });
+      }
+    }
+  }, [mediaItems, router, searchParams]);
 
   // Handler for "Se rejserute" button - opens carousel at first milestone
   const handleShowJourney = useCallback(() => {
@@ -448,17 +570,21 @@ export function HomeClient({
                   posts={mapPosts}
                   onMilestoneClick={handleMilestoneClick}
                   onPostClick={handleMapPostClick}
+                  onMediaClick={handleMapMediaClick}
                   onError={handleMapError}
                   focusLat={focusLat}
                   focusLng={focusLng}
                   focusZoom={focusZoom}
                   activeMilestone={activeMilestone}
                   highlightPostId={highlightPostId}
+                  highlightMediaId={highlightMediaId}
+                  activePostForMedia={activePost}
+                  showMediaMarkers={carouselViewMode === "media"}
                   extentBottomOffset={showCarousel ? CAROUSEL_HEIGHT : BUTTON_HEIGHT}
                   mapStyle={mapStyle}
                 />
 
-                {/* Journey Carousel - shows milestones or posts (no pseudo-milestones) */}
+                {/* Journey Carousel - shows milestones, posts, or media (hierarchical) */}
                 {showCarousel && activeMilestone && (
                   <JourneyCarousel
                     milestones={milestones}
@@ -466,11 +592,16 @@ export function HomeClient({
                     activeMilestoneIndex={activeMilestoneIndex}
                     posts={carouselPosts}
                     activePostIndex={activePostIndex}
+                    activePost={activePost}
+                    mediaItems={mediaItems}
+                    activeMediaIndex={activeMediaIndex}
                     viewMode={carouselViewMode}
                     onViewModeChange={handleViewModeChange}
                     onMilestoneChange={handleCarouselMilestoneChange}
                     onPostChange={handleCarouselPostChange}
+                    onMediaChange={handleCarouselMediaChange}
                     onPostClick={handlePostClick}
+                    onMediaClick={handleMediaClick}
                     onClose={handleCarouselClose}
                     getPostsForMilestone={getPostsForMilestone}
                   />

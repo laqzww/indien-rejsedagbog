@@ -2,6 +2,17 @@
 
 import { getMediaUrl } from "@/lib/upload";
 
+// Media type with location data for individual media markers
+export interface MapMedia {
+  id: string;
+  type: string;
+  storage_path: string;
+  thumbnail_path: string | null;
+  display_order: number;
+  lat: number | null;
+  lng: number | null;
+}
+
 // Post type for map markers
 export interface MapPost {
   id: string;
@@ -11,18 +22,16 @@ export interface MapPost {
   location_name: string | null;
   created_at: string;
   captured_at: string | null;
-  media: {
-    id: string;
-    type: string;
-    storage_path: string;
-    thumbnail_path: string | null;
-    display_order: number;
-  }[];
+  media: MapMedia[];
 }
 
 // Deep crimson red that complements the saffron/green palette
 const PIN_COLOR = "#8B1538";
 const PIN_COLOR_DARK = "#6B1030";
+
+// Indigo color for media markers - creates visual contrast with warm post/milestone colors
+const MEDIA_COLOR = "#6366F1";
+const MEDIA_COLOR_LIGHT = "#818CF8";
 
 /**
  * Creates the HTML content for a traditional pin marker
@@ -77,6 +86,58 @@ export function createPostMarkerHTML(_post: MapPost, isMobile: boolean): string 
           fill="white"
         />
       </svg>
+    </div>
+  `;
+}
+
+/**
+ * Creates the HTML content for a subtle media marker (small dot)
+ * Used for the lowest level in the map hierarchy (zoom ≥ 15)
+ * 
+ * @param hasOwnLocation - true if media has its own GPS coordinates, false if using post location
+ * @param isMobile - whether to use larger touch targets
+ */
+export function createMediaMarkerHTML(hasOwnLocation: boolean, isMobile: boolean): string {
+  // Subtle dot sizes - smaller than post pins
+  const dotSize = isMobile ? 14 : 12;
+  const innerDotSize = isMobile ? 6 : 5;
+  
+  // Styling differs based on whether media has its own GPS location
+  // Media WITH GPS: solid dot with white border
+  // Media WITHOUT GPS: semi-transparent with dashed border (indicates estimated location)
+  const opacity = hasOwnLocation ? 1 : 0.6;
+  const borderStyle = hasOwnLocation ? "solid" : "dashed";
+  const borderWidth = hasOwnLocation ? 2 : 1.5;
+  
+  return `
+    <div class="media-marker-dot" style="
+      position: relative;
+      width: ${dotSize}px;
+      height: ${dotSize}px;
+      cursor: pointer;
+    ">
+      <div style="
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        background-color: ${MEDIA_COLOR};
+        border: ${borderWidth}px ${borderStyle} white;
+        opacity: ${opacity};
+        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      ">
+        ${hasOwnLocation ? `
+          <div style="
+            width: ${innerDotSize}px;
+            height: ${innerDotSize}px;
+            border-radius: 50%;
+            background-color: white;
+          "></div>
+        ` : ""}
+      </div>
     </div>
   `;
 }
@@ -268,6 +329,22 @@ export function injectPostMarkerStyles(): void {
     }
     .post-marker-highlighted .post-marker-pin {
       filter: brightness(1.15) drop-shadow(0 0 8px rgba(255,153,51,0.6)) !important;
+    }
+    
+    /* Media marker styles - subtle dot at bottom of hierarchy */
+    .media-marker-dot {
+      transition: transform 0.15s ease !important;
+    }
+    .media-marker-dot:hover > div {
+      transform: scale(1.2) !important;
+      box-shadow: 0 3px 6px rgba(0,0,0,0.4) !important;
+    }
+    
+    /* Highlighted media marker - bright glow */
+    .media-marker-highlighted .media-marker-dot > div {
+      transform: scale(1.3) !important;
+      box-shadow: 0 0 10px rgba(99, 102, 241, 0.7), 0 3px 6px rgba(0,0,0,0.3) !important;
+      border-color: #FF9933 !important;
     }
     
     /* Popup styles */

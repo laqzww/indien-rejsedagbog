@@ -7,8 +7,10 @@ import { findMilestoneForDate } from "@/lib/journey";
 import { declutterMilestoneMarkers } from "@/lib/map-declutter";
 import {
   createPostMarkerHTML,
+  createMediaMarkerHTML,
   injectPostMarkerStyles,
   type MapPost,
+  type MapMedia,
 } from "./PostMarker";
 
 // Available map styles
@@ -24,6 +26,7 @@ interface JourneyMapProps {
   posts: MapPost[];
   onMilestoneClick?: (milestone: Milestone, milestonePosts: MapPost[]) => void;
   onPostClick?: (post: MapPost) => void;
+  onMediaClick?: (media: MapMedia, post: MapPost) => void;
   onError?: () => void;
   initialCenter?: [number, number];
   initialZoom?: number;
@@ -35,6 +38,12 @@ interface JourneyMapProps {
   activeMilestone?: Milestone | null;
   // Highlight a specific post on the map
   highlightPostId?: string | null;
+  // Highlight a specific media on the map (when in media view mode)
+  highlightMediaId?: string | null;
+  // Active post for showing its media markers
+  activePostForMedia?: MapPost | null;
+  // Whether to show media markers (only when in media view mode and zoomed in)
+  showMediaMarkers?: boolean;
   // Bottom offset for extent calculations (e.g., carousel height)
   // This ensures the "useful" visible area is above overlaying UI elements
   extentBottomOffset?: number;
@@ -42,11 +51,14 @@ interface JourneyMapProps {
   mapStyle?: MapStyle;
 }
 
-// Re-export MapPost type for consumers
-export type { MapPost };
+// Re-export MapPost and MapMedia types for consumers
+export type { MapPost, MapMedia };
 
 // Zoom level at which post markers become visible
 const POST_VISIBILITY_ZOOM = 9;
+
+// Zoom level at which media markers become visible (street level detail)
+const MEDIA_VISIBILITY_ZOOM = 15;
 
 /**
  * Find all posts that belong to a specific milestone based on their date
@@ -80,6 +92,7 @@ export function JourneyMap({
   posts,
   onMilestoneClick,
   onPostClick,
+  onMediaClick,
   onError,
   initialCenter,
   initialZoom = 5,
@@ -88,6 +101,9 @@ export function JourneyMap({
   focusZoom = 14, // Default to neighborhood level
   activeMilestone,
   highlightPostId,
+  highlightMediaId,
+  activePostForMedia,
+  showMediaMarkers = false,
   extentBottomOffset = 0,
   mapStyle = "streets",
 }: JourneyMapProps) {
@@ -95,6 +111,7 @@ export function JourneyMap({
   const map = useRef<mapboxgl.Map | null>(null);
   const milestoneMarkersRef = useRef<mapboxgl.Marker[]>([]);
   const postMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  const mediaMarkersRef = useRef<mapboxgl.Marker[]>([]);
   // Track milestone IDs and original coordinates for decluttering
   const milestoneIdsRef = useRef<string[]>([]);
   const milestoneOriginalLngLatsRef = useRef<[number, number][]>([]);
@@ -105,6 +122,12 @@ export function JourneyMap({
   // Track which milestone is currently active and whether we're zoomed in or out
   const activeMilestoneRef = useRef<string | null>(null);
   const isZoomedInRef = useRef(false);
+
+  // Cleanup function to remove media markers only
+  const cleanupMediaMarkers = useCallback(() => {
+    mediaMarkersRef.current.forEach((marker) => marker.remove());
+    mediaMarkersRef.current = [];
+  }, []);
 
   // Cleanup function to remove all markers
   const cleanupMarkers = useCallback(() => {
@@ -124,7 +147,8 @@ export function JourneyMap({
     milestoneOriginalLngLatsRef.current = [];
     postMarkersRef.current.forEach((marker) => marker.remove());
     postMarkersRef.current = [];
-  }, []);
+    cleanupMediaMarkers();
+  }, [cleanupMediaMarkers]);
 
   // Update post marker visibility based on zoom level
   const updatePostVisibility = useCallback((zoom: number) => {
@@ -919,6 +943,106 @@ export function JourneyMap({
       }
     }
   }, [highlightPostId, isLoaded]);
+
+  // Handle media markers - show individual media pins when in media view mode
+  // These are small dots that appear when viewing a specific post's media
+  useEffect(() => {
+    const mapInstance = map.current;
+    if (!mapInstance || !isLoaded) return;
+
+    // Clean up existing media markers
+    cleanupMediaMarkers();
+
+    // Only show media markers when explicitly enabled and we have an active post
+    if (!showMediaMarkers || !activePostForMedia) return;
+
+    // Check zoom level - only show at street level
+    const currentZoom = mapInstance.getZoom();
+    if (currentZoom < MEDIA_VISIBILITY_ZOOM) return;
+
+    const isMobileDevice = window.innerWidth < 768;
+
+    // Sort media by display_order (same as in feed/gallery)
+    const sortedMedia = [...activePostForMedia.media].sort(
+      (a, b) => a.display_order - b.display_order
+    );
+
+    // Create markers for each media item
+    sortedMedia.forEach((media) => {
+      // Use media's own coordinates if available, otherwise fall back to post coordinates
+      const lat = media.lat ?? activePostForMedia.lat;
+      const lng = media.lng ?? activePostForMedia.lng;
+      
+      if (lat === null || lng === null) return;
+
+      const hasOwnLocation = media.lat !== null && media.lng !== null;
+
+      const el = document.createElement("div");
+      el.className = "media-marker";
+      el.innerHTML = createMediaMarkerHTML(hasOwnLocation, isMobileDevice);
+
+      // Store media id on element for highlighting and click handling
+      el.dataset.mediaId = media.id;
+      el.dataset.postId = activePostForMedia.id;
+
+      const marker = new mapboxgl.Marker({
+        element: el,
+        anchor: "center", // Dot is centered on coordinates
+      })
+        .setLngLat([lng, lat])
+        .addTo(mapInstance);
+
+      mediaMarkersRef.current.push(marker);
+
+      // Handle click on media marker
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        onMediaClick?.(media, activePostForMedia);
+      });
+    });
+
+    // Update visibility based on zoom changes
+    const handleZoom = () => {
+      const zoom = mapInstance.getZoom();
+      const shouldShow = zoom >= MEDIA_VISIBILITY_ZOOM;
+      mediaMarkersRef.current.forEach((marker) => {
+        const el = marker.getElement();
+        el.style.display = shouldShow ? "block" : "none";
+      });
+    };
+
+    mapInstance.on("zoom", handleZoom);
+
+    return () => {
+      mapInstance.off("zoom", handleZoom);
+    };
+  }, [isLoaded, showMediaMarkers, activePostForMedia, cleanupMediaMarkers, onMediaClick]);
+
+  // Handle highlighting of active media marker
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    // Reset all media markers to normal state
+    mediaMarkersRef.current.forEach((marker) => {
+      const el = marker.getElement();
+      el.style.zIndex = "";
+      el.classList.remove("media-marker-highlighted");
+    });
+
+    // Highlight the active media using CSS class
+    if (highlightMediaId) {
+      const activeMarker = mediaMarkersRef.current.find((marker) => {
+        const el = marker.getElement();
+        return el.dataset.mediaId === highlightMediaId;
+      });
+
+      if (activeMarker) {
+        const el = activeMarker.getElement();
+        el.style.zIndex = "110"; // Above post markers
+        el.classList.add("media-marker-highlighted");
+      }
+    }
+  }, [highlightMediaId, isLoaded]);
 
   // Don't render error here - parent handles it via onError callback
   // This allows for a cleaner retry mechanism

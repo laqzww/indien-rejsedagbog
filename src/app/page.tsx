@@ -64,6 +64,7 @@ export default async function HomePage({ searchParams }: PageProps) {
 
   // Fetch posts with location for map (including media details for thumbnail markers)
   // Order by captured_at (ascending) so earliest posts appear on the left in the carousel
+  // Include media lat/lng for individual media markers on the map
   const { data: mapPostsRaw } = await supabase
     .from("posts")
     .select(`
@@ -74,7 +75,7 @@ export default async function HomePage({ searchParams }: PageProps) {
       location_name,
       created_at,
       captured_at,
-      media (id, type, storage_path, thumbnail_path, display_order)
+      media (id, type, storage_path, thumbnail_path, display_order, lat, lng)
     `)
     .not("lat", "is", null)
     .order("captured_at", { ascending: true, nullsFirst: false })

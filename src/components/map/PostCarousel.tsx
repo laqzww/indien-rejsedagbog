@@ -47,6 +47,17 @@ function getMilestoneStatus(milestone: Milestone): MilestoneStatus {
   return "current";
 }
 
+// Media type with location data for individual media markers
+export interface CarouselMedia {
+  id: string;
+  type: string;
+  storage_path: string;
+  thumbnail_path: string | null;
+  display_order: number;
+  lat: number | null;
+  lng: number | null;
+}
+
 // Post type for carousel
 export interface CarouselPost {
   id: string;
@@ -56,17 +67,11 @@ export interface CarouselPost {
   location_name: string | null;
   created_at: string;
   captured_at: string | null;
-  media: {
-    id: string;
-    type: string;
-    storage_path: string;
-    thumbnail_path: string | null;
-    display_order: number;
-  }[];
+  media: CarouselMedia[];
 }
 
-// View mode for the carousel
-export type CarouselViewMode = "milestones" | "posts";
+// View mode for the carousel - includes new "media" level
+export type CarouselViewMode = "milestones" | "posts" | "media";
 
 interface JourneyCarouselProps {
   milestones: Milestone[];
@@ -74,11 +79,18 @@ interface JourneyCarouselProps {
   activeMilestoneIndex: number;
   posts: CarouselPost[];
   activePostIndex: number;
+  // Active post for media view (the post whose media we're browsing)
+  activePost?: CarouselPost | null;
+  // Media items for the active post (sorted by display_order)
+  mediaItems: CarouselMedia[];
+  activeMediaIndex: number;
   viewMode: CarouselViewMode;
   onViewModeChange: (mode: CarouselViewMode) => void;
   onMilestoneChange: (index: number, milestone: Milestone) => void;
   onPostChange: (index: number, post: CarouselPost) => void;
+  onMediaChange: (index: number, media: CarouselMedia) => void;
   onPostClick: (post: CarouselPost) => void;
+  onMediaClick: (media: CarouselMedia) => void;
   onClose: () => void;
   // Function to get posts for a milestone (for showing post count)
   getPostsForMilestone: (milestone: Milestone) => CarouselPost[];
@@ -90,11 +102,16 @@ export function JourneyCarousel({
   activeMilestoneIndex,
   posts,
   activePostIndex,
+  activePost,
+  mediaItems,
+  activeMediaIndex,
   viewMode,
   onViewModeChange,
   onMilestoneChange,
   onPostChange,
+  onMediaChange,
   onPostClick,
+  onMediaClick,
   onClose,
   getPostsForMilestone,
 }: JourneyCarouselProps) {
@@ -116,10 +133,20 @@ export function JourneyCarousel({
     dragFree: false,
   });
 
+  // Media carousel (for individual media items within a post)
+  const [mediaEmblaRef, mediaEmblaApi] = useEmblaCarousel({
+    align: "center",
+    containScroll: "trimSnaps",
+    loop: false,
+    skipSnaps: false,
+    dragFree: false,
+  });
+
   const [canScrollPrev, setCanScrollPrev] = useState(false);
   const [canScrollNext, setCanScrollNext] = useState(false);
   const [selectedMilestoneIndex, setSelectedMilestoneIndex] = useState(activeMilestoneIndex);
   const [selectedPostIndex, setSelectedPostIndex] = useState(activePostIndex);
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(activeMediaIndex);
   
   // Track if we're programmatically scrolling to avoid feedback loops
   const isProgrammaticScrollRef = useRef(false);
@@ -133,8 +160,16 @@ export function JourneyCarousel({
   const postsKey = posts.map(p => p.id).join(",");
   const prevPostsKeyRef = useRef(postsKey);
 
+  // Generate a stable key for media items
+  const mediaKey = mediaItems.map(m => m.id).join(",");
+  const prevMediaKeyRef = useRef(mediaKey);
+
   // Get the active API based on view mode
-  const activeApi = viewMode === "milestones" ? milestoneEmblaApi : postEmblaApi;
+  const activeApi = viewMode === "milestones" 
+    ? milestoneEmblaApi 
+    : viewMode === "posts" 
+    ? postEmblaApi 
+    : mediaEmblaApi;
 
   // Sync milestone carousel when external index changes OR on initial mount
   // IMPORTANT: We track the last external index to detect genuine parent-driven changes
@@ -223,6 +258,53 @@ export function JourneyCarousel({
     }, 150);
   }, [postEmblaApi, postsKey]);
 
+  // Initialize media carousel position when API is ready
+  useEffect(() => {
+    if (!mediaEmblaApi) return;
+    
+    // On mount, scroll to the active media
+    isProgrammaticScrollRef.current = true;
+    mediaEmblaApi.scrollTo(activeMediaIndex, false);
+    setSelectedMediaIndex(activeMediaIndex);
+    
+    setTimeout(() => {
+      isProgrammaticScrollRef.current = false;
+    }, 150);
+  }, [mediaEmblaApi]); // Only on API init
+
+  // Sync media carousel when external index changes
+  useEffect(() => {
+    if (!mediaEmblaApi) return;
+    if (activeMediaIndex === selectedMediaIndex && mediaItems.length > 0) return;
+    
+    isProgrammaticScrollRef.current = true;
+    const validIndex = Math.min(activeMediaIndex, Math.max(0, mediaItems.length - 1));
+    mediaEmblaApi.scrollTo(validIndex, false);
+    setSelectedMediaIndex(validIndex);
+    
+    setTimeout(() => {
+      isProgrammaticScrollRef.current = false;
+    }, 150);
+  }, [mediaEmblaApi, activeMediaIndex, selectedMediaIndex, mediaItems.length]);
+
+  // Reinitialize media carousel when media items change
+  useEffect(() => {
+    if (!mediaEmblaApi) return;
+    
+    if (prevMediaKeyRef.current === mediaKey) return;
+    prevMediaKeyRef.current = mediaKey;
+    
+    mediaEmblaApi.reInit();
+    
+    isProgrammaticScrollRef.current = true;
+    mediaEmblaApi.scrollTo(0, false);
+    setSelectedMediaIndex(0);
+    
+    setTimeout(() => {
+      isProgrammaticScrollRef.current = false;
+    }, 150);
+  }, [mediaEmblaApi, mediaKey]);
+
   // Handle milestone carousel scroll
   const onMilestoneSelect = useCallback(() => {
     if (!milestoneEmblaApi || isProgrammaticScrollRef.current) return;
@@ -250,6 +332,20 @@ export function JourneyCarousel({
       onPostChange(index, posts[index]);
     }
   }, [postEmblaApi, posts, onPostChange, selectedPostIndex]);
+
+  // Handle media carousel scroll
+  const onMediaSelect = useCallback(() => {
+    if (!mediaEmblaApi || isProgrammaticScrollRef.current) return;
+
+    const index = mediaEmblaApi.selectedScrollSnap();
+    if (index === selectedMediaIndex) return;
+    
+    setSelectedMediaIndex(index);
+
+    if (mediaItems[index]) {
+      onMediaChange(index, mediaItems[index]);
+    }
+  }, [mediaEmblaApi, mediaItems, onMediaChange, selectedMediaIndex]);
 
   // Update scroll state for active carousel
   const updateScrollState = useCallback(() => {
@@ -306,12 +402,25 @@ export function JourneyCarousel({
         isProgrammaticScrollRef.current = false;
       }, 150);
     }
+
+    // When switching to media view, reinit and scroll to first media
+    if (viewMode === "media" && mediaEmblaApi) {
+      isProgrammaticScrollRef.current = true;
+      
+      mediaEmblaApi.reInit();
+      
+      mediaEmblaApi.scrollTo(0, false);
+      setSelectedMediaIndex(0);
+      setTimeout(() => {
+        isProgrammaticScrollRef.current = false;
+      }, 150);
+    }
     
     // Update scroll buttons for new view
     requestAnimationFrame(() => {
       updateScrollState();
     });
-  }, [viewMode, postEmblaApi, milestoneEmblaApi, selectedMilestoneIndex, updateScrollState]);
+  }, [viewMode, postEmblaApi, milestoneEmblaApi, mediaEmblaApi, selectedMilestoneIndex, updateScrollState]);
 
   // Setup milestone carousel listeners
   useEffect(() => {
@@ -339,6 +448,19 @@ export function JourneyCarousel({
     };
   }, [postEmblaApi, onPostSelect]);
 
+  // Setup media carousel listeners
+  useEffect(() => {
+    if (!mediaEmblaApi) return;
+
+    mediaEmblaApi.on("select", onMediaSelect);
+    mediaEmblaApi.on("reInit", onMediaSelect);
+
+    return () => {
+      mediaEmblaApi.off("select", onMediaSelect);
+      mediaEmblaApi.off("reInit", onMediaSelect);
+    };
+  }, [mediaEmblaApi, onMediaSelect]);
+
   // Update scroll state when view mode or API changes
   useEffect(() => {
     updateScrollState();
@@ -361,9 +483,12 @@ export function JourneyCarousel({
   }, [activeApi]);
 
   // Navigate up in hierarchy by clicking on badge
-  // posts → milestones → route overview (close)
+  // media → posts → milestones → route overview (close)
   const handleBadgeClick = useCallback(() => {
-    if (viewMode === "posts") {
+    if (viewMode === "media") {
+      // Go up to posts view (stay on current post)
+      onViewModeChange("posts");
+    } else if (viewMode === "posts") {
       // Go up to milestones view (stay on current milestone)
       onViewModeChange("milestones");
     } else {
@@ -377,13 +502,32 @@ export function JourneyCarousel({
     onViewModeChange("posts");
   }, [onViewModeChange]);
 
-  // Handle post card click
+  // Handle post card click - switch to media view if post has geotagged media
   const handlePostCardClick = useCallback((post: CarouselPost) => {
-    onPostClick(post);
-  }, [onPostClick]);
+    // Check if post has any media (for media view navigation)
+    if (post.media.length > 0) {
+      onViewModeChange("media");
+    } else {
+      // No media - navigate to full post view
+      onPostClick(post);
+    }
+  }, [onViewModeChange, onPostClick]);
 
-  const itemCount = viewMode === "milestones" ? milestones.length : posts.length;
-  const selectedIndex = viewMode === "milestones" ? selectedMilestoneIndex : selectedPostIndex;
+  // Handle media card click - navigate to full post view
+  const handleMediaCardClick = useCallback((media: CarouselMedia) => {
+    onMediaClick(media);
+  }, [onMediaClick]);
+
+  const itemCount = viewMode === "milestones" 
+    ? milestones.length 
+    : viewMode === "posts" 
+    ? posts.length 
+    : mediaItems.length;
+  const selectedIndex = viewMode === "milestones" 
+    ? selectedMilestoneIndex 
+    : viewMode === "posts" 
+    ? selectedPostIndex 
+    : selectedMediaIndex;
 
   return (
     <div className="absolute bottom-0 left-0 right-0 z-40 pb-3 pt-2">
@@ -393,7 +537,7 @@ export function JourneyCarousel({
         <button
           onClick={handleBadgeClick}
           className="flex items-center gap-1.5 group px-2.5 py-1.5 rounded-full bg-black/40 backdrop-blur-sm hover:bg-black/50 transition-colors"
-          title={viewMode === "milestones" ? "Se hele ruten" : "Se alle destinationer"}
+          title={viewMode === "milestones" ? "Se hele ruten" : viewMode === "posts" ? "Se alle destinationer" : "Tilbage til opslag"}
         >
           <ChevronUp className="h-4 w-4 text-white/80 group-hover:text-white transition-colors" />
           {viewMode === "milestones" ? (
@@ -405,7 +549,7 @@ export function JourneyCarousel({
                 {selectedMilestoneIndex + 1}/{milestones.length}
               </span>
             </>
-          ) : (
+          ) : viewMode === "posts" ? (
             // In posts view - show current milestone name to indicate going back to it
             <>
               <div className="w-5 h-5 rounded-full bg-saffron text-white text-xs flex items-center justify-center font-bold">
@@ -417,6 +561,19 @@ export function JourneyCarousel({
               {posts.length > 0 && (
                 <span className="text-white/60 text-xs ml-1">
                   {selectedPostIndex + 1}/{posts.length}
+                </span>
+              )}
+            </>
+          ) : (
+            // In media view - show post info to indicate going back to posts
+            <>
+              <MapPin className="h-4 w-4 text-india-green" />
+              <span className="text-white text-sm font-medium truncate max-w-[120px]">
+                {activePost?.location_name || "Opslag"}
+              </span>
+              {mediaItems.length > 0 && (
+                <span className="text-white/60 text-xs ml-1">
+                  {selectedMediaIndex + 1}/{mediaItems.length}
                 </span>
               )}
             </>
@@ -508,6 +665,33 @@ export function JourneyCarousel({
             )}
           </div>
         </div>
+
+        {/* Media carousel - individual media items within a post */}
+        <div 
+          className={cn(
+            "overflow-hidden",
+            viewMode === "media" ? "block" : "hidden"
+          )} 
+          ref={mediaEmblaRef}
+        >
+          <div className="flex gap-3 px-4 lg:px-16">
+            {mediaItems.length > 0 ? (
+              mediaItems.map((media, index) => (
+                <CompactMediaCard
+                  key={media.id}
+                  media={media}
+                  postLocation={activePost}
+                  isActive={index === selectedMediaIndex}
+                  mediaNumber={index + 1}
+                  totalMedia={mediaItems.length}
+                  onClick={() => handleMediaCardClick(media)}
+                />
+              ))
+            ) : (
+              <EmptyMediaCard />
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Compact dot indicators for mobile - only when many items */}
@@ -523,7 +707,7 @@ export function JourneyCarousel({
                   : "bg-white/40"
               )}
               onClick={() => activeApi?.scrollTo(index)}
-              aria-label={`Gå til ${viewMode === "milestones" ? "destination" : "opslag"} ${index + 1}`}
+              aria-label={`Gå til ${viewMode === "milestones" ? "destination" : viewMode === "posts" ? "opslag" : "billede"} ${index + 1}`}
             />
           ))}
         </div>
@@ -808,6 +992,136 @@ function EmptyPostsCard({ milestoneName }: { milestoneName: string }) {
         <p className="text-sm text-gray-500">
           Ingen opslag for <span className="font-semibold text-gray-700">{milestoneName}</span> endnu
         </p>
+      </div>
+    </div>
+  );
+}
+
+// Media card component - individual media item within a post
+interface CompactMediaCardProps {
+  media: CarouselMedia;
+  postLocation: CarouselPost | null | undefined;
+  isActive: boolean;
+  mediaNumber: number;
+  totalMedia: number;
+  onClick: () => void;
+}
+
+function CompactMediaCard({ media, postLocation, isActive, mediaNumber, totalMedia, onClick }: CompactMediaCardProps) {
+  const hasOwnLocation = media.lat !== null && media.lng !== null;
+  
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        // Same width and height as other cards for consistent layout
+        "flex-shrink-0 w-[280px] sm:w-[300px] lg:w-[320px] h-[200px]",
+        "bg-white rounded-xl overflow-hidden shadow-xl",
+        "text-left transition-all duration-200 flex flex-col",
+        "hover:scale-[1.02] hover:shadow-2xl",
+        "focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2",
+        isActive && "ring-2 ring-indigo-500"
+      )}
+    >
+      {/* Large image/video on top - fills most of card */}
+      <div className="relative w-full h-[150px] flex-shrink-0 overflow-hidden bg-muted">
+        {media.type === "image" ? (
+          <Image
+            src={getMediaUrl(media.storage_path)}
+            alt=""
+            fill
+            className="object-cover"
+            sizes="320px"
+          />
+        ) : (
+          <>
+            {/* Video thumbnail */}
+            {media.thumbnail_path ? (
+              <Image
+                src={getMediaUrl(media.thumbnail_path)}
+                alt=""
+                fill
+                className="object-cover"
+                sizes="320px"
+              />
+            ) : (
+              <video
+                src={`${getMediaUrl(media.storage_path)}#t=0.001`}
+                preload="metadata"
+                muted
+                playsInline
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            )}
+            {/* Video play overlay */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="p-2.5 bg-black/50 rounded-full">
+                <Play className="h-5 w-5 text-white fill-white" />
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Media number badge */}
+        <div className="absolute top-2 left-2 px-2 py-0.5 bg-indigo-600/90 backdrop-blur-sm rounded-full text-white text-xs font-medium z-10">
+          {mediaNumber}/{totalMedia}
+        </div>
+
+        {/* Location status indicator - subtle indicator for GPS status */}
+        <div className={cn(
+          "absolute top-2 right-2 px-2 py-0.5 rounded-full text-xs font-medium z-10 flex items-center gap-1",
+          hasOwnLocation 
+            ? "bg-india-green/90 text-white" 
+            : "bg-white/80 text-gray-600 backdrop-blur-sm border border-dashed border-gray-300"
+        )}>
+          <MapPin className="h-3 w-3" />
+          {hasOwnLocation ? "GPS" : "~"}
+        </div>
+      </div>
+
+      {/* Compact content below - just location info and action */}
+      <div className="p-3 flex items-center justify-between">
+        <div className="flex items-center gap-2 text-xs text-gray-500 flex-1 min-w-0">
+          {hasOwnLocation ? (
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-indigo-500" />
+              <span className="truncate">Egen placering</span>
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-gray-400">
+              <span className="w-2 h-2 rounded-full border border-dashed border-gray-400" />
+              <span className="truncate">{postLocation?.location_name || "Opslagets placering"}</span>
+            </span>
+          )}
+        </div>
+        <span className="text-indigo-600 font-medium whitespace-nowrap text-xs">
+          Se opslag →
+        </span>
+      </div>
+    </button>
+  );
+}
+
+// Empty state when no media items
+function EmptyMediaCard() {
+  return (
+    <div
+      className={cn(
+        "flex-shrink-0 w-[280px] sm:w-[300px] lg:w-[320px] h-[200px]",
+        "bg-white rounded-xl overflow-hidden shadow-xl flex flex-col"
+      )}
+    >
+      <div 
+        className="relative w-full h-[150px] flex-shrink-0 flex items-center justify-center"
+        style={{ background: "linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)" }}
+      >
+        <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+          <ImageIcon className="h-8 w-8 text-white" />
+        </div>
+      </div>
+      
+      <div className="p-3 flex-1 flex items-center justify-center text-center">
+        <p className="text-sm text-gray-500">Ingen medier i dette opslag</p>
       </div>
     </div>
   );
