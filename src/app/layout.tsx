@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Outfit, JetBrains_Mono, Tillana } from "next/font/google";
 import "./globals.css";
 
@@ -19,6 +19,10 @@ const tillana = Tillana({
   weight: ["400", "500", "600", "700"],
 });
 
+export const viewport: Viewport = {
+  themeColor: "#FF9933",
+};
+
 export const metadata: Metadata = {
   title: {
     default: "T&A Indien Rejsedagbog",
@@ -31,6 +35,12 @@ export const metadata: Metadata = {
     title: "Tommy og Amalies Indien Rejsedagbog",
     description: "Følg med på vores eventyr gennem Indien - fra Kerala til Delhi",
     type: "website",
+  },
+  // Apple specific settings
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "T&A Indien",
   },
 };
 
