@@ -26,8 +26,21 @@ export interface ResumableUploadResult {
 // Supabase Storage limits - adjust based on your plan:
 // Free tier: 50MB max file size
 // Pro tier: 5GB max file size
-// Configure this based on your Supabase project settings
-export const MAX_FILE_SIZE_MB = 500; // 500MB - adjust if needed
+// Configure via NEXT_PUBLIC_MAX_FILE_SIZE_MB environment variable
+const DEFAULT_MAX_FILE_SIZE_MB = 500;
+
+function getMaxFileSizeMB(): number {
+  const envValue = process.env.NEXT_PUBLIC_MAX_FILE_SIZE_MB;
+  if (envValue) {
+    const parsed = parseInt(envValue, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return DEFAULT_MAX_FILE_SIZE_MB;
+}
+
+export const MAX_FILE_SIZE_MB = getMaxFileSizeMB();
 export const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 // Use 5MB chunks for better compatibility with Supabase's limits

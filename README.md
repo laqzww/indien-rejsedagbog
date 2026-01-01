@@ -90,14 +90,30 @@ npm install
 
 ### 3. Opsæt miljøvariabler
 
-Opret en `.env.local` fil med følgende variabler:
+Kopiér eksempelfilen og tilpas:
 
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=pk.your-public-token
-NEXT_PUBLIC_APP_URL=http://localhost:3000
+```bash
+cp .env.example .env.local
 ```
+
+Åbn `.env.local` og udfyld følgende **påkrævede** variabler:
+
+| Variabel | Beskrivelse | Hvor finder du den? |
+|----------|-------------|---------------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Din Supabase projekt URL | Supabase Dashboard → Settings → API |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon/public key | Supabase Dashboard → Settings → API |
+| `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` | Mapbox public access token | [Mapbox Account](https://account.mapbox.com/) |
+| `NEXT_PUBLIC_SITE_URL` | Din app URL (til auth) | `http://localhost:3000` i udvikling |
+
+**Valgfrie variabler:**
+
+| Variabel | Standard | Beskrivelse |
+|----------|----------|-------------|
+| `ADMIN_EMAILS` | (tom) | Komma-separeret liste over author-emails |
+| `NEXT_PUBLIC_JOURNEY_START_DATE` | `2025-12-18` | Rejsens startdato (Dag 0) |
+| `NEXT_PUBLIC_MAX_FILE_SIZE_MB` | `500` | Maks filstørrelse for uploads |
+
+Se `.env.example` for fuld dokumentation af alle miljøvariabler.
 
 ### 4. Supabase Setup
 
