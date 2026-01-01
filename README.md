@@ -139,7 +139,7 @@ Farvepalette baseret på det indiske flag:
 
 ## 📝 License
 
-MIT
+Apache 2.0 - Se [LICENSE](LICENSE) filen for detaljer.
 
 ---
 
