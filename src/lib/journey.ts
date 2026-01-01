@@ -1,7 +1,25 @@
 import type { Milestone } from "@/types/database";
 
 // Journey start date - Dag 0
-const JOURNEY_START_DATE = new Date("2025-12-18T00:00:00");
+// Can be overridden via NEXT_PUBLIC_JOURNEY_START_DATE environment variable
+const DEFAULT_JOURNEY_START_DATE = "2025-12-18";
+
+function getJourneyStartDate(): Date {
+  const envDate = process.env.NEXT_PUBLIC_JOURNEY_START_DATE;
+  const dateStr = envDate && /^\d{4}-\d{2}-\d{2}$/.test(envDate) 
+    ? envDate 
+    : DEFAULT_JOURNEY_START_DATE;
+  return new Date(`${dateStr}T00:00:00`);
+}
+
+// Memoize the journey start date to avoid repeated parsing
+let _journeyStartDate: Date | null = null;
+function getJourneyStartDateCached(): Date {
+  if (!_journeyStartDate) {
+    _journeyStartDate = getJourneyStartDate();
+  }
+  return _journeyStartDate;
+}
 
 /**
  * Calculate which day of the journey a date falls on
@@ -9,7 +27,8 @@ const JOURNEY_START_DATE = new Date("2025-12-18T00:00:00");
  */
 export function getDayNumber(date: Date | string): number {
   const d = typeof date === "string" ? new Date(date) : date;
-  const diffMs = d.getTime() - JOURNEY_START_DATE.getTime();
+  const journeyStart = getJourneyStartDateCached();
+  const diffMs = d.getTime() - journeyStart.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
   return Math.max(0, diffDays);
 }
@@ -25,7 +44,8 @@ export function formatDayLabel(dayNumber: number): string {
  * Get the date for a specific day number
  */
 export function getDateFromDayNumber(dayNumber: number): Date {
-  const date = new Date(JOURNEY_START_DATE);
+  const journeyStart = getJourneyStartDateCached();
+  const date = new Date(journeyStart);
   date.setDate(date.getDate() + dayNumber);
   return date;
 }
