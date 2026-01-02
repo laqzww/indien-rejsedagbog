@@ -7,7 +7,7 @@ export const size = {
 };
 export const contentType = "image/png";
 
-// Image generation - Admin version with navy background
+// Image generation - Admin version with gear icon
 export default function Icon() {
   return new ImageResponse(
     (
@@ -18,7 +18,7 @@ export default function Icon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#000080", // Navy background to distinguish admin
+          background: "#FF9933", // Saffron background (same as main app)
           borderRadius: "20%",
         }}
       >
@@ -37,16 +37,16 @@ export default function Icon() {
           {/* Tuktuk roof */}
           <path
             d="M20 28C20 24 24 20 30 20H34C38 20 42 22 44 26L46 28H18L20 28Z"
-            fill="#FF9933"
+            fill="#138808"
           />
           
           {/* Front wheel */}
-          <circle cx="24" cy="46" r="6" fill="#FFFDD0" />
-          <circle cx="24" cy="46" r="3" fill="#000080" />
+          <circle cx="24" cy="46" r="6" fill="#000080" />
+          <circle cx="24" cy="46" r="3" fill="#FFFDD0" />
           
           {/* Back wheel */}
-          <circle cx="44" cy="46" r="6" fill="#FFFDD0" />
-          <circle cx="44" cy="46" r="3" fill="#000080" />
+          <circle cx="44" cy="46" r="6" fill="#000080" />
+          <circle cx="44" cy="46" r="3" fill="#FFFDD0" />
           
           {/* Window */}
           <rect x="26" y="30" width="12" height="8" rx="1" fill="#87CEEB" />
@@ -55,7 +55,7 @@ export default function Icon() {
           <circle cx="18" cy="36" r="2" fill="#FFD700" />
           
           {/* Small gear icon in corner to indicate admin */}
-          <circle cx="52" cy="16" r="10" fill="#FF9933" />
+          <circle cx="52" cy="16" r="10" fill="#000080" />
           <path
             d="M52 10L53 12L55 12L56 14L55 16L56 18L55 20L53 20L52 22L50 20L48 20L47 18L48 16L47 14L48 12L50 12L52 10Z"
             fill="#FFFDD0"

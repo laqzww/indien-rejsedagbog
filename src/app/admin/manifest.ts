@@ -8,7 +8,7 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/admin",
     display: "standalone",
     background_color: "#FFFDD0",
-    theme_color: "#000080", // Navy to distinguish from main app
+    theme_color: "#FF9933", // Saffron (same as main app)
     icons: [
       {
         src: "/admin/icon-192",
