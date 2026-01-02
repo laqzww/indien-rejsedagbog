@@ -43,13 +43,22 @@ export async function GET() {
           {/* Headlight */}
           <circle cx="18" cy="36" r="2" fill="#FFD700" />
 
-          {/* Small gear icon in corner to indicate admin */}
-          <circle cx="52" cy="16" r="10" fill="#000080" />
-          <path
-            d="M52 10L53 12L55 12L56 14L55 16L56 18L55 20L53 20L52 22L50 20L48 20L47 18L48 16L47 14L48 12L50 12L52 10Z"
-            fill="#FFFDD0"
-          />
-          <circle cx="52" cy="16" r="3" fill="#000080" />
+          {/* Small gear badge in corner to indicate admin */}
+          <circle cx="54" cy="14" r="10" fill="#000080" />
+          <g transform="translate(54, 14)">
+            {/* Gear teeth */}
+            <path d="M-2,-8 L2,-8 L2,-6 L-2,-6 Z" fill="#FFFDD0" />
+            <path d="M-2,6 L2,6 L2,8 L-2,8 Z" fill="#FFFDD0" />
+            <path d="M-8,-2 L-6,-2 L-6,2 L-8,2 Z" fill="#FFFDD0" />
+            <path d="M6,-2 L8,-2 L8,2 L6,2 Z" fill="#FFFDD0" />
+            <path d="M4,-7 L6.5,-4.5 L5,-3 L2.5,-5.5 Z" fill="#FFFDD0" />
+            <path d="M-6.5,4.5 L-4,7 L-2.5,5.5 L-5,3 Z" fill="#FFFDD0" />
+            <path d="M-6.5,-4.5 L-4,-7 L-2.5,-5.5 L-5,-3 Z" fill="#FFFDD0" />
+            <path d="M4,7 L6.5,4.5 L5,3 L2.5,5.5 Z" fill="#FFFDD0" />
+            {/* Gear body */}
+            <circle r="5" fill="#FFFDD0" />
+            <circle r="2" fill="#000080" />
+          </g>
         </svg>
       </div>
     ),
