@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "T&A Indien Admin",
-    short_name: "T&A Admin",
+    name: "Indientur Admin",
+    short_name: "Indientur",
     description: "Admin panel til Tommy og Amalies rejsedagbog",
     start_url: "/admin",
     display: "standalone",
