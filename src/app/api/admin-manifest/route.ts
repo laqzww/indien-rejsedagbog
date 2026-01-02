@@ -1,25 +1,31 @@
-import type { MetadataRoute } from "next";
+import { NextResponse } from "next/server";
 
-export default function manifest(): MetadataRoute.Manifest {
-  return {
+export async function GET() {
+  const manifest = {
     name: "Indientur Admin",
     short_name: "Indientur",
     description: "Admin panel til Tommy og Amalies rejsedagbog",
     start_url: "/admin",
     display: "standalone",
     background_color: "#FFFDD0",
-    theme_color: "#FF9933", // Saffron (same as main app)
+    theme_color: "#FF9933",
     icons: [
       {
-        src: "/admin/icon-192",
+        src: "/api/admin-icon-192",
         sizes: "192x192",
         type: "image/png",
       },
       {
-        src: "/admin/icon-512",
+        src: "/api/admin-icon-512",
         sizes: "512x512",
         type: "image/png",
       },
     ],
   };
+
+  return NextResponse.json(manifest, {
+    headers: {
+      "Content-Type": "application/manifest+json",
+    },
+  });
 }

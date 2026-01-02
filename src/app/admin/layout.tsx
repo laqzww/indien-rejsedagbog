@@ -2,6 +2,19 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Header } from "@/components/Header";
 import { getIsAuthor } from "@/lib/author";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  manifest: "/api/admin-manifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Indientur Admin",
+  },
+  icons: {
+    apple: "/api/admin-apple-icon",
+  },
+};
 
 export default async function AdminLayout({
   children,
