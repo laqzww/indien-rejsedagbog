@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useMemo } from "react";
+import { useCallback, useState, useMemo, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Camera, X, Loader2, MapPinOff, Film } from "lucide-react";
 import { isHeicFile, convertHeicToJpeg } from "@/lib/heic";
@@ -50,6 +50,15 @@ export function MediaUpload({
   maxFiles = 10,
 }: MediaUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
+  
+  // Use a ref to always have access to the latest files value
+  // This prevents race conditions when processing multiple file batches
+  const filesRef = useRef<MediaFile[]>(files);
+  
+  // Keep the ref in sync with the prop
+  useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
 
   // Convert files to sortable items format
   const sortableItems: SortableMediaItem[] = useMemo(() => {
@@ -192,7 +201,10 @@ export function MediaUpload({
   const handleFiles = useCallback(
     async (newFiles: FileList | File[]) => {
       const fileArray = Array.from(newFiles);
-      const remainingSlots = maxFiles - files.length;
+      
+      // Use ref to get the current files count to avoid stale closure issues
+      const currentFiles = filesRef.current;
+      const remainingSlots = maxFiles - currentFiles.length;
       const filesToProcess = fileArray.slice(0, remainingSlots);
 
       if (filesToProcess.length === 0) return;
@@ -225,8 +237,13 @@ export function MediaUpload({
           
           allProcessedFiles.push(...processedChunk);
           
-          // Update UI progressively with each chunk
-          const newFileList = [...files, ...allProcessedFiles];
+          // Use ref to get the latest files value to avoid race conditions
+          // when multiple file batches are being processed simultaneously
+          const latestFiles = filesRef.current;
+          const newFileList = [...latestFiles, ...processedChunk];
+          
+          // Update the ref synchronously to prevent duplicates
+          filesRef.current = newFileList;
           onFilesChange(newFileList);
           
           // Capture first EXIF data for location auto-fill
@@ -247,7 +264,7 @@ export function MediaUpload({
         onExifExtracted(firstExifData);
       }
     },
-    [files, maxFiles, onFilesChange, onExifExtracted, processFile]
+    [maxFiles, onFilesChange, onExifExtracted, processFile]
   );
 
   const handleDrop = useCallback(
@@ -272,13 +289,18 @@ export function MediaUpload({
 
   const removeFile = useCallback(
     (id: string) => {
-      const file = files.find((f) => f.id === id);
+      // Use ref to get the latest files value
+      const currentFiles = filesRef.current;
+      const file = currentFiles.find((f) => f.id === id);
       if (file?.preview) {
         URL.revokeObjectURL(file.preview);
       }
-      onFilesChange(files.filter((f) => f.id !== id));
+      const newFiles = currentFiles.filter((f) => f.id !== id);
+      // Update ref synchronously
+      filesRef.current = newFiles;
+      onFilesChange(newFiles);
     },
-    [files, onFilesChange]
+    [onFilesChange]
   );
 
   const handleInputChange = useCallback(
