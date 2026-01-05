@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 
 export async function GET() {
   const manifest = {
+    id: "/admin",
     name: "Indientur Admin",
-    short_name: "Indientur",
+    short_name: "T&A Admin",
     description: "Admin panel til Tommy og Amalies rejsedagbog",
     start_url: "/admin",
     display: "standalone",
