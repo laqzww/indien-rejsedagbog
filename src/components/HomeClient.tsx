@@ -3,6 +3,7 @@
 import { useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { Header } from "./Header";
+import { InstallBanner } from "./InstallBanner";
 import { PostFeed } from "./post/PostFeed";
 import { EmptyFeed } from "./post/EmptyFeed";
 import { JourneyCarousel } from "./map/PostCarousel";
@@ -122,6 +123,9 @@ export function HomeClient({
         onViewChange={navigation.changeView}
         showNavigation={true}
       />
+
+      {/* Install App Banner - only visible on mobile, not when installed */}
+      <InstallBanner />
 
       {/* Feed View */}
       {navigation.activeView === "feed" && (
