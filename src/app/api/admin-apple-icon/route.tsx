@@ -3,9 +3,9 @@ import { ImageResponse } from "next/og";
 export const runtime = "edge";
 
 export async function GET() {
-  // 8-tooth gear centered at (51, 13), outer radius 10, inner radius 7
-  // Mathematically generated for perfect symmetry
-  const gearPath = "M48.4,3.3 L53.6,3.3 L52.8,6.2 L54.5,6.9 L56.0,4.3 L59.7,8.0 L57.1,9.5 L57.8,11.2 L60.7,10.4 L60.7,15.6 L57.8,14.8 L57.1,16.5 L59.7,18.0 L56.0,21.7 L54.5,19.1 L52.8,19.8 L53.6,22.7 L48.4,22.7 L49.2,19.8 L47.5,19.1 L46.0,21.7 L42.3,18.0 L44.9,16.5 L44.2,14.8 L41.3,15.6 L41.3,10.4 L44.2,11.2 L44.9,9.5 L42.3,8.0 L46.0,4.3 L47.5,6.9 L49.2,6.2 L48.4,3.3 Z";
+  // 8-tooth gear centered at (51, 13), outer radius 8, inner radius 5.5
+  // Mathematically generated for perfect symmetry - smaller for better fit in badge
+  const gearPath = "M48.9,5.3 L53.1,5.3 L52.4,7.7 L53.8,8.2 L55.0,6.1 L57.9,9.0 L55.8,10.3 L56.3,11.6 L58.7,10.9 L58.7,15.1 L56.3,14.4 L55.8,15.8 L57.9,17.0 L55.0,19.9 L53.8,17.8 L52.4,18.3 L53.1,20.7 L48.9,20.7 L49.6,18.3 L48.3,17.8 L47.0,19.9 L44.1,17.0 L46.2,15.8 L45.7,14.4 L43.3,15.1 L43.3,10.9 L45.7,11.6 L46.2,10.3 L44.1,9.0 L47.0,6.1 L48.3,8.2 L49.6,7.7 L48.9,5.3 Z";
 
   return new ImageResponse(
     (
@@ -47,7 +47,7 @@ export async function GET() {
           {/* Simple gear shape */}
           <path d={gearPath} fill="#FFFDD0" />
           {/* Center hole */}
-          <circle cx="51" cy="13" r="3" fill="#000080" />
+          <circle cx="51" cy="13" r="2.5" fill="#000080" />
         </svg>
       </div>
     ),
