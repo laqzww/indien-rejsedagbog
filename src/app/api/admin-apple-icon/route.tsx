@@ -2,51 +2,10 @@ import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
 
-// Generate gear path with perfect symmetry
-function generateGearPath(cx: number, cy: number, outerRadius: number, innerRadius: number, teethCount: number) {
-  const toothWidth = 0.4;
-  let path = "";
-  
-  for (let i = 0; i < teethCount; i++) {
-    const angle = (i * 2 * Math.PI) / teethCount;
-    const nextAngle = ((i + 1) * 2 * Math.PI) / teethCount;
-    
-    // Tooth outer edge
-    const toothStart = angle - (toothWidth * Math.PI) / teethCount;
-    const toothEnd = angle + (toothWidth * Math.PI) / teethCount;
-    
-    // Valley (between teeth)
-    const valleyStart = toothEnd;
-    const valleyEnd = nextAngle - (toothWidth * Math.PI) / teethCount;
-    
-    const ox1 = cx + outerRadius * Math.cos(toothStart);
-    const oy1 = cy + outerRadius * Math.sin(toothStart);
-    const ox2 = cx + outerRadius * Math.cos(toothEnd);
-    const oy2 = cy + outerRadius * Math.sin(toothEnd);
-    const ix1 = cx + innerRadius * Math.cos(valleyStart);
-    const iy1 = cy + innerRadius * Math.sin(valleyStart);
-    const ix2 = cx + innerRadius * Math.cos(valleyEnd);
-    const iy2 = cy + innerRadius * Math.sin(valleyEnd);
-    
-    if (i === 0) {
-      path += `M ${ox1.toFixed(1)} ${oy1.toFixed(1)} `;
-    }
-    path += `L ${ox2.toFixed(1)} ${oy2.toFixed(1)} L ${ix1.toFixed(1)} ${iy1.toFixed(1)} L ${ix2.toFixed(1)} ${iy2.toFixed(1)} `;
-    
-    // Connect to next tooth
-    const nextToothStart = nextAngle - (toothWidth * Math.PI) / teethCount;
-    const nox = cx + outerRadius * Math.cos(nextToothStart);
-    const noy = cy + outerRadius * Math.sin(nextToothStart);
-    path += `L ${nox.toFixed(1)} ${noy.toFixed(1)} `;
-  }
-  return path + "Z";
-}
-
 export async function GET() {
-  // Gear badge parameters - positioned in top-right corner, slightly larger
-  const gearCx = 51;
-  const gearCy = 13;
-  const gearPath = generateGearPath(gearCx, gearCy, 11, 7, 8);
+  // 8-tooth gear centered at (51, 13), outer radius 10, inner radius 7
+  // Mathematically generated for perfect symmetry
+  const gearPath = "M48.4,3.3 L53.6,3.3 L52.8,6.2 L54.5,6.9 L56.0,4.3 L59.7,8.0 L57.1,9.5 L57.8,11.2 L60.7,10.4 L60.7,15.6 L57.8,14.8 L57.1,16.5 L59.7,18.0 L56.0,21.7 L54.5,19.1 L52.8,19.8 L53.6,22.7 L48.4,22.7 L49.2,19.8 L47.5,19.1 L46.0,21.7 L42.3,18.0 L44.9,16.5 L44.2,14.8 L41.3,15.6 L41.3,10.4 L44.2,11.2 L44.9,9.5 L42.3,8.0 L46.0,4.3 L47.5,6.9 L49.2,6.2 L48.4,3.3 Z";
 
   return new ImageResponse(
     (
@@ -83,12 +42,12 @@ export async function GET() {
           {/* Headlight */}
           <circle cx="18" cy="36" r="2" fill="#FFD700" />
           
-          {/* Gear badge background */}
-          <circle cx={gearCx} cy={gearCy} r="13" fill="#000080" />
-          {/* Gear teeth */}
+          {/* Gear badge - Navy background circle */}
+          <circle cx="51" cy="13" r="12" fill="#000080" />
+          {/* Simple gear shape */}
           <path d={gearPath} fill="#FFFDD0" />
-          {/* Gear center hole */}
-          <circle cx={gearCx} cy={gearCy} r="3" fill="#000080" />
+          {/* Center hole */}
+          <circle cx="51" cy="13" r="3" fill="#000080" />
         </svg>
       </div>
     ),
