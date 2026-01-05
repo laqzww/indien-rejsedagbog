@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Outfit, JetBrains_Mono, Tillana } from "next/font/google";
 import "./globals.css";
+import { BadgeManager } from "@/components/BadgeManager";
 
 const outfit = Outfit({
   variable: "--font-outfit",
@@ -60,6 +61,7 @@ export default function RootLayout({
       <body
         className={`${outfit.variable} ${jetbrainsMono.variable} ${tillana.variable} antialiased min-h-dvh min-h-[100svh]`}
       >
+        <BadgeManager />
         {children}
       </body>
     </html>
