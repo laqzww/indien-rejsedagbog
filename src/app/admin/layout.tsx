@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Header } from "@/components/Header";
+import { AdminInstallBanner } from "@/components/AdminInstallBanner";
 import { getIsAuthor } from "@/lib/author";
 import type { Metadata } from "next";
 
@@ -37,6 +38,7 @@ export default async function AdminLayout({
   return (
     <div className="min-h-screen bg-muted/30">
       <Header isAuthor={true} activeView="admin" useLinks={true} />
+      <AdminInstallBanner />
       <main>{children}</main>
     </div>
   );

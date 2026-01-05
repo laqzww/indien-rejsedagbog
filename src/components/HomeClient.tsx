@@ -2,6 +2,7 @@
 
 import { useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { Header } from "./Header";
 import { InstallBanner } from "./InstallBanner";
 import { PostFeed } from "./post/PostFeed";
@@ -233,8 +234,15 @@ function FeedView({ hasPosts, groupedPosts, focusPostId }: FeedViewProps) {
       </main>
 
       <footer className="border-t border-border bg-white py-4">
-        <div className="flex items-center justify-center text-xs text-muted-foreground">
+        <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
           <span>© {new Date().getFullYear()} Tommy & Amalie</span>
+          <span className="text-muted-foreground/30">·</span>
+          <Link 
+            href="/admin" 
+            className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+          >
+            Admin
+          </Link>
         </div>
       </footer>
     </div>
