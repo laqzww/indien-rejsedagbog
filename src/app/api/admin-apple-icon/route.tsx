@@ -3,6 +3,63 @@ import { ImageResponse } from "next/og";
 export const runtime = "edge";
 
 export async function GET() {
+  // Generate gear teeth path using trigonometry for perfect symmetry
+  const cx = 32; // center x
+  const cy = 32; // center y
+  const outerRadius = 26; // outer radius of gear
+  const innerRadius = 18; // inner radius (valley between teeth)
+  const teethCount = 8; // number of teeth
+  const toothWidth = 0.35; // tooth width as fraction of segment (0-1)
+
+  // Build the gear path
+  let gearPath = "";
+  for (let i = 0; i < teethCount; i++) {
+    const startAngle = (i * 2 * Math.PI) / teethCount;
+    const toothStartAngle = startAngle - (toothWidth * Math.PI) / teethCount;
+    const toothEndAngle = startAngle + (toothWidth * Math.PI) / teethCount;
+    const valleyStartAngle = toothEndAngle;
+    const valleyEndAngle =
+      ((i + 1) * 2 * Math.PI) / teethCount - (toothWidth * Math.PI) / teethCount;
+
+    // Outer tooth corners
+    const outerX1 = cx + outerRadius * Math.cos(toothStartAngle);
+    const outerY1 = cy + outerRadius * Math.sin(toothStartAngle);
+    const outerX2 = cx + outerRadius * Math.cos(toothEndAngle);
+    const outerY2 = cy + outerRadius * Math.sin(toothEndAngle);
+
+    // Inner valley corners
+    const innerX1 = cx + innerRadius * Math.cos(valleyStartAngle);
+    const innerY1 = cy + innerRadius * Math.sin(valleyStartAngle);
+    const innerX2 = cx + innerRadius * Math.cos(valleyEndAngle);
+    const innerY2 = cy + innerRadius * Math.sin(valleyEndAngle);
+
+    if (i === 0) {
+      gearPath += `M ${outerX1.toFixed(2)} ${outerY1.toFixed(2)} `;
+    }
+
+    gearPath += `L ${outerX2.toFixed(2)} ${outerY2.toFixed(2)} `;
+    gearPath += `L ${innerX1.toFixed(2)} ${innerY1.toFixed(2)} `;
+    gearPath += `L ${innerX2.toFixed(2)} ${innerY2.toFixed(2)} `;
+
+    // Connect to next tooth
+    const nextOuterX =
+      cx +
+      outerRadius *
+        Math.cos(
+          ((i + 1) * 2 * Math.PI) / teethCount -
+            (toothWidth * Math.PI) / teethCount
+        );
+    const nextOuterY =
+      cy +
+      outerRadius *
+        Math.sin(
+          ((i + 1) * 2 * Math.PI) / teethCount -
+            (toothWidth * Math.PI) / teethCount
+        );
+    gearPath += `L ${nextOuterX.toFixed(2)} ${nextOuterY.toFixed(2)} `;
+  }
+  gearPath += "Z";
+
   return new ImageResponse(
     (
       <div
@@ -17,31 +74,12 @@ export async function GET() {
         }}
       >
         <svg width="140" height="140" viewBox="0 0 64 64" fill="none">
-          {/* Tuktuk body */}
-          <path
-            d="M16 36C16 32 18 28 22 28H38C42 28 46 30 48 34V42C48 44 46 46 44 46H20C18 46 16 44 16 42V36Z"
-            fill="#FFFDD0"
-          />
-
-          {/* Tuktuk roof */}
-          <path
-            d="M20 28C20 24 24 20 30 20H34C38 20 42 22 44 26L46 28H18L20 28Z"
-            fill="#138808"
-          />
-
-          {/* Front wheel */}
-          <circle cx="24" cy="46" r="6" fill="#000080" />
-          <circle cx="24" cy="46" r="3" fill="#FFFDD0" />
-
-          {/* Back wheel */}
-          <circle cx="44" cy="46" r="6" fill="#000080" />
-          <circle cx="44" cy="46" r="3" fill="#FFFDD0" />
-
-          {/* Window */}
-          <rect x="26" y="30" width="12" height="8" rx="1" fill="#87CEEB" />
-
-          {/* Headlight */}
-          <circle cx="18" cy="36" r="2" fill="#FFD700" />
+          {/* Gear body with teeth */}
+          <path d={gearPath} fill="#000080" />
+          {/* Center hole */}
+          <circle cx="32" cy="32" r="8" fill="#FF9933" />
+          {/* Center dot */}
+          <circle cx="32" cy="32" r="3" fill="#000080" />
         </svg>
       </div>
     ),
