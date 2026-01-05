@@ -1,42 +1,77 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { X, Share, Plus, Download, Smartphone } from "lucide-react";
+import { X, Share, Plus, Download, Smartphone, MoreVertical, Menu, EllipsisVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // LocalStorage key for dismiss state
 const DISMISS_KEY = "install-banner-dismissed";
 
-// Types for platform detection
+// Types for platform and browser detection
 type Platform = "ios" | "android" | "desktop" | "installed";
+type Browser = "safari" | "chrome" | "firefox" | "edge" | "samsung" | "opera" | "other";
+
+interface DeviceInfo {
+  platform: Platform;
+  browser: Browser;
+}
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
-// Detect platform and install state
-function detectPlatform(): Platform {
-  if (typeof window === "undefined") return "desktop";
+// Detect platform, browser and install state
+function detectDevice(): DeviceInfo {
+  if (typeof window === "undefined") {
+    return { platform: "desktop", browser: "other" };
+  }
 
   // Check if already running as installed PWA
   const isStandalone =
     window.matchMedia("(display-mode: standalone)").matches ||
     (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
 
-  if (isStandalone) return "installed";
+  if (isStandalone) {
+    return { platform: "installed", browser: "other" };
+  }
 
   const userAgent = window.navigator.userAgent.toLowerCase();
+  const vendor = window.navigator.vendor?.toLowerCase() || "";
 
-  // iOS detection (iPhone, iPad, iPod)
+  // Detect browser first
+  let browser: Browser = "other";
+
+  // Order matters - check more specific browsers first
+  if (/samsungbrowser/.test(userAgent)) {
+    browser = "samsung";
+  } else if (/opr|opera/.test(userAgent)) {
+    browser = "opera";
+  } else if (/edg/.test(userAgent)) {
+    browser = "edge";
+  } else if (/firefox|fxios/.test(userAgent)) {
+    browser = "firefox";
+  } else if (/crios/.test(userAgent)) {
+    // Chrome on iOS uses CriOS
+    browser = "chrome";
+  } else if (/chrome/.test(userAgent) && /google inc/.test(vendor)) {
+    browser = "chrome";
+  } else if (/safari/.test(userAgent) && /apple computer/.test(vendor)) {
+    browser = "safari";
+  }
+
+  // Detect platform
   const isIOS = /iphone|ipad|ipod/.test(userAgent) && !(window as Window & { MSStream?: unknown }).MSStream;
-  if (isIOS) return "ios";
+  if (isIOS) {
+    return { platform: "ios", browser };
+  }
 
-  // Android detection
   const isAndroid = /android/.test(userAgent);
-  if (isAndroid) return "android";
+  if (isAndroid) {
+    return { platform: "android", browser };
+  }
 
-  return "desktop";
+  return { platform: "desktop", browser };
 }
 
 // Check if banner was dismissed
@@ -52,19 +87,19 @@ function setDismissed(): void {
 }
 
 export function InstallBanner() {
-  const [platform, setPlatform] = useState<Platform>("desktop");
+  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo>({ platform: "desktop", browser: "other" });
   const [isVisible, setIsVisible] = useState(false);
-  const [showIOSGuide, setShowIOSGuide] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
 
   // Initialize platform detection and visibility
   useEffect(() => {
-    const detectedPlatform = detectPlatform();
-    setPlatform(detectedPlatform);
+    const detected = detectDevice();
+    setDeviceInfo(detected);
 
     // Show banner only on mobile and if not dismissed/installed
     const shouldShow =
-      (detectedPlatform === "ios" || detectedPlatform === "android") &&
+      (detected.platform === "ios" || detected.platform === "android") &&
       !isDismissed();
 
     setIsVisible(shouldShow);
@@ -94,11 +129,11 @@ export function InstallBanner() {
   const handleDismiss = useCallback(() => {
     setDismissed();
     setIsVisible(false);
-    setShowIOSGuide(false);
+    setShowGuide(false);
   }, []);
 
-  // Handle Android install
-  const handleAndroidInstall = useCallback(async () => {
+  // Handle native install (Android Chrome primarily)
+  const handleNativeInstall = useCallback(async () => {
     if (!deferredPrompt) return;
 
     await deferredPrompt.prompt();
@@ -110,13 +145,26 @@ export function InstallBanner() {
     setDeferredPrompt(null);
   }, [deferredPrompt]);
 
-  // Handle iOS button click - show guide
-  const handleIOSClick = useCallback(() => {
-    setShowIOSGuide(true);
+  // Handle guide button click
+  const handleShowGuide = useCallback(() => {
+    setShowGuide(true);
   }, []);
 
   // Don't render anything if not visible
   if (!isVisible) return null;
+
+  const { platform, browser } = deviceInfo;
+
+  // Determine if we have native install support
+  const hasNativeInstall = deferredPrompt !== null;
+
+  // Get browser-specific message for banner
+  const getBannerMessage = () => {
+    if (platform === "ios" && browser !== "safari") {
+      return "Åbn i Safari for bedste oplevelse";
+    }
+    return "Installer app for nem adgang";
+  };
 
   return (
     <>
@@ -136,16 +184,16 @@ export function InstallBanner() {
                 <Smartphone className="w-4 h-4 text-saffron" />
               </div>
               <p className="text-sm text-foreground/80 truncate">
-                <span className="font-medium">Installer app</span>
-                <span className="hidden sm:inline"> for nem adgang</span>
+                <span className="font-medium">{getBannerMessage()}</span>
               </p>
             </div>
 
             {/* Action buttons */}
             <div className="flex items-center gap-2 flex-shrink-0">
-              {platform === "android" && deferredPrompt && (
+              {/* Native install available (Android Chrome) */}
+              {hasNativeInstall && (
                 <button
-                  onClick={handleAndroidInstall}
+                  onClick={handleNativeInstall}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-saffron text-white text-sm font-medium rounded-lg hover:bg-saffron-dark transition-colors"
                 >
                   <Download className="w-4 h-4" />
@@ -153,15 +201,21 @@ export function InstallBanner() {
                 </button>
               )}
 
-              {platform === "android" && !deferredPrompt && (
-                <span className="text-xs text-muted-foreground">
-                  Åbn i Chrome
-                </span>
+              {/* Android without native install - show guide */}
+              {platform === "android" && !hasNativeInstall && (
+                <button
+                  onClick={handleShowGuide}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-saffron text-white text-sm font-medium rounded-lg hover:bg-saffron-dark transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Tilføj</span>
+                </button>
               )}
 
+              {/* iOS - show guide */}
               {platform === "ios" && (
                 <button
-                  onClick={handleIOSClick}
+                  onClick={handleShowGuide}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-saffron text-white text-sm font-medium rounded-lg hover:bg-saffron-dark transition-colors"
                 >
                   <Plus className="w-4 h-4" />
@@ -182,21 +236,307 @@ export function InstallBanner() {
         </div>
       </div>
 
-      {/* iOS Guide Modal */}
-      {showIOSGuide && (
-        <IOSGuideModal onClose={() => setShowIOSGuide(false)} onDismiss={handleDismiss} />
+      {/* Guide Modal */}
+      {showGuide && (
+        <InstallGuideModal
+          platform={platform}
+          browser={browser}
+          onClose={() => setShowGuide(false)}
+          onDismiss={handleDismiss}
+        />
       )}
     </>
   );
 }
 
-// iOS Guide Modal Component
-interface IOSGuideModalProps {
+// =============================================================================
+// Install Guide Modal Component
+// =============================================================================
+
+interface InstallGuideModalProps {
+  platform: Platform;
+  browser: Browser;
   onClose: () => void;
   onDismiss: () => void;
 }
 
-function IOSGuideModal({ onClose, onDismiss }: IOSGuideModalProps) {
+// Step type for guide
+interface GuideStep {
+  icon: React.ReactNode;
+  label: string;
+  description: string;
+}
+
+// Get browser-specific instructions
+function getInstallSteps(platform: Platform, browser: Browser): GuideStep[] {
+  // iOS Safari - standard flow
+  if (platform === "ios" && browser === "safari") {
+    return [
+      {
+        icon: <Share className="w-4 h-4" />,
+        label: "Del",
+        description: "Tryk på del-knappen i bunden af skærmen",
+      },
+      {
+        icon: <Plus className="w-4 h-4" />,
+        label: "Føj til hjemmeskærm",
+        description: "Scroll ned og tryk på \"Føj til hjemmeskærm\"",
+      },
+      {
+        icon: <span className="text-sm font-semibold">Tilføj</span>,
+        label: "Bekræft",
+        description: "Tryk \"Tilføj\" i øverste højre hjørne",
+      },
+    ];
+  }
+
+  // iOS Chrome - menu at top
+  if (platform === "ios" && browser === "chrome") {
+    return [
+      {
+        icon: <EllipsisVertical className="w-4 h-4" />,
+        label: "Menu",
+        description: "Tryk på de 3 prikker (⋯) i øverste højre hjørne",
+      },
+      {
+        icon: <Share className="w-4 h-4" />,
+        label: "Del...",
+        description: "Vælg \"Del...\" i menuen",
+      },
+      {
+        icon: <Plus className="w-4 h-4" />,
+        label: "Føj til hjemmeskærm",
+        description: "Vælg \"Føj til hjemmeskærm\" og tryk \"Tilføj\"",
+      },
+    ];
+  }
+
+  // iOS Firefox
+  if (platform === "ios" && browser === "firefox") {
+    return [
+      {
+        icon: <Menu className="w-4 h-4" />,
+        label: "Menu",
+        description: "Tryk på menu-ikonet (☰) i bunden",
+      },
+      {
+        icon: <Share className="w-4 h-4" />,
+        label: "Del",
+        description: "Vælg \"Del\" i menuen",
+      },
+      {
+        icon: <Plus className="w-4 h-4" />,
+        label: "Føj til hjemmeskærm",
+        description: "Vælg \"Føj til hjemmeskærm\" og bekræft",
+      },
+    ];
+  }
+
+  // iOS Edge
+  if (platform === "ios" && browser === "edge") {
+    return [
+      {
+        icon: <Menu className="w-4 h-4" />,
+        label: "Menu",
+        description: "Tryk på menu-ikonet (☰) i bunden",
+      },
+      {
+        icon: <Share className="w-4 h-4" />,
+        label: "Del",
+        description: "Vælg \"Del\" i menuen",
+      },
+      {
+        icon: <Plus className="w-4 h-4" />,
+        label: "Føj til hjemmeskærm",
+        description: "Vælg \"Føj til hjemmeskærm\" og bekræft",
+      },
+    ];
+  }
+
+  // iOS other browsers - recommend Safari
+  if (platform === "ios") {
+    return [
+      {
+        icon: <span className="text-sm">🧭</span>,
+        label: "Åbn Safari",
+        description: "For bedste oplevelse, åbn siden i Safari",
+      },
+      {
+        icon: <Share className="w-4 h-4" />,
+        label: "Del",
+        description: "Tryk på del-knappen i bunden",
+      },
+      {
+        icon: <Plus className="w-4 h-4" />,
+        label: "Føj til hjemmeskærm",
+        description: "Vælg \"Føj til hjemmeskærm\"",
+      },
+    ];
+  }
+
+  // Android Firefox
+  if (platform === "android" && browser === "firefox") {
+    return [
+      {
+        icon: <MoreVertical className="w-4 h-4" />,
+        label: "Menu",
+        description: "Tryk på de 3 prikker (⋮) i øverste højre hjørne",
+      },
+      {
+        icon: <Plus className="w-4 h-4" />,
+        label: "Installer",
+        description: "Vælg \"Installer\" eller \"Føj til hjemmeskærm\"",
+      },
+      {
+        icon: <span className="text-sm font-semibold">OK</span>,
+        label: "Bekræft",
+        description: "Bekræft installationen",
+      },
+    ];
+  }
+
+  // Android Samsung Internet
+  if (platform === "android" && browser === "samsung") {
+    return [
+      {
+        icon: <Menu className="w-4 h-4" />,
+        label: "Menu",
+        description: "Tryk på menu-ikonet (☰) i bunden",
+      },
+      {
+        icon: <Plus className="w-4 h-4" />,
+        label: "Føj side til",
+        description: "Vælg \"Føj side til\" → \"Hjemmeskærm\"",
+      },
+      {
+        icon: <span className="text-sm font-semibold">Tilføj</span>,
+        label: "Bekræft",
+        description: "Tryk \"Tilføj\" for at bekræfte",
+      },
+    ];
+  }
+
+  // Android Edge
+  if (platform === "android" && browser === "edge") {
+    return [
+      {
+        icon: <MoreVertical className="w-4 h-4" />,
+        label: "Menu",
+        description: "Tryk på de 3 prikker (⋯) i bunden",
+      },
+      {
+        icon: <Plus className="w-4 h-4" />,
+        label: "Føj til telefon",
+        description: "Vælg \"Føj til telefon\"",
+      },
+      {
+        icon: <span className="text-sm font-semibold">Tilføj</span>,
+        label: "Bekræft",
+        description: "Bekræft installationen",
+      },
+    ];
+  }
+
+  // Android Opera
+  if (platform === "android" && browser === "opera") {
+    return [
+      {
+        icon: <MoreVertical className="w-4 h-4" />,
+        label: "Menu",
+        description: "Tryk på de 3 prikker (⋮) i øverste højre hjørne",
+      },
+      {
+        icon: <Plus className="w-4 h-4" />,
+        label: "Hjemmeskærm",
+        description: "Vælg \"Hjemmeskærm\" eller \"Tilføj til...\"",
+      },
+      {
+        icon: <span className="text-sm font-semibold">OK</span>,
+        label: "Bekræft",
+        description: "Bekræft installationen",
+      },
+    ];
+  }
+
+  // Android Chrome fallback (if beforeinstallprompt didn't fire)
+  if (platform === "android" && browser === "chrome") {
+    return [
+      {
+        icon: <MoreVertical className="w-4 h-4" />,
+        label: "Menu",
+        description: "Tryk på de 3 prikker (⋮) i øverste højre hjørne",
+      },
+      {
+        icon: <Download className="w-4 h-4" />,
+        label: "Installer app",
+        description: "Vælg \"Installer app\" eller \"Føj til hjemmeskærm\"",
+      },
+      {
+        icon: <span className="text-sm font-semibold">Installer</span>,
+        label: "Bekræft",
+        description: "Tryk \"Installer\" for at bekræfte",
+      },
+    ];
+  }
+
+  // Android other browsers - generic
+  if (platform === "android") {
+    return [
+      {
+        icon: <MoreVertical className="w-4 h-4" />,
+        label: "Menu",
+        description: "Åbn browserens menu",
+      },
+      {
+        icon: <Plus className="w-4 h-4" />,
+        label: "Tilføj til hjemmeskærm",
+        description: "Find \"Tilføj til hjemmeskærm\" eller lignende",
+      },
+      {
+        icon: <span className="text-sm font-semibold">OK</span>,
+        label: "Bekræft",
+        description: "Bekræft installationen",
+      },
+    ];
+  }
+
+  // Fallback
+  return [
+    {
+      icon: <Menu className="w-4 h-4" />,
+      label: "Menu",
+      description: "Åbn browserens menu",
+    },
+    {
+      icon: <Plus className="w-4 h-4" />,
+      label: "Tilføj til hjemmeskærm",
+      description: "Find \"Tilføj til hjemmeskærm\"",
+    },
+    {
+      icon: <span className="text-sm font-semibold">OK</span>,
+      label: "Bekræft",
+      description: "Bekræft installationen",
+    },
+  ];
+}
+
+// Get browser display name
+function getBrowserName(browser: Browser): string {
+  switch (browser) {
+    case "safari": return "Safari";
+    case "chrome": return "Chrome";
+    case "firefox": return "Firefox";
+    case "edge": return "Edge";
+    case "samsung": return "Samsung Internet";
+    case "opera": return "Opera";
+    default: return "din browser";
+  }
+}
+
+function InstallGuideModal({ platform, browser, onClose, onDismiss }: InstallGuideModalProps) {
+  const steps = getInstallSteps(platform, browser);
+  const browserName = getBrowserName(browser);
+
   return (
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center animate-fade-in">
       {/* Backdrop */}
@@ -209,7 +549,12 @@ function IOSGuideModal({ onClose, onDismiss }: IOSGuideModalProps) {
       <div className="relative w-full sm:max-w-sm mx-4 mb-4 sm:mb-0 bg-white rounded-2xl shadow-xl animate-slide-up overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
-          <h3 className="font-semibold text-lg">Installer app</h3>
+          <div>
+            <h3 className="font-semibold text-lg">Installer app</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Guide til {browserName}
+            </p>
+          </div>
           <button
             onClick={onClose}
             className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
@@ -220,56 +565,46 @@ function IOSGuideModal({ onClose, onDismiss }: IOSGuideModalProps) {
         </div>
 
         {/* Steps */}
-        <div className="p-4 space-y-4">
-          {/* Step 1 */}
-          <div className="flex items-start gap-4">
-            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-saffron/10 flex items-center justify-center">
-              <span className="text-saffron font-bold">1</span>
+        <div className="p-4 space-y-3">
+          {steps.map((step, index) => (
+            <div key={index} className="flex items-start gap-3">
+              <div
+                className={cn(
+                  "flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center",
+                  index === steps.length - 1
+                    ? "bg-india-green/10"
+                    : "bg-saffron/10"
+                )}
+              >
+                {index === steps.length - 1 ? (
+                  <span className="text-india-green font-bold text-sm">✓</span>
+                ) : (
+                  <span className="text-saffron font-bold text-sm">{index + 1}</span>
+                )}
+              </div>
+              <div className="flex-1 pt-0.5">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-muted rounded text-sm font-medium">
+                    {step.icon}
+                    {step.label}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {step.description}
+                </p>
+              </div>
             </div>
-            <div className="flex-1 pt-1.5">
-              <p className="text-sm text-foreground">
-                Tryk på{" "}
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-muted rounded font-medium">
-                  <Share className="w-4 h-4" />
-                  Del
-                </span>{" "}
-                i bunden
-              </p>
-            </div>
-          </div>
-
-          {/* Step 2 */}
-          <div className="flex items-start gap-4">
-            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-saffron/10 flex items-center justify-center">
-              <span className="text-saffron font-bold">2</span>
-            </div>
-            <div className="flex-1 pt-1.5">
-              <p className="text-sm text-foreground">
-                Scroll ned og tryk{" "}
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-muted rounded font-medium">
-                  <Plus className="w-4 h-4" />
-                  Føj til hjemmeskærm
-                </span>
-              </p>
-            </div>
-          </div>
-
-          {/* Step 3 */}
-          <div className="flex items-start gap-4">
-            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-india-green/10 flex items-center justify-center">
-              <span className="text-india-green font-bold">✓</span>
-            </div>
-            <div className="flex-1 pt-1.5">
-              <p className="text-sm text-foreground">
-                Tryk{" "}
-                <span className="inline-flex px-2 py-0.5 bg-saffron/10 text-saffron rounded font-medium">
-                  Tilføj
-                </span>{" "}
-                i øverste højre hjørne
-              </p>
-            </div>
-          </div>
+          ))}
         </div>
+
+        {/* Tip for non-Safari iOS */}
+        {platform === "ios" && browser !== "safari" && (
+          <div className="mx-4 mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <p className="text-xs text-amber-800">
+              💡 <strong>Tip:</strong> Safari giver den bedste app-oplevelse på iPhone/iPad
+            </p>
+          </div>
+        )}
 
         {/* Footer */}
         <div className="p-4 pt-0 flex gap-2">
