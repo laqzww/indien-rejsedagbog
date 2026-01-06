@@ -52,7 +52,7 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-outfit), system-ui, sans-serif;
+    font-family: "Outfit", system-ui, sans-serif;
     /* Prevent body from growing beyond viewport on map pages */
     min-height: 0;
   }
