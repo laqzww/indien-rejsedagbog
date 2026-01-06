@@ -15,6 +15,7 @@ export function MediaGallery({ media }: MediaGalleryProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const activeMediaElRef = useRef<HTMLDivElement | null>(null);
+  const fullscreenElRef = useRef<HTMLDivElement | null>(null);
   const swipeStateRef = useRef<{
     pointerId: number | null;
     startX: number;
@@ -85,8 +86,10 @@ export function MediaGallery({ media }: MediaGalleryProps) {
   const shouldIgnoreSwipeTarget = (target: EventTarget | null) => {
     const el = target as HTMLElement | null;
     if (!el) return false;
-    // Don't hijack gestures on interactive controls / video player
-    return Boolean(el.closest("button,a,video,input,textarea,select,[role='button']"));
+    // Don't hijack gestures on video controls / form inputs / links
+    // NOTE: We intentionally do NOT exclude <button> so swipes that start
+    // on overlay buttons (arrows/play) still don't cause the page to pan.
+    return Boolean(el.closest("a,video,input,textarea,select,[data-no-swipe='true']"));
   };
 
   // iOS Safari: `overflow-x: hidden` alone doesn't stop the page from "panning"
@@ -128,7 +131,7 @@ export function MediaGallery({ media }: MediaGalleryProps) {
       const absY = Math.abs(dy);
 
       // Only lock if it's clearly horizontal and beyond a threshold
-      if (absX < 18) return;
+      if (absX < 8) return;
       if (absX < absY * 1.2) return;
 
       didTrigger = true;
@@ -160,6 +163,71 @@ export function MediaGallery({ media }: MediaGalleryProps) {
       el.removeEventListener("touchcancel", end);
     };
   }, [media.length, activeIndex]); // activeIndex keeps goToNext/goToPrev behavior in sync
+
+  // Same iOS protection for fullscreen overlay (page can still "rubber band")
+  useEffect(() => {
+    const el = fullscreenElRef.current;
+    if (!el) return;
+    if (!isFullscreen) return;
+    if (media.length <= 1) return;
+
+    let startX = 0;
+    let startY = 0;
+    let isTracking = false;
+    let didTrigger = false;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      if (shouldIgnoreSwipeTarget(e.target)) return;
+      const t = e.touches[0];
+      startX = t.clientX;
+      startY = t.clientY;
+      isTracking = true;
+      didTrigger = false;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!isTracking) return;
+      if (didTrigger) {
+        e.preventDefault();
+        return;
+      }
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+
+      if (absX < 8) return;
+      if (absX < absY * 1.2) return;
+
+      didTrigger = true;
+      swipeStateRef.current.didSwipe = true;
+      e.preventDefault();
+
+      if (dx < 0) goToNext();
+      else goToPrev();
+    };
+
+    const end = () => {
+      isTracking = false;
+      didTrigger = false;
+    };
+
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", end, { passive: true });
+    el.addEventListener("touchcancel", end, { passive: true });
+
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", end);
+      el.removeEventListener("touchcancel", end);
+    };
+  }, [isFullscreen, media.length, activeIndex]);
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (media.length <= 1) return;
@@ -394,6 +462,7 @@ export function MediaGallery({ media }: MediaGalleryProps) {
       {/* Fullscreen modal */}
       {isFullscreen && activeMedia.type === "image" && (
         <div
+          ref={fullscreenElRef}
           className="fixed inset-0 z-50 bg-black flex items-center justify-center"
           onClick={() => setIsFullscreen(false)}
         >
