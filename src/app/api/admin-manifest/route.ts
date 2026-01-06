@@ -7,6 +7,9 @@ export async function GET() {
     short_name: "T&A Admin",
     description: "Admin panel til Tommy og Amalies rejsedagbog",
     start_url: "/admin",
+    // Scope must be "/" to allow navigation to /login for authentication
+    // The start_url ensures the app opens at /admin
+    scope: "/",
     display: "standalone",
     background_color: "#FFFDD0",
     theme_color: "#FF9933",
