@@ -5,9 +5,9 @@ export async function POST(request: NextRequest) {
   const supabase = await createClient();
   await supabase.auth.signOut();
 
-  // Use NEXT_PUBLIC_SITE_URL for production redirect, fall back to request origin
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin;
+  // Use nextUrl which correctly handles proxy headers (x-forwarded-host, etc.)
+  const redirectUrl = request.nextUrl.clone();
+  redirectUrl.search = "";
 
   // Check if the request came from admin context (referer or explicit param)
   const referer = request.headers.get("referer");
@@ -15,9 +15,11 @@ export async function POST(request: NextRequest) {
 
   // Redirect to login with admin redirect if coming from admin, otherwise to root
   if (isAdminContext) {
-    return NextResponse.redirect(`${siteUrl}/login?redirect=/admin`);
+    redirectUrl.pathname = "/login";
+    redirectUrl.searchParams.set("redirect", "/admin");
+    return NextResponse.redirect(redirectUrl);
   }
 
-  return NextResponse.redirect(`${siteUrl}/`);
+  redirectUrl.pathname = "/";
+  return NextResponse.redirect(redirectUrl);
 }
-

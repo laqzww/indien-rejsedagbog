@@ -2,8 +2,21 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse, type NextRequest } from "next/server";
 import { isEmailAllowlisted } from "@/lib/author";
 
+// Helper to create redirect URL using nextUrl (correctly handles proxy headers)
+function createRedirectUrl(request: NextRequest, pathname: string, searchParams?: Record<string, string>) {
+  const url = request.nextUrl.clone();
+  url.pathname = pathname;
+  url.search = "";
+  if (searchParams) {
+    Object.entries(searchParams).forEach(([key, value]) => {
+      url.searchParams.set(key, value);
+    });
+  }
+  return url;
+}
+
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = request.nextUrl;
   const code = searchParams.get("code");
   const token_hash = searchParams.get("token_hash");
   const type = searchParams.get("type");
@@ -30,7 +43,7 @@ export async function GET(request: NextRequest) {
     
     if (!error) {
       await maybeProvisionAuthor();
-      return NextResponse.redirect(`${origin}${redirect}`);
+      return NextResponse.redirect(createRedirectUrl(request, redirect));
     }
     console.error("Code exchange error:", error);
   }
@@ -47,23 +60,22 @@ export async function GET(request: NextRequest) {
 
       // Password recovery: after verification, direct user to set new password.
       if (type === "recovery") {
-        const url = new URL(`${origin}/auth/update-password`);
-        url.searchParams.set("redirect", redirect);
-        return NextResponse.redirect(url.toString());
+        return NextResponse.redirect(
+          createRedirectUrl(request, "/auth/update-password", { redirect })
+        );
       }
 
-      return NextResponse.redirect(`${origin}${redirect}`);
+      return NextResponse.redirect(createRedirectUrl(request, redirect));
     }
     console.error("Token verification error:", error);
   }
 
   // If we have neither code nor token_hash, show helpful error page
-  const errorUrl = new URL(`${origin}/auth/error`);
-  errorUrl.searchParams.set("redirect", redirect);
-  if (code) errorUrl.searchParams.set("reason", "code_exchange_failed");
-  if (token_hash) errorUrl.searchParams.set("reason", "token_verification_failed");
-  if (!code && !token_hash) errorUrl.searchParams.set("reason", "missing_params");
+  const errorParams: Record<string, string> = { redirect };
+  if (code) errorParams.reason = "code_exchange_failed";
+  else if (token_hash) errorParams.reason = "token_verification_failed";
+  else errorParams.reason = "missing_params";
   
-  return NextResponse.redirect(errorUrl.toString());
+  return NextResponse.redirect(createRedirectUrl(request, "/auth/error", errorParams));
 }
 
