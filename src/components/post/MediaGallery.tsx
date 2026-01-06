@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { getMediaUrl } from "@/lib/upload";
@@ -14,6 +14,19 @@ interface MediaGalleryProps {
 export function MediaGallery({ media }: MediaGalleryProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const swipeStateRef = useRef<{
+    pointerId: number | null;
+    startX: number;
+    startY: number;
+    didTrigger: boolean;
+    didSwipe: boolean;
+  }>({
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    didTrigger: false,
+    didSwipe: false,
+  });
   
   // Track which videos are playing (by media id)
   const [playingVideos, setPlayingVideos] = useState<Set<string>>(new Set());
@@ -45,14 +58,99 @@ export function MediaGallery({ media }: MediaGalleryProps) {
     setActiveIndex((i) => (i - 1 + media.length) % media.length);
   };
 
+  // Prevent background scroll when fullscreen is open (especially iOS rubber-banding)
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const prevOverflow = document.body.style.overflow;
+    const prevOverscroll = (document.body.style as any).overscrollBehavior;
+    document.body.style.overflow = "hidden";
+    // Best-effort; not supported in all browsers
+    (document.body.style as any).overscrollBehavior = "none";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      (document.body.style as any).overscrollBehavior = prevOverscroll;
+    };
+  }, [isFullscreen]);
+
+  const handleActiveMediaClick = () => {
+    // If the user just swiped, ignore the click that would open fullscreen
+    if (swipeStateRef.current.didSwipe) {
+      swipeStateRef.current.didSwipe = false;
+      return;
+    }
+    if (activeMedia.type === "image") setIsFullscreen(true);
+  };
+
+  const shouldIgnoreSwipeTarget = (target: EventTarget | null) => {
+    const el = target as HTMLElement | null;
+    if (!el) return false;
+    // Don't hijack gestures on interactive controls / video player
+    return Boolean(el.closest("button,a,video,input,textarea,select,[role='button']"));
+  };
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (media.length <= 1) return;
+    if (shouldIgnoreSwipeTarget(e.target)) return;
+    if (e.pointerType === "mouse") return; // mouse users have arrows/clicks
+
+    swipeStateRef.current.pointerId = e.pointerId;
+    swipeStateRef.current.startX = e.clientX;
+    swipeStateRef.current.startY = e.clientY;
+    swipeStateRef.current.didTrigger = false;
+    swipeStateRef.current.didSwipe = false;
+
+    // Keep receiving move events even if pointer leaves element
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const s = swipeStateRef.current;
+    if (media.length <= 1) return;
+    if (s.pointerId == null || e.pointerId !== s.pointerId) return;
+    if (s.didTrigger) return;
+
+    const dx = e.clientX - s.startX;
+    const dy = e.clientY - s.startY;
+
+    // Require a clearly horizontal gesture to avoid stealing vertical scroll
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+    if (absX < 28) return;
+    if (absX < absY * 1.2) return;
+
+    s.didTrigger = true;
+    s.didSwipe = true;
+
+    // Swipe left => next, swipe right => prev
+    if (dx < 0) goToNext();
+    else goToPrev();
+  };
+
+  const onPointerUpOrCancel = (e: React.PointerEvent) => {
+    const s = swipeStateRef.current;
+    if (s.pointerId == null || e.pointerId !== s.pointerId) return;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      // no-op
+    }
+    s.pointerId = null;
+    s.didTrigger = false;
+    // keep didSwipe for the next click suppression (cleared in click handler)
+  };
+
   return (
     <>
       {/* Main gallery */}
       <div className="relative rounded-xl overflow-hidden bg-muted">
         {/* Active media */}
         <div
-          className="relative aspect-[4/3] cursor-pointer"
-          onClick={() => activeMedia.type === "image" && setIsFullscreen(true)}
+          className="relative aspect-[4/3] cursor-pointer touch-pan-y select-none"
+          onClick={handleActiveMediaClick}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUpOrCancel}
+          onPointerCancel={onPointerUpOrCancel}
         >
           {activeMedia.type === "image" ? (
             <Image
