@@ -14,6 +14,7 @@ interface MediaGalleryProps {
 export function MediaGallery({ media }: MediaGalleryProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const activeMediaElRef = useRef<HTMLDivElement | null>(null);
   const swipeStateRef = useRef<{
     pointerId: number | null;
     startX: number;
@@ -88,6 +89,78 @@ export function MediaGallery({ media }: MediaGalleryProps) {
     return Boolean(el.closest("button,a,video,input,textarea,select,[role='button']"));
   };
 
+  // iOS Safari: `overflow-x: hidden` alone doesn't stop the page from "panning"
+  // horizontally during a horizontal swipe. We preventDefault *only* for clearly
+  // horizontal gestures that start on the active media container.
+  useEffect(() => {
+    const el = activeMediaElRef.current;
+    if (!el) return;
+    if (media.length <= 1) return;
+
+    let startX = 0;
+    let startY = 0;
+    let isTracking = false;
+    let didTrigger = false;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      if (shouldIgnoreSwipeTarget(e.target)) return;
+      const t = e.touches[0];
+      startX = t.clientX;
+      startY = t.clientY;
+      isTracking = true;
+      didTrigger = false;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!isTracking) return;
+      if (didTrigger) {
+        // We already decided this is a horizontal swipe; keep blocking page pan.
+        e.preventDefault();
+        return;
+      }
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+
+      // Only lock if it's clearly horizontal and beyond a threshold
+      if (absX < 18) return;
+      if (absX < absY * 1.2) return;
+
+      didTrigger = true;
+      swipeStateRef.current.didSwipe = true;
+
+      // Stop the browser from shifting the whole page horizontally
+      e.preventDefault();
+
+      // Do the navigation once per gesture
+      if (dx < 0) goToNext();
+      else goToPrev();
+    };
+
+    const end = () => {
+      isTracking = false;
+      didTrigger = false;
+    };
+
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    // MUST be passive:false to allow preventDefault()
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", end, { passive: true });
+    el.addEventListener("touchcancel", end, { passive: true });
+
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", end);
+      el.removeEventListener("touchcancel", end);
+    };
+  }, [media.length, activeIndex]); // activeIndex keeps goToNext/goToPrev behavior in sync
+
   const onPointerDown = (e: React.PointerEvent) => {
     if (media.length <= 1) return;
     if (shouldIgnoreSwipeTarget(e.target)) return;
@@ -145,6 +218,7 @@ export function MediaGallery({ media }: MediaGalleryProps) {
       <div className="relative rounded-xl overflow-hidden bg-muted">
         {/* Active media */}
         <div
+          ref={activeMediaElRef}
           className="relative aspect-[4/3] cursor-pointer touch-pan-y select-none"
           onClick={handleActiveMediaClick}
           onPointerDown={onPointerDown}
