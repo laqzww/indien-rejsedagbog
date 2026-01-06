@@ -5,10 +5,11 @@ export async function POST(request: NextRequest) {
   const supabase = await createClient();
   await supabase.auth.signOut();
 
-  // Use NEXT_PUBLIC_SITE_URL for production redirect, fall back to request origin
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin;
+  // Use nextUrl which correctly handles proxy headers (x-forwarded-host, etc.)
+  const redirectUrl = request.nextUrl.clone();
+  redirectUrl.pathname = "/";
+  redirectUrl.search = "";
 
-  return NextResponse.redirect(`${siteUrl}/`);
+  return NextResponse.redirect(redirectUrl);
 }
 
