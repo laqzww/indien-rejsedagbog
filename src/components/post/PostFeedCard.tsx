@@ -145,8 +145,8 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
       {hasMedia && (
         <div
           ref={containerRef}
-          className="relative bg-black touch-pan-y"
-          style={{ aspectRatio: MEDIA_ASPECT_RATIO }}
+          className="relative bg-black select-none"
+          style={{ aspectRatio: MEDIA_ASPECT_RATIO, touchAction: "pan-y pinch-zoom" }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
