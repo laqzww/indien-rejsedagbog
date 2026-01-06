@@ -467,7 +467,7 @@ export function JourneyCarousel({
         {/* Milestones carousel */}
         <div 
           className={cn(
-            "overflow-hidden",
+            "overflow-hidden touch-pan-y",
             viewMode === "milestones" ? "block" : "hidden"
           )} 
           ref={milestoneEmblaRef}
@@ -488,7 +488,7 @@ export function JourneyCarousel({
         {/* Posts carousel */}
         <div 
           className={cn(
-            "overflow-hidden",
+            "overflow-hidden touch-pan-y",
             viewMode === "posts" ? "block" : "hidden"
           )} 
           ref={postEmblaRef}
