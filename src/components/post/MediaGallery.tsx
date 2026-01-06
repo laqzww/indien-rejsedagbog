@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { getMediaUrl } from "@/lib/upload";
@@ -16,6 +16,20 @@ export function MediaGallery({ media }: MediaGalleryProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const activeMediaElRef = useRef<HTMLDivElement | null>(null);
   const fullscreenElRef = useRef<HTMLDivElement | null>(null);
+  const gestureRef = useRef<{
+    startX: number;
+    startY: number;
+    isTracking: boolean;
+    didTrigger: boolean;
+    // Used to suppress "click-to-open" after a swipe
+    didSwipe: boolean;
+  }>({
+    startX: 0,
+    startY: 0,
+    isTracking: false,
+    didTrigger: false,
+    didSwipe: false,
+  });
   const swipeStateRef = useRef<{
     pointerId: number | null;
     startX: number;
@@ -52,13 +66,13 @@ export function MediaGallery({ media }: MediaGalleryProps) {
 
   const activeMedia = media[activeIndex];
 
-  const goToNext = () => {
+  const goToNext = useCallback(() => {
     setActiveIndex((i) => (i + 1) % media.length);
-  };
+  }, [media.length]);
 
-  const goToPrev = () => {
+  const goToPrev = useCallback(() => {
     setActiveIndex((i) => (i - 1 + media.length) % media.length);
-  };
+  }, [media.length]);
 
   // Prevent background scroll when fullscreen is open (especially iOS rubber-banding)
   useEffect(() => {
@@ -76,8 +90,9 @@ export function MediaGallery({ media }: MediaGalleryProps) {
 
   const handleActiveMediaClick = () => {
     // If the user just swiped, ignore the click that would open fullscreen
-    if (swipeStateRef.current.didSwipe) {
+    if (swipeStateRef.current.didSwipe || gestureRef.current.didSwipe) {
       swipeStateRef.current.didSwipe = false;
+      gestureRef.current.didSwipe = false;
       return;
     }
     if (activeMedia.type === "image") setIsFullscreen(true);
@@ -93,48 +108,56 @@ export function MediaGallery({ media }: MediaGalleryProps) {
   };
 
   // iOS Safari: `overflow-x: hidden` alone doesn't stop the page from "panning"
-  // horizontally during a horizontal swipe. We preventDefault *only* for clearly
-  // horizontal gestures that start on the active media container.
+  // horizontally during a horizontal swipe (you can "pull" the viewport and see
+  // the page background). The most reliable fix is to intercept touch gestures
+  // at document-level (capture) and preventDefault only for clearly horizontal
+  // gestures that START within our gallery/fullscreen.
   useEffect(() => {
-    const el = activeMediaElRef.current;
-    if (!el) return;
     if (media.length <= 1) return;
 
-    let startX = 0;
-    let startY = 0;
-    let isTracking = false;
-    let didTrigger = false;
-
-    const onTouchStart = (e: TouchEvent) => {
+    const onTouchStartCapture = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
       if (shouldIgnoreSwipeTarget(e.target)) return;
+
+      const targetNode = e.target as Node | null;
+      const inActive = Boolean(activeMediaElRef.current && targetNode && activeMediaElRef.current.contains(targetNode));
+      const inFullscreen = Boolean(
+        isFullscreen &&
+          fullscreenElRef.current &&
+          targetNode &&
+          fullscreenElRef.current.contains(targetNode)
+      );
+      if (!inActive && !inFullscreen) return;
+
       const t = e.touches[0];
-      startX = t.clientX;
-      startY = t.clientY;
-      isTracking = true;
-      didTrigger = false;
+      gestureRef.current.startX = t.clientX;
+      gestureRef.current.startY = t.clientY;
+      gestureRef.current.isTracking = true;
+      gestureRef.current.didTrigger = false;
     };
 
-    const onTouchMove = (e: TouchEvent) => {
-      if (!isTracking) return;
-      if (didTrigger) {
+    const onTouchMoveCapture = (e: TouchEvent) => {
+      const g = gestureRef.current;
+      if (!g.isTracking) return;
+      if (g.didTrigger) {
         // We already decided this is a horizontal swipe; keep blocking page pan.
         e.preventDefault();
         return;
       }
       if (e.touches.length !== 1) return;
       const t = e.touches[0];
-      const dx = t.clientX - startX;
-      const dy = t.clientY - startY;
+      const dx = t.clientX - g.startX;
+      const dy = t.clientY - g.startY;
 
       const absX = Math.abs(dx);
       const absY = Math.abs(dy);
 
       // Only lock if it's clearly horizontal and beyond a threshold
-      if (absX < 8) return;
+      if (absX < 6) return;
       if (absX < absY * 1.2) return;
 
-      didTrigger = true;
+      g.didTrigger = true;
+      g.didSwipe = true;
       swipeStateRef.current.didSwipe = true;
 
       // Stop the browser from shifting the whole page horizontally
@@ -146,88 +169,23 @@ export function MediaGallery({ media }: MediaGalleryProps) {
     };
 
     const end = () => {
-      isTracking = false;
-      didTrigger = false;
+      gestureRef.current.isTracking = false;
+      gestureRef.current.didTrigger = false;
     };
 
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
-    // MUST be passive:false to allow preventDefault()
-    el.addEventListener("touchmove", onTouchMove, { passive: false });
-    el.addEventListener("touchend", end, { passive: true });
-    el.addEventListener("touchcancel", end, { passive: true });
+    // MUST be capture + passive:false on move to allow preventDefault() early enough.
+    document.addEventListener("touchstart", onTouchStartCapture, { passive: true, capture: true });
+    document.addEventListener("touchmove", onTouchMoveCapture, { passive: false, capture: true });
+    document.addEventListener("touchend", end, { passive: true, capture: true });
+    document.addEventListener("touchcancel", end, { passive: true, capture: true });
 
     return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-      el.removeEventListener("touchend", end);
-      el.removeEventListener("touchcancel", end);
+      document.removeEventListener("touchstart", onTouchStartCapture, true);
+      document.removeEventListener("touchmove", onTouchMoveCapture, true);
+      document.removeEventListener("touchend", end, true);
+      document.removeEventListener("touchcancel", end, true);
     };
-  }, [media.length, activeIndex]); // activeIndex keeps goToNext/goToPrev behavior in sync
-
-  // Same iOS protection for fullscreen overlay (page can still "rubber band")
-  useEffect(() => {
-    const el = fullscreenElRef.current;
-    if (!el) return;
-    if (!isFullscreen) return;
-    if (media.length <= 1) return;
-
-    let startX = 0;
-    let startY = 0;
-    let isTracking = false;
-    let didTrigger = false;
-
-    const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      if (shouldIgnoreSwipeTarget(e.target)) return;
-      const t = e.touches[0];
-      startX = t.clientX;
-      startY = t.clientY;
-      isTracking = true;
-      didTrigger = false;
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (!isTracking) return;
-      if (didTrigger) {
-        e.preventDefault();
-        return;
-      }
-      if (e.touches.length !== 1) return;
-      const t = e.touches[0];
-      const dx = t.clientX - startX;
-      const dy = t.clientY - startY;
-
-      const absX = Math.abs(dx);
-      const absY = Math.abs(dy);
-
-      if (absX < 8) return;
-      if (absX < absY * 1.2) return;
-
-      didTrigger = true;
-      swipeStateRef.current.didSwipe = true;
-      e.preventDefault();
-
-      if (dx < 0) goToNext();
-      else goToPrev();
-    };
-
-    const end = () => {
-      isTracking = false;
-      didTrigger = false;
-    };
-
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchmove", onTouchMove, { passive: false });
-    el.addEventListener("touchend", end, { passive: true });
-    el.addEventListener("touchcancel", end, { passive: true });
-
-    return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-      el.removeEventListener("touchend", end);
-      el.removeEventListener("touchcancel", end);
-    };
-  }, [isFullscreen, media.length, activeIndex]);
+  }, [goToNext, goToPrev, isFullscreen, media.length]);
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (media.length <= 1) return;
