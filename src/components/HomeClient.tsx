@@ -1,11 +1,11 @@
 "use client";
 
-import { useRef, useCallback, useEffect } from "react";
+import { useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Header } from "./Header";
 import { InstallBanner } from "./InstallBanner";
+import { AdminPwaRedirect } from "./AdminPwaRedirect";
 import { PostFeed } from "./post/PostFeed";
 import { EmptyFeed } from "./post/EmptyFeed";
 import { JourneyCarousel } from "./map/PostCarousel";
@@ -76,24 +76,6 @@ export function HomeClient({
   focusZoom: initialFocusZoom,
 }: HomeClientProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
-
-  // Redirect authors to /admin when opened as PWA (standalone mode)
-  // This handles the case where admin PWA bookmark incorrectly opens at /
-  // due to cached manifest issues
-  useEffect(() => {
-    if (!isAuthor) return;
-    
-    // Check if running as installed PWA (standalone mode)
-    const isStandalone = 
-      window.matchMedia("(display-mode: standalone)").matches ||
-      (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
-    
-    if (isStandalone) {
-      // Author opened PWA at root - redirect to admin
-      router.replace("/admin");
-    }
-  }, [isAuthor, router]);
 
   // URL-based navigation state
   const navigation = useViewNavigation({
@@ -137,6 +119,9 @@ export function HomeClient({
 
   return (
     <div className="h-dvh h-[100svh] bg-white flex flex-col overflow-hidden">
+      {/* Redirect admin PWA users if opened at wrong URL */}
+      <AdminPwaRedirect />
+      
       <Header
         isAuthor={isAuthor}
         activeView={navigation.activeView}
