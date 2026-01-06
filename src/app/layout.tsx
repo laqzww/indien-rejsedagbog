@@ -37,6 +37,8 @@ export const metadata: Metadata = {
     description: "Følg med på vores eventyr gennem Indien - fra Kerala til Delhi",
     type: "website",
   },
+  // Explicit manifest to allow proper override in admin layout
+  manifest: "/manifest.webmanifest",
   // Apple specific settings
   appleWebApp: {
     capable: true,

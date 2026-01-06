@@ -7,6 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "T&A Indien",
     description: "Følg med på Tommy og Amalies eventyr gennem Indien",
     start_url: "/",
+    scope: "/",
     display: "standalone",
     background_color: "#FFFDD0",
     theme_color: "#FF9933",
