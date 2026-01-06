@@ -3,6 +3,12 @@
 @tailwind utilities;
 
 @layer base {
+  /* Prevent ALL horizontal scrolling on the page */
+  html, body {
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
+  }
+
   /* Viewport height fallback for older browsers */
   html {
     height: 100dvh;
