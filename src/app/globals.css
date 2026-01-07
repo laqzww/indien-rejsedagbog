@@ -3,24 +3,11 @@
 @tailwind utilities;
 
 @layer base {
-  /* AGGRESSIVE fix: Completely prevent horizontal page displacement */
-  html {
+  /* Prevent horizontal scrolling - CSS layer */
+  html, body {
     overflow-x: hidden;
-    overflow-y: scroll;
-    overscroll-behavior: none;
-    position: fixed;
-    width: 100%;
-    height: 100%;
-  }
-  
-  body {
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior: none;
-    width: 100%;
-    height: 100%;
-    /* Only allow vertical pan - NO horizontal movement at page level */
-    touch-action: pan-y;
+    overscroll-behavior-x: none;
+    max-width: 100%;
   }
 
   :root {
