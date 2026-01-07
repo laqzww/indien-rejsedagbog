@@ -72,7 +72,7 @@ export default async function PostPage({ params }: PageProps) {
   );
 
   return (
-    <div className="min-h-screen bg-white overflow-x-clip">
+    <div className="min-h-screen bg-white">
       <Header isAuthor={isAuthor} showNavigation={false} />
 
       <main className="container mx-auto px-4 py-6 max-w-3xl">

@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { Outfit, JetBrains_Mono, Tillana } from "next/font/google";
 import "./globals.css";
 import { BadgeManager } from "@/components/BadgeManager";
-import { PreventHorizontalScroll } from "@/components/PreventHorizontalScroll";
 
 const outfit = Outfit({
   variable: "--font-outfit",
@@ -65,7 +64,6 @@ export default function RootLayout({
         className={`${outfit.variable} ${jetbrainsMono.variable} ${tillana.variable} antialiased`}
       >
         <BadgeManager />
-        <PreventHorizontalScroll />
         {children}
       </body>
     </html>
