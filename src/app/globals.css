@@ -3,21 +3,24 @@
 @tailwind utilities;
 
 @layer base {
-  /* Prevent horizontal scrolling and rubber-banding on the page */
+  /* AGGRESSIVE fix: Completely prevent horizontal page displacement */
   html {
     overflow-x: hidden;
-    overscroll-behavior-x: none;
+    overflow-y: scroll;
+    overscroll-behavior: none;
+    position: fixed;
+    width: 100%;
+    height: 100%;
   }
   
   body {
     overflow-x: hidden;
-    /* Use 100% instead of 100vw to avoid scrollbar width causing overflow */
+    overflow-y: auto;
+    overscroll-behavior: none;
     width: 100%;
-    max-width: 100%;
-    /* Prevents swipe navigation/rubber-banding on the page itself */
-    overscroll-behavior-x: none;
-    /* Prevent horizontal touch gestures from moving the page */
-    touch-action: pan-y pinch-zoom;
+    height: 100%;
+    /* Only allow vertical pan - NO horizontal movement at page level */
+    touch-action: pan-y;
   }
 
   :root {

@@ -245,7 +245,7 @@ export function MediaGallery({ media }: MediaGalleryProps) {
 
       {/* Thumbnails */}
       {media.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto py-2 scrollbar-hide touch-pan-x">
+        <div className="flex gap-2 overflow-x-auto py-2 scrollbar-hide overscroll-x-contain">
           {media.map((item, index) => (
             <button
               key={item.id}
