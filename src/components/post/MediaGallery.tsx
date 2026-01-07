@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { getMediaUrl } from "@/lib/upload";
@@ -16,20 +16,6 @@ export function MediaGallery({ media }: MediaGalleryProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const activeMediaElRef = useRef<HTMLDivElement | null>(null);
   const fullscreenElRef = useRef<HTMLDivElement | null>(null);
-  const gestureRef = useRef<{
-    startX: number;
-    startY: number;
-    isTracking: boolean;
-    didTrigger: boolean;
-    // Used to suppress "click-to-open" after a swipe
-    didSwipe: boolean;
-  }>({
-    startX: 0,
-    startY: 0,
-    isTracking: false,
-    didTrigger: false,
-    didSwipe: false,
-  });
   const swipeStateRef = useRef<{
     pointerId: number | null;
     startX: number;
@@ -66,13 +52,13 @@ export function MediaGallery({ media }: MediaGalleryProps) {
 
   const activeMedia = media[activeIndex];
 
-  const goToNext = useCallback(() => {
+  const goToNext = () => {
     setActiveIndex((i) => (i + 1) % media.length);
-  }, [media.length]);
+  };
 
-  const goToPrev = useCallback(() => {
+  const goToPrev = () => {
     setActiveIndex((i) => (i - 1 + media.length) % media.length);
-  }, [media.length]);
+  };
 
   // Prevent background scroll when fullscreen is open (especially iOS rubber-banding)
   useEffect(() => {
@@ -90,9 +76,8 @@ export function MediaGallery({ media }: MediaGalleryProps) {
 
   const handleActiveMediaClick = () => {
     // If the user just swiped, ignore the click that would open fullscreen
-    if (swipeStateRef.current.didSwipe || gestureRef.current.didSwipe) {
+    if (swipeStateRef.current.didSwipe) {
       swipeStateRef.current.didSwipe = false;
-      gestureRef.current.didSwipe = false;
       return;
     }
     if (activeMedia.type === "image") setIsFullscreen(true);
@@ -101,91 +86,9 @@ export function MediaGallery({ media }: MediaGalleryProps) {
   const shouldIgnoreSwipeTarget = (target: EventTarget | null) => {
     const el = target as HTMLElement | null;
     if (!el) return false;
-    // Don't hijack gestures on video controls / form inputs / links
-    // NOTE: We intentionally do NOT exclude <button> so swipes that start
-    // on overlay buttons (arrows/play) still don't cause the page to pan.
-    return Boolean(el.closest("a,video,input,textarea,select,[data-no-swipe='true']"));
+    // Don't hijack gestures on interactive controls / video player
+    return Boolean(el.closest("button,a,video,input,textarea,select,[role='button']"));
   };
-
-  // iOS Safari: `overflow-x: hidden` alone doesn't stop the page from "panning"
-  // horizontally during a horizontal swipe (you can "pull" the viewport and see
-  // the page background). The most reliable fix is to intercept touch gestures
-  // at document-level (capture) and preventDefault only for clearly horizontal
-  // gestures that START within our gallery/fullscreen.
-  useEffect(() => {
-    if (media.length <= 1) return;
-
-    const onTouchStartCapture = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      if (shouldIgnoreSwipeTarget(e.target)) return;
-
-      const targetNode = e.target as Node | null;
-      const inActive = Boolean(activeMediaElRef.current && targetNode && activeMediaElRef.current.contains(targetNode));
-      const inFullscreen = Boolean(
-        isFullscreen &&
-          fullscreenElRef.current &&
-          targetNode &&
-          fullscreenElRef.current.contains(targetNode)
-      );
-      if (!inActive && !inFullscreen) return;
-
-      const t = e.touches[0];
-      gestureRef.current.startX = t.clientX;
-      gestureRef.current.startY = t.clientY;
-      gestureRef.current.isTracking = true;
-      gestureRef.current.didTrigger = false;
-    };
-
-    const onTouchMoveCapture = (e: TouchEvent) => {
-      const g = gestureRef.current;
-      if (!g.isTracking) return;
-      if (g.didTrigger) {
-        // We already decided this is a horizontal swipe; keep blocking page pan.
-        e.preventDefault();
-        return;
-      }
-      if (e.touches.length !== 1) return;
-      const t = e.touches[0];
-      const dx = t.clientX - g.startX;
-      const dy = t.clientY - g.startY;
-
-      const absX = Math.abs(dx);
-      const absY = Math.abs(dy);
-
-      // Only lock if it's clearly horizontal and beyond a threshold
-      if (absX < 6) return;
-      if (absX < absY * 1.2) return;
-
-      g.didTrigger = true;
-      g.didSwipe = true;
-      swipeStateRef.current.didSwipe = true;
-
-      // Stop the browser from shifting the whole page horizontally
-      e.preventDefault();
-
-      // Do the navigation once per gesture
-      if (dx < 0) goToNext();
-      else goToPrev();
-    };
-
-    const end = () => {
-      gestureRef.current.isTracking = false;
-      gestureRef.current.didTrigger = false;
-    };
-
-    // MUST be capture + passive:false on move to allow preventDefault() early enough.
-    document.addEventListener("touchstart", onTouchStartCapture, { passive: true, capture: true });
-    document.addEventListener("touchmove", onTouchMoveCapture, { passive: false, capture: true });
-    document.addEventListener("touchend", end, { passive: true, capture: true });
-    document.addEventListener("touchcancel", end, { passive: true, capture: true });
-
-    return () => {
-      document.removeEventListener("touchstart", onTouchStartCapture, true);
-      document.removeEventListener("touchmove", onTouchMoveCapture, true);
-      document.removeEventListener("touchend", end, true);
-      document.removeEventListener("touchcancel", end, true);
-    };
-  }, [goToNext, goToPrev, isFullscreen, media.length]);
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (media.length <= 1) return;
@@ -245,7 +148,7 @@ export function MediaGallery({ media }: MediaGalleryProps) {
         {/* Active media */}
         <div
           ref={activeMediaElRef}
-          className="relative aspect-[4/3] cursor-pointer touch-pan-y select-none"
+          className="relative aspect-[4/3] cursor-pointer touch-none select-none"
           onClick={handleActiveMediaClick}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -374,7 +277,7 @@ export function MediaGallery({ media }: MediaGalleryProps) {
 
       {/* Thumbnails */}
       {media.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto py-2 -mx-4 px-4 scrollbar-hide touch-pan-x">
+        <div className="flex gap-2 overflow-x-auto py-2 scrollbar-hide touch-pan-x">
           {media.map((item, index) => (
             <button
               key={item.id}
@@ -421,7 +324,7 @@ export function MediaGallery({ media }: MediaGalleryProps) {
       {isFullscreen && activeMedia.type === "image" && (
         <div
           ref={fullscreenElRef}
-          className="fixed inset-0 z-50 bg-black flex items-center justify-center"
+          className="fixed inset-0 z-50 bg-black flex items-center justify-center touch-none"
           onClick={() => setIsFullscreen(false)}
         >
           <button
