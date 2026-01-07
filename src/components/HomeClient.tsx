@@ -118,7 +118,7 @@ export function HomeClient({
   );
 
   return (
-    <div className="h-dvh h-[100svh] bg-white flex flex-col overflow-hidden w-full max-w-full">
+    <div className="h-dvh h-[100svh] bg-white flex flex-col overflow-hidden overflow-x-hidden w-full max-w-full">
       {/* Redirect admin PWA users if opened at wrong URL */}
       <AdminPwaRedirect />
       

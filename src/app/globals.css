@@ -3,10 +3,15 @@
 @tailwind utilities;
 
 @layer base {
-  /* Prevent horizontal scrolling */
+  /* Prevent horizontal scrolling - width constraints prevent overflow */
   html, body {
-    overflow-x: hidden;
     width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+  
+  /* Ensure all direct children also respect width */
+  body > * {
     max-width: 100%;
   }
 
