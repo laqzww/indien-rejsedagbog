@@ -226,7 +226,7 @@ interface FeedViewProps {
 
 function FeedView({ hasPosts, groupedPosts, focusPostId }: FeedViewProps) {
   return (
-    <div className="flex-1 overflow-y-auto overscroll-x-none">
+    <div className="flex-1 overflow-y-auto overscroll-contain">
       <main className="max-w-2xl mx-auto pb-8">
         {hasPosts ? (
           <PostFeed groups={groupedPosts} focusPostId={focusPostId} />
