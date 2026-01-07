@@ -16,11 +16,10 @@ interface PostFeedCardProps {
 
 export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const [swipeOffset, setSwipeOffset] = useState(0);
-  const [isSwiping, setIsSwiping] = useState(false);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
-  const isHorizontalSwipe = useRef<boolean | null>(null);
+  const touchCurrentX = useRef<number | null>(null);
+  const isHorizontalGesture = useRef<boolean | null>(null);
   
   // Track which videos are playing (by media id)
   const [playingVideos, setPlayingVideos] = useState<Set<string>>(new Set());
@@ -46,12 +45,12 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
   const mediaCount = sortedMedia.length;
   const hasMedia = mediaCount > 0;
 
-  // Swipe handlers with visual feedback
+  // Swipe handlers
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
-    isHorizontalSwipe.current = null;
-    setIsSwiping(true);
+    touchCurrentX.current = e.touches[0].clientX;
+    isHorizontalGesture.current = null;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -62,42 +61,37 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
     const deltaX = currentX - touchStartX.current;
     const deltaY = currentY - touchStartY.current;
     
-    // Determine swipe direction on first significant movement
-    if (isHorizontalSwipe.current === null && (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10)) {
-      isHorizontalSwipe.current = Math.abs(deltaX) > Math.abs(deltaY);
+    // Determine direction on first significant movement
+    if (isHorizontalGesture.current === null && (Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8)) {
+      isHorizontalGesture.current = Math.abs(deltaX) > Math.abs(deltaY);
     }
     
-    // Only track horizontal swipes
-    if (isHorizontalSwipe.current) {
-      // Limit swipe at edges
-      let limitedOffset = deltaX;
-      if (activeIndex === 0 && deltaX > 0) {
-        limitedOffset = deltaX * 0.3; // Resistance at start
-      } else if (activeIndex === mediaCount - 1 && deltaX < 0) {
-        limitedOffset = deltaX * 0.3; // Resistance at end
-      }
-      setSwipeOffset(limitedOffset);
+    // If horizontal gesture, prevent vertical scroll
+    if (isHorizontalGesture.current) {
+      e.preventDefault();
+      touchCurrentX.current = currentX;
     }
   };
 
   const handleTouchEnd = () => {
-    if (touchStartX.current === null) return;
+    if (touchStartX.current === null || touchCurrentX.current === null) return;
     
-    const threshold = 50;
-    
-    if (isHorizontalSwipe.current) {
-      if (swipeOffset < -threshold && activeIndex < mediaCount - 1) {
-        setActiveIndex((i) => i + 1);
-      } else if (swipeOffset > threshold && activeIndex > 0) {
-        setActiveIndex((i) => i - 1);
+    // Only change slide if it was a horizontal gesture
+    if (isHorizontalGesture.current) {
+      const deltaX = touchStartX.current - touchCurrentX.current;
+      if (Math.abs(deltaX) > 50) {
+        if (deltaX > 0 && activeIndex < mediaCount - 1) {
+          setActiveIndex((i) => i + 1);
+        } else if (deltaX < 0 && activeIndex > 0) {
+          setActiveIndex((i) => i - 1);
+        }
       }
     }
     
-    setSwipeOffset(0);
-    setIsSwiping(false);
     touchStartX.current = null;
     touchStartY.current = null;
-    isHorizontalSwipe.current = null;
+    touchCurrentX.current = null;
+    isHorizontalGesture.current = null;
   };
 
   const goToNext = () => {
@@ -178,25 +172,19 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
       {/* Media carousel */}
       {hasMedia && (
         <div
-          className="relative bg-black select-none overflow-hidden"
-          style={{ aspectRatio: MEDIA_ASPECT_RATIO, touchAction: 'pan-y' }}
+          className="relative bg-black select-none"
+          style={{ aspectRatio: MEDIA_ASPECT_RATIO }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         >
-          {sortedMedia.map((media, index) => {
-            const offset = (index - activeIndex) * 100;
-            const transform = `translateX(calc(${offset}% + ${isSwiping ? swipeOffset : 0}px))`;
-            
-            return (
+          {sortedMedia.map((media, index) => (
             <div
               key={media.id}
-              className="absolute inset-0"
-              style={{
-                transform,
-                transition: isSwiping ? 'none' : 'transform 0.3s ease-out',
-                pointerEvents: index === activeIndex ? 'auto' : 'none',
-              }}
+              className={cn(
+                "absolute inset-0 transition-opacity duration-300",
+                index === activeIndex ? "opacity-100" : "opacity-0 pointer-events-none"
+              )}
             >
               {media.type === "image" ? (
                 <Image
@@ -260,8 +248,7 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
                 </div>
               )}
             </div>
-            );
-          })}
+          ))}
 
           {/* Navigation arrows (desktop only) */}
           {mediaCount > 1 && (
