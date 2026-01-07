@@ -20,12 +20,16 @@ export function MediaGallery({ media }: MediaGalleryProps) {
   const [emblaRef, emblaApi] = useEmblaCarousel({ 
     loop: true,
     duration: 30,
+    align: "center",
+    skipSnaps: false,
   });
 
   // Embla carousel for fullscreen view
   const [fullscreenEmblaRef, fullscreenEmblaApi] = useEmblaCarousel({
     loop: true,
     duration: 30,
+    align: "center",
+    skipSnaps: false,
   });
 
   // Track playing videos
@@ -117,7 +121,7 @@ export function MediaGallery({ media }: MediaGalleryProps) {
       {/* Main gallery */}
       <div className="relative rounded-xl overflow-hidden bg-muted group/gallery">
         <div className="overflow-hidden" ref={emblaRef}>
-          <div className="flex touch-pan-y touch-pinch-zoom">
+          <div className="flex">
             {media.map((item) => (
               <div 
                 key={item.id} 
@@ -288,7 +292,7 @@ export function MediaGallery({ media }: MediaGalleryProps) {
       {isFullscreen && (
         <div className="fixed inset-0 z-[60] bg-black flex items-center justify-center animate-fade-in">
           <div className="absolute inset-0 flex items-center justify-center w-full h-full overflow-hidden" ref={fullscreenEmblaRef}>
-            <div className="flex h-full w-full touch-pan-y">
+            <div className="flex h-full w-full">
               {media.map((item) => (
                 <div key={item.id} className="flex-[0_0_100%] min-w-0 relative flex items-center justify-center h-full">
                   {item.type === "image" ? (
