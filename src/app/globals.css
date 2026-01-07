@@ -3,9 +3,10 @@
 @tailwind utilities;
 
 @layer base {
-  /* Prevent horizontal scrolling */
+  /* Prevent horizontal scrolling and overscroll */
   html, body {
     overflow-x: hidden;
+    overscroll-behavior-x: none;
   }
 
   :root {
