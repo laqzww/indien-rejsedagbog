@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,8 @@ interface PostFeedCardProps {
 
 export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
   const [activeIndex, setActiveIndex] = useState(0);
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
   
   // Track which videos are playing (by media id)
   const [playingVideos, setPlayingVideos] = useState<Set<string>>(new Set());
@@ -40,6 +42,33 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
   );
   const mediaCount = sortedMedia.length;
   const hasMedia = mediaCount > 0;
+
+  // Swipe handlers
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    const deltaX = touchStartX.current - touchEndX;
+    const deltaY = touchStartY.current - touchEndY;
+    
+    // Only trigger if horizontal swipe is greater than vertical (to not interfere with scroll)
+    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) {
+      if (deltaX > 0 && activeIndex < mediaCount - 1) {
+        setActiveIndex((i) => i + 1);
+      } else if (deltaX < 0 && activeIndex > 0) {
+        setActiveIndex((i) => i - 1);
+      }
+    }
+    
+    touchStartX.current = null;
+    touchStartY.current = null;
+  };
 
   const goToNext = () => {
     if (activeIndex < mediaCount - 1) {
@@ -121,6 +150,8 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
         <div
           className="relative bg-black select-none"
           style={{ aspectRatio: MEDIA_ASPECT_RATIO }}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
         >
           {sortedMedia.map((media, index) => (
             <div
