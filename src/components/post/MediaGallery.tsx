@@ -117,7 +117,7 @@ export function MediaGallery({ media }: MediaGalleryProps) {
       {/* Main gallery */}
       <div className="relative rounded-xl overflow-hidden bg-muted group/gallery">
         <div className="overflow-hidden" ref={emblaRef}>
-          <div className="flex touch-pan-y">
+          <div className="flex touch-pan-y touch-pinch-zoom">
             {media.map((item) => (
               <div 
                 key={item.id} 
