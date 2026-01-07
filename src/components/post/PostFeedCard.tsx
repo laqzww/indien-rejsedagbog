@@ -16,8 +16,11 @@ interface PostFeedCardProps {
 
 export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [isSwiping, setIsSwiping] = useState(false);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
+  const isHorizontalSwipe = useRef<boolean | null>(null);
   
   // Track which videos are playing (by media id)
   const [playingVideos, setPlayingVideos] = useState<Set<string>>(new Set());
@@ -43,31 +46,58 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
   const mediaCount = sortedMedia.length;
   const hasMedia = mediaCount > 0;
 
-  // Swipe handlers
+  // Swipe handlers with visual feedback
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
+    isHorizontalSwipe.current = null;
+    setIsSwiping(true);
   };
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
+  const handleTouchMove = (e: React.TouchEvent) => {
     if (touchStartX.current === null || touchStartY.current === null) return;
     
-    const touchEndX = e.changedTouches[0].clientX;
-    const touchEndY = e.changedTouches[0].clientY;
-    const deltaX = touchStartX.current - touchEndX;
-    const deltaY = touchStartY.current - touchEndY;
+    const currentX = e.touches[0].clientX;
+    const currentY = e.touches[0].clientY;
+    const deltaX = currentX - touchStartX.current;
+    const deltaY = currentY - touchStartY.current;
     
-    // Only trigger if horizontal swipe is greater than vertical (to not interfere with scroll)
-    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) {
-      if (deltaX > 0 && activeIndex < mediaCount - 1) {
+    // Determine swipe direction on first significant movement
+    if (isHorizontalSwipe.current === null && (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10)) {
+      isHorizontalSwipe.current = Math.abs(deltaX) > Math.abs(deltaY);
+    }
+    
+    // Only track horizontal swipes
+    if (isHorizontalSwipe.current) {
+      // Limit swipe at edges
+      let limitedOffset = deltaX;
+      if (activeIndex === 0 && deltaX > 0) {
+        limitedOffset = deltaX * 0.3; // Resistance at start
+      } else if (activeIndex === mediaCount - 1 && deltaX < 0) {
+        limitedOffset = deltaX * 0.3; // Resistance at end
+      }
+      setSwipeOffset(limitedOffset);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartX.current === null) return;
+    
+    const threshold = 50;
+    
+    if (isHorizontalSwipe.current) {
+      if (swipeOffset < -threshold && activeIndex < mediaCount - 1) {
         setActiveIndex((i) => i + 1);
-      } else if (deltaX < 0 && activeIndex > 0) {
+      } else if (swipeOffset > threshold && activeIndex > 0) {
         setActiveIndex((i) => i - 1);
       }
     }
     
+    setSwipeOffset(0);
+    setIsSwiping(false);
     touchStartX.current = null;
     touchStartY.current = null;
+    isHorizontalSwipe.current = null;
   };
 
   const goToNext = () => {
@@ -148,18 +178,25 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
       {/* Media carousel */}
       {hasMedia && (
         <div
-          className="relative bg-black select-none"
+          className="relative bg-black select-none overflow-hidden"
           style={{ aspectRatio: MEDIA_ASPECT_RATIO, touchAction: 'pan-y' }}
           onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         >
-          {sortedMedia.map((media, index) => (
+          {sortedMedia.map((media, index) => {
+            const offset = (index - activeIndex) * 100;
+            const transform = `translateX(calc(${offset}% + ${isSwiping ? swipeOffset : 0}px))`;
+            
+            return (
             <div
               key={media.id}
-              className={cn(
-                "absolute inset-0 transition-opacity duration-300",
-                index === activeIndex ? "opacity-100" : "opacity-0 pointer-events-none"
-              )}
+              className="absolute inset-0"
+              style={{
+                transform,
+                transition: isSwiping ? 'none' : 'transform 0.3s ease-out',
+                pointerEvents: index === activeIndex ? 'auto' : 'none',
+              }}
             >
               {media.type === "image" ? (
                 <Image
@@ -223,7 +260,8 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
 
           {/* Navigation arrows (desktop only) */}
           {mediaCount > 1 && (
