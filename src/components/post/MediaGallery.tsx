@@ -120,7 +120,7 @@ export function MediaGallery({ media }: MediaGalleryProps) {
     <>
       {/* Main gallery */}
       <div className="relative rounded-xl overflow-hidden bg-muted group/gallery">
-        <div className="overflow-hidden touch-pan-y" ref={emblaRef} data-allow-horizontal-scroll>
+        <div className="overflow-hidden overflow-x-clip touch-pan-y" ref={emblaRef} data-allow-horizontal-scroll>
           <div className="flex">
             {media.map((item) => (
               <div 
