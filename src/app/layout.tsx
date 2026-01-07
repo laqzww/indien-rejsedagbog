@@ -1,24 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import { Outfit, JetBrains_Mono, Tillana } from "next/font/google";
 import "./globals.css";
 import { BadgeManager } from "@/components/BadgeManager";
-
-const outfit = Outfit({
-  variable: "--font-outfit",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-const tillana = Tillana({
-  variable: "--font-tillana",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
 
 export const viewport: Viewport = {
   themeColor: "#FF9933",
@@ -55,13 +37,19 @@ export default function RootLayout({
   return (
     <html lang="da">
       <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Tillana:wght@400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
         <link
           href="https://api.mapbox.com/mapbox-gl-js/v3.17.0/mapbox-gl.css"
           rel="stylesheet"
         />
       </head>
       <body
-        className={`${outfit.variable} ${jetbrainsMono.variable} ${tillana.variable} antialiased min-h-dvh min-h-[100svh]`}
+        className="antialiased min-h-dvh min-h-[100svh]"
       >
         <BadgeManager />
         {children}
