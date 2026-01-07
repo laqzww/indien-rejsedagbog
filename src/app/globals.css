@@ -7,6 +7,9 @@
   html, body {
     overflow-x: hidden;
     overscroll-behavior-x: none;
+    /* Block horizontal viewport panning (keeps vertical scroll). Elements that
+       need horizontal gestures must explicitly opt-in (e.g. touch-pan-x). */
+    touch-action: pan-y;
   }
 
   /* Viewport height fallback for older browsers */

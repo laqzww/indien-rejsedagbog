@@ -148,7 +148,7 @@ export function MediaGallery({ media }: MediaGalleryProps) {
         {/* Active media */}
         <div
           ref={activeMediaElRef}
-          className="relative aspect-[4/3] cursor-pointer touch-none select-none"
+          className="relative aspect-[4/3] cursor-pointer touch-pan-y select-none"
           onClick={handleActiveMediaClick}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
