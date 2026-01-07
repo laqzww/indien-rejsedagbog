@@ -242,8 +242,9 @@ function FeedView({ hasPosts, groupedPosts, focusPostId }: FeedViewProps) {
           <span>© {new Date().getFullYear()} Tommy & Amalie</span>
           <span className="text-muted-foreground/30">·</span>
           <Link 
-            href="/admin" 
-            className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+            href="/admin"
+            prefetch={false}
+            className="text-muted-foreground/50 hover:text-muted-foreground transition-colors px-2 py-1 -mx-2 -my-1"
           >
             Admin
           </Link>
