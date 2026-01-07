@@ -22,6 +22,10 @@ const tillana = Tillana({
 
 export const viewport: Viewport = {
   themeColor: "#FF9933",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export const metadata: Metadata = {
