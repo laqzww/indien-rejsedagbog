@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -16,9 +16,6 @@ interface PostFeedCardProps {
 
 export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const [touchStart, setTouchStart] = useState<number | null>(null);
-  const [touchEnd, setTouchEnd] = useState<number | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   
   // Track which videos are playing (by media id)
   const [playingVideos, setPlayingVideos] = useState<Set<string>>(new Set());
@@ -43,28 +40,6 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
   );
   const mediaCount = sortedMedia.length;
   const hasMedia = mediaCount > 0;
-
-  // Swipe handlers for touch devices
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientX);
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX);
-  };
-
-  const handleTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-    const distance = touchStart - touchEnd;
-    const minSwipeDistance = 50;
-
-    if (distance > minSwipeDistance && activeIndex < mediaCount - 1) {
-      setActiveIndex((i) => i + 1);
-    } else if (distance < -minSwipeDistance && activeIndex > 0) {
-      setActiveIndex((i) => i - 1);
-    }
-  };
 
   const goToNext = () => {
     if (activeIndex < mediaCount - 1) {
@@ -144,12 +119,8 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
       {/* Media carousel */}
       {hasMedia && (
         <div
-          ref={containerRef}
           className="relative bg-black select-none"
-          style={{ aspectRatio: MEDIA_ASPECT_RATIO, touchAction: "pan-y pinch-zoom" }}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
+          style={{ aspectRatio: MEDIA_ASPECT_RATIO }}
         >
           {sortedMedia.map((media, index) => (
             <div
@@ -223,23 +194,23 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
             </div>
           ))}
 
-          {/* Navigation arrows (desktop only) */}
+          {/* Navigation arrows */}
           {mediaCount > 1 && (
             <>
               {activeIndex > 0 && (
                 <button
                   onClick={goToPrev}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 bg-white/90 hover:bg-white rounded-full shadow-md transition-all opacity-0 sm:opacity-100 sm:hover:scale-110"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
                 >
-                  <ChevronLeft className="h-4 w-4 text-foreground" />
+                  <ChevronLeft className="h-5 w-5" />
                 </button>
               )}
               {activeIndex < mediaCount - 1 && (
                 <button
                   onClick={goToNext}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-white/90 hover:bg-white rounded-full shadow-md transition-all opacity-0 sm:opacity-100 sm:hover:scale-110"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
                 >
-                  <ChevronRight className="h-4 w-4 text-foreground" />
+                  <ChevronRight className="h-5 w-5" />
                 </button>
               )}
             </>
