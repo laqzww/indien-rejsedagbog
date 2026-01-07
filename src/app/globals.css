@@ -3,13 +3,9 @@
 @tailwind utilities;
 
 @layer base {
-  /* Prevent ALL horizontal scrolling/panning on the page */
+  /* Prevent horizontal scrolling */
   html, body {
     overflow-x: hidden;
-    overscroll-behavior-x: none;
-    /* Block horizontal viewport panning globally. Elements that need 
-       horizontal gestures (like carousels) must override with touch-action. */
-    touch-action: pan-y;
   }
 
   :root {

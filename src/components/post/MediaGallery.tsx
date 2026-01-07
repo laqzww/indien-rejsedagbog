@@ -1,93 +1,24 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { getMediaUrl } from "@/lib/upload";
 import { ChevronLeft, ChevronRight, X, Film, ZoomIn, Play, Loader2 } from "lucide-react";
 import type { Media } from "@/types/database";
-import useEmblaCarousel from "embla-carousel-react";
 
 interface MediaGalleryProps {
   media: Media[];
 }
 
 export function MediaGallery({ media }: MediaGalleryProps) {
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   
-  // Embla carousel for the main view
-  const [emblaRef, emblaApi] = useEmblaCarousel({ 
-    loop: true,
-    duration: 30,
-    align: "center",
-    skipSnaps: false,
-  });
-
-  // Embla carousel for fullscreen view
-  const [fullscreenEmblaRef, fullscreenEmblaApi] = useEmblaCarousel({
-    loop: true,
-    duration: 30,
-    align: "center",
-    skipSnaps: false,
-  });
-
-  // Track playing videos
+  // Track which videos are playing (by media id)
   const [playingVideos, setPlayingVideos] = useState<Set<string>>(new Set());
   const [loadingVideos, setLoadingVideos] = useState<Set<string>>(new Set());
-
-  // Sync internal state with Embla
-  const onSelect = useCallback(() => {
-    if (!emblaApi) return;
-    setSelectedIndex(emblaApi.selectedScrollSnap());
-  }, [emblaApi]);
-
-  useEffect(() => {
-    if (!emblaApi) return;
-    onSelect();
-    emblaApi.on("select", onSelect);
-    emblaApi.on("reInit", onSelect);
-    return () => {
-      emblaApi.off("select", onSelect);
-      emblaApi.off("reInit", onSelect);
-    };
-  }, [emblaApi, onSelect]);
-
-  // Sync fullscreen carousel when opening
-  useEffect(() => {
-    if (isFullscreen && fullscreenEmblaApi) {
-      fullscreenEmblaApi.scrollTo(selectedIndex, true);
-    }
-  }, [isFullscreen, fullscreenEmblaApi, selectedIndex]);
-
-  // Sync main carousel when fullscreen changes (if user swiped in fullscreen)
-  useEffect(() => {
-    if (!fullscreenEmblaApi) return;
-    
-    const onFullscreenSelect = () => {
-      const index = fullscreenEmblaApi.selectedScrollSnap();
-      setSelectedIndex(index);
-      if (emblaApi) emblaApi.scrollTo(index, true);
-    };
-
-    fullscreenEmblaApi.on("select", onFullscreenSelect);
-    return () => {
-      fullscreenEmblaApi.off("select", onFullscreenSelect);
-    };
-  }, [fullscreenEmblaApi, emblaApi]);
-
-  const scrollTo = useCallback((index: number) => {
-    if (emblaApi) emblaApi.scrollTo(index);
-  }, [emblaApi]);
-
-  const scrollPrev = useCallback(() => {
-    if (emblaApi) emblaApi.scrollPrev();
-  }, [emblaApi]);
-
-  const scrollNext = useCallback(() => {
-    if (emblaApi) emblaApi.scrollNext();
-  }, [emblaApi]);
-
+  
   const handlePlayVideo = (mediaId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setLoadingVideos(prev => new Set(prev).add(mediaId));
@@ -102,101 +33,96 @@ export function MediaGallery({ media }: MediaGalleryProps) {
     });
   };
 
-  // Lock body scroll when fullscreen
-  useEffect(() => {
-    if (isFullscreen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [isFullscreen]);
-
   if (media.length === 0) return null;
+
+  const activeMedia = media[activeIndex];
+
+  const goToNext = () => {
+    setActiveIndex((i) => (i + 1) % media.length);
+  };
+
+  const goToPrev = () => {
+    setActiveIndex((i) => (i - 1 + media.length) % media.length);
+  };
 
   return (
     <>
       {/* Main gallery */}
-      <div className="relative rounded-xl overflow-hidden bg-muted group/gallery">
-        <div className="overflow-hidden" style={{ touchAction: 'none' }} ref={emblaRef}>
-          <div className="flex">
-            {media.map((item) => (
-              <div 
-                key={item.id} 
-                className="flex-[0_0_100%] min-w-0 relative aspect-[4/3] cursor-pointer"
-                onClick={() => {
-                   if (item.type === "image") setIsFullscreen(true);
-                }}
-              >
-                {item.type === "image" ? (
-                  <Image
-                    src={getMediaUrl(item.storage_path)}
-                    alt=""
-                    fill
-                    className="object-contain bg-black select-none"
-                    sizes="(max-width: 768px) 100vw, 800px"
-                    priority={selectedIndex === media.indexOf(item)}
-                  />
-                ) : playingVideos.has(item.id) ? (
-                  <div className="relative w-full h-full">
-                    <video
-                      src={getMediaUrl(item.storage_path)}
-                      controls
-                      playsInline
-                      autoPlay
-                      preload="auto"
-                      onCanPlay={() => handleVideoCanPlay(item.id)}
-                      className="w-full h-full object-cover bg-black"
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                    {loadingVideos.has(item.id) && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
-                        <Loader2 className="h-10 w-10 text-white animate-spin" />
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div 
-                    className="relative w-full h-full group"
-                    onClick={(e) => handlePlayVideo(item.id, e)}
-                  >
-                    {item.thumbnail_path ? (
-                      <Image
-                        src={getMediaUrl(item.thumbnail_path)}
-                        alt=""
-                        fill
-                        className="object-contain bg-black select-none"
-                        sizes="(max-width: 768px) 100vw, 800px"
-                        priority={selectedIndex === media.indexOf(item)}
-                      />
-                    ) : (
-                      <video
-                        src={`${getMediaUrl(item.storage_path)}#t=0.001`}
-                        preload="metadata"
-                        muted
-                        playsInline
-                        className="w-full h-full object-contain bg-black pointer-events-none"
-                      />
-                    )}
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="p-5 bg-black/60 rounded-full group-hover:bg-black/80 group-hover:scale-110 transition-all">
-                        <Play className="h-12 w-12 text-white fill-white" />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Zoom hint for images */}
-                {item.type === "image" && (
-                  <div className="absolute bottom-4 right-4 p-2 bg-black/50 rounded-full text-white opacity-0 group-hover/gallery:opacity-100 transition-opacity pointer-events-none">
-                    <ZoomIn className="h-5 w-5" />
-                  </div>
-                )}
+      <div className="relative rounded-xl overflow-hidden bg-muted">
+        {/* Active media */}
+        <div
+          className="relative aspect-[4/3] cursor-pointer"
+          onClick={() => activeMedia.type === "image" && setIsFullscreen(true)}
+        >
+          {activeMedia.type === "image" ? (
+            <Image
+              src={getMediaUrl(activeMedia.storage_path)}
+              alt=""
+              fill
+              className="object-contain bg-black"
+              sizes="(max-width: 768px) 100vw, 800px"
+              priority
+            />
+          ) : playingVideos.has(activeMedia.id) ? (
+            // Video is playing - show actual video (object-cover to match thumbnail)
+            <div className="relative w-full h-full">
+              <video
+                src={getMediaUrl(activeMedia.storage_path)}
+                controls
+                playsInline
+                autoPlay
+                preload="auto"
+                onCanPlay={() => handleVideoCanPlay(activeMedia.id)}
+                className="w-full h-full object-cover bg-black"
+                onClick={(e) => e.stopPropagation()}
+              />
+              {/* Loading overlay */}
+              {loadingVideos.has(activeMedia.id) && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
+                  <Loader2 className="h-10 w-10 text-white animate-spin" />
+                </div>
+              )}
+            </div>
+          ) : (
+            // Video thumbnail with play button
+            <div 
+              className="relative w-full h-full group"
+              onClick={(e) => handlePlayVideo(activeMedia.id, e)}
+            >
+              {/* Thumbnail image or video fallback */}
+              {activeMedia.thumbnail_path ? (
+                <Image
+                  src={getMediaUrl(activeMedia.thumbnail_path)}
+                  alt=""
+                  fill
+                  className="object-contain bg-black"
+                  sizes="(max-width: 768px) 100vw, 800px"
+                  priority
+                />
+              ) : (
+                <video
+                  src={`${getMediaUrl(activeMedia.storage_path)}#t=0.001`}
+                  preload="metadata"
+                  muted
+                  playsInline
+                  className="w-full h-full object-contain bg-black pointer-events-none"
+                />
+              )}
+              {/* Play button overlay */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="p-5 bg-black/60 rounded-full group-hover:bg-black/80 group-hover:scale-110 transition-all">
+                  <Play className="h-12 w-12 text-white fill-white" />
+                </div>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
+
+          {/* Zoom hint for images */}
+          {activeMedia.type === "image" && (
+            <div className="absolute bottom-4 right-4 p-2 bg-black/50 rounded-full text-white opacity-0 hover:opacity-100 transition-opacity">
+              <ZoomIn className="h-5 w-5" />
+            </div>
+          )}
         </div>
 
         {/* Navigation arrows */}
@@ -205,9 +131,9 @@ export function MediaGallery({ media }: MediaGalleryProps) {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                scrollPrev();
+                goToPrev();
               }}
-              className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors opacity-0 group-hover/gallery:opacity-100"
+              className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
               aria-label="Previous"
             >
               <ChevronLeft className="h-6 w-6" />
@@ -215,9 +141,9 @@ export function MediaGallery({ media }: MediaGalleryProps) {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                scrollNext();
+                goToNext();
               }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors opacity-0 group-hover/gallery:opacity-100"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
               aria-label="Next"
             >
               <ChevronRight className="h-6 w-6" />
@@ -227,16 +153,21 @@ export function MediaGallery({ media }: MediaGalleryProps) {
 
         {/* Dots indicator */}
         {media.length > 1 && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 pointer-events-none">
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
             {media.map((_, index) => (
-              <div
+              <button
                 key={index}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveIndex(index);
+                }}
                 className={cn(
-                  "w-2 h-2 rounded-full transition-all shadow-sm",
-                  index === selectedIndex
+                  "w-2 h-2 rounded-full transition-all",
+                  index === activeIndex
                     ? "bg-white w-4"
-                    : "bg-white/50"
+                    : "bg-white/50 hover:bg-white/75"
                 )}
+                aria-label={`Go to slide ${index + 1}`}
               />
             ))}
           </div>
@@ -245,14 +176,14 @@ export function MediaGallery({ media }: MediaGalleryProps) {
 
       {/* Thumbnails */}
       {media.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto py-2 scrollbar-hide overscroll-x-contain">
+        <div className="flex gap-2 overflow-x-auto py-2 scrollbar-hide">
           {media.map((item, index) => (
             <button
               key={item.id}
-              onClick={() => scrollTo(index)}
+              onClick={() => setActiveIndex(index)}
               className={cn(
                 "relative flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden transition-all",
-                index === selectedIndex
+                index === activeIndex
                   ? "ring-2 ring-saffron ring-offset-2"
                   : "opacity-60 hover:opacity-100"
               )}
@@ -289,67 +220,54 @@ export function MediaGallery({ media }: MediaGalleryProps) {
       )}
 
       {/* Fullscreen modal */}
-      {isFullscreen && (
-        <div className="fixed inset-0 z-[60] bg-black flex items-center justify-center animate-fade-in">
-          <div className="absolute inset-0 flex items-center justify-center w-full h-full overflow-hidden" style={{ touchAction: 'none' }} ref={fullscreenEmblaRef}>
-            <div className="flex h-full w-full">
-              {media.map((item) => (
-                <div key={item.id} className="flex-[0_0_100%] min-w-0 relative flex items-center justify-center h-full">
-                  {item.type === "image" ? (
-                    <Image
-                      src={getMediaUrl(item.storage_path)}
-                      alt=""
-                      fill
-                      className="object-contain"
-                      sizes="100vw"
-                      priority
-                    />
-                  ) : (
-                    <video
-                       src={getMediaUrl(item.storage_path)}
-                       controls
-                       className="max-h-full max-w-full"
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
+      {isFullscreen && activeMedia.type === "image" && (
+        <div
+          className="fixed inset-0 z-50 bg-black flex items-center justify-center"
+          onClick={() => setIsFullscreen(false)}
+        >
           <button
-            className="absolute top-4 right-4 p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-colors z-50"
+            className="absolute top-4 right-4 p-2 text-white hover:bg-white/10 rounded-full transition-colors"
             onClick={() => setIsFullscreen(false)}
           >
-            <X className="h-8 w-8" />
+            <X className="h-6 w-6" />
           </button>
 
-          {/* Navigation in fullscreen (visible on desktop) */}
+          {/* Navigation in fullscreen */}
           {media.length > 1 && (
             <>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (fullscreenEmblaApi) fullscreenEmblaApi.scrollPrev();
+                  goToPrev();
                 }}
-                className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors z-50 hidden md:block"
+                className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
               >
                 <ChevronLeft className="h-8 w-8" />
               </button>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (fullscreenEmblaApi) fullscreenEmblaApi.scrollNext();
+                  goToNext();
                 }}
-                className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors z-50 hidden md:block"
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
               >
                 <ChevronRight className="h-8 w-8" />
               </button>
             </>
           )}
 
+          <Image
+            src={getMediaUrl(activeMedia.storage_path)}
+            alt=""
+            fill
+            className="object-contain"
+            sizes="100vw"
+            onClick={(e) => e.stopPropagation()}
+          />
+
           {/* Counter */}
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-black/50 rounded-full text-white text-sm backdrop-blur-sm z-50">
-            {selectedIndex + 1} / {media.length}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1 bg-black/50 rounded-full text-white text-sm">
+            {activeIndex + 1} / {media.length}
           </div>
         </div>
       )}
