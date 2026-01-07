@@ -1,39 +1,89 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { getMediaUrl } from "@/lib/upload";
 import { ChevronLeft, ChevronRight, X, Film, ZoomIn, Play, Loader2 } from "lucide-react";
 import type { Media } from "@/types/database";
+import useEmblaCarousel from "embla-carousel-react";
 
 interface MediaGalleryProps {
   media: Media[];
 }
 
 export function MediaGallery({ media }: MediaGalleryProps) {
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const activeMediaElRef = useRef<HTMLDivElement | null>(null);
-  const fullscreenElRef = useRef<HTMLDivElement | null>(null);
-  const swipeStateRef = useRef<{
-    pointerId: number | null;
-    startX: number;
-    startY: number;
-    didTrigger: boolean;
-    didSwipe: boolean;
-  }>({
-    pointerId: null,
-    startX: 0,
-    startY: 0,
-    didTrigger: false,
-    didSwipe: false,
-  });
   
-  // Track which videos are playing (by media id)
+  // Embla carousel for the main view
+  const [emblaRef, emblaApi] = useEmblaCarousel({ 
+    loop: true,
+    duration: 30,
+  });
+
+  // Embla carousel for fullscreen view
+  const [fullscreenEmblaRef, fullscreenEmblaApi] = useEmblaCarousel({
+    loop: true,
+    duration: 30,
+  });
+
+  // Track playing videos
   const [playingVideos, setPlayingVideos] = useState<Set<string>>(new Set());
   const [loadingVideos, setLoadingVideos] = useState<Set<string>>(new Set());
-  
+
+  // Sync internal state with Embla
+  const onSelect = useCallback(() => {
+    if (!emblaApi) return;
+    setSelectedIndex(emblaApi.selectedScrollSnap());
+  }, [emblaApi]);
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    onSelect();
+    emblaApi.on("select", onSelect);
+    emblaApi.on("reInit", onSelect);
+    return () => {
+      emblaApi.off("select", onSelect);
+      emblaApi.off("reInit", onSelect);
+    };
+  }, [emblaApi, onSelect]);
+
+  // Sync fullscreen carousel when opening
+  useEffect(() => {
+    if (isFullscreen && fullscreenEmblaApi) {
+      fullscreenEmblaApi.scrollTo(selectedIndex, true);
+    }
+  }, [isFullscreen, fullscreenEmblaApi, selectedIndex]);
+
+  // Sync main carousel when fullscreen changes (if user swiped in fullscreen)
+  useEffect(() => {
+    if (!fullscreenEmblaApi) return;
+    
+    const onFullscreenSelect = () => {
+      const index = fullscreenEmblaApi.selectedScrollSnap();
+      setSelectedIndex(index);
+      if (emblaApi) emblaApi.scrollTo(index, true);
+    };
+
+    fullscreenEmblaApi.on("select", onFullscreenSelect);
+    return () => {
+      fullscreenEmblaApi.off("select", onFullscreenSelect);
+    };
+  }, [fullscreenEmblaApi, emblaApi]);
+
+  const scrollTo = useCallback((index: number) => {
+    if (emblaApi) emblaApi.scrollTo(index);
+  }, [emblaApi]);
+
+  const scrollPrev = useCallback(() => {
+    if (emblaApi) emblaApi.scrollPrev();
+  }, [emblaApi]);
+
+  const scrollNext = useCallback(() => {
+    if (emblaApi) emblaApi.scrollNext();
+  }, [emblaApi]);
+
   const handlePlayVideo = (mediaId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setLoadingVideos(prev => new Set(prev).add(mediaId));
@@ -48,182 +98,101 @@ export function MediaGallery({ media }: MediaGalleryProps) {
     });
   };
 
-  if (media.length === 0) return null;
-
-  const activeMedia = media[activeIndex];
-
-  const goToNext = () => {
-    setActiveIndex((i) => (i + 1) % media.length);
-  };
-
-  const goToPrev = () => {
-    setActiveIndex((i) => (i - 1 + media.length) % media.length);
-  };
-
-  // Prevent background scroll when fullscreen is open (especially iOS rubber-banding)
+  // Lock body scroll when fullscreen
   useEffect(() => {
-    if (!isFullscreen) return;
-    const prevOverflow = document.body.style.overflow;
-    const prevOverscroll = (document.body.style as any).overscrollBehavior;
-    document.body.style.overflow = "hidden";
-    // Best-effort; not supported in all browsers
-    (document.body.style as any).overscrollBehavior = "none";
+    if (isFullscreen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
     return () => {
-      document.body.style.overflow = prevOverflow;
-      (document.body.style as any).overscrollBehavior = prevOverscroll;
+      document.body.style.overflow = "";
     };
   }, [isFullscreen]);
 
-  const handleActiveMediaClick = () => {
-    // If the user just swiped, ignore the click that would open fullscreen
-    if (swipeStateRef.current.didSwipe) {
-      swipeStateRef.current.didSwipe = false;
-      return;
-    }
-    if (activeMedia.type === "image") setIsFullscreen(true);
-  };
-
-  const shouldIgnoreSwipeTarget = (target: EventTarget | null) => {
-    const el = target as HTMLElement | null;
-    if (!el) return false;
-    // Don't hijack gestures on interactive controls / video player
-    return Boolean(el.closest("button,a,video,input,textarea,select,[role='button']"));
-  };
-
-  const onPointerDown = (e: React.PointerEvent) => {
-    if (media.length <= 1) return;
-    if (shouldIgnoreSwipeTarget(e.target)) return;
-    if (e.pointerType === "mouse") return; // mouse users have arrows/clicks
-
-    swipeStateRef.current.pointerId = e.pointerId;
-    swipeStateRef.current.startX = e.clientX;
-    swipeStateRef.current.startY = e.clientY;
-    swipeStateRef.current.didTrigger = false;
-    swipeStateRef.current.didSwipe = false;
-
-    // Keep receiving move events even if pointer leaves element
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-  };
-
-  const onPointerMove = (e: React.PointerEvent) => {
-    const s = swipeStateRef.current;
-    if (media.length <= 1) return;
-    if (s.pointerId == null || e.pointerId !== s.pointerId) return;
-    if (s.didTrigger) return;
-
-    const dx = e.clientX - s.startX;
-    const dy = e.clientY - s.startY;
-
-    // Require a clearly horizontal gesture to avoid stealing vertical scroll
-    const absX = Math.abs(dx);
-    const absY = Math.abs(dy);
-    if (absX < 28) return;
-    if (absX < absY * 1.2) return;
-
-    s.didTrigger = true;
-    s.didSwipe = true;
-
-    // Swipe left => next, swipe right => prev
-    if (dx < 0) goToNext();
-    else goToPrev();
-  };
-
-  const onPointerUpOrCancel = (e: React.PointerEvent) => {
-    const s = swipeStateRef.current;
-    if (s.pointerId == null || e.pointerId !== s.pointerId) return;
-    try {
-      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-    } catch {
-      // no-op
-    }
-    s.pointerId = null;
-    s.didTrigger = false;
-    // keep didSwipe for the next click suppression (cleared in click handler)
-  };
+  if (media.length === 0) return null;
 
   return (
     <>
       {/* Main gallery */}
-      <div className="relative rounded-xl overflow-hidden bg-muted">
-        {/* Active media */}
-        <div
-          ref={activeMediaElRef}
-          className="relative aspect-[4/3] cursor-pointer touch-pan-y select-none"
-          onClick={handleActiveMediaClick}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUpOrCancel}
-          onPointerCancel={onPointerUpOrCancel}
-        >
-          {activeMedia.type === "image" ? (
-            <Image
-              src={getMediaUrl(activeMedia.storage_path)}
-              alt=""
-              fill
-              className="object-contain bg-black"
-              sizes="(max-width: 768px) 100vw, 800px"
-              priority
-            />
-          ) : playingVideos.has(activeMedia.id) ? (
-            // Video is playing - show actual video (object-cover to match thumbnail)
-            <div className="relative w-full h-full">
-              <video
-                src={getMediaUrl(activeMedia.storage_path)}
-                controls
-                playsInline
-                autoPlay
-                preload="auto"
-                onCanPlay={() => handleVideoCanPlay(activeMedia.id)}
-                className="w-full h-full object-cover bg-black"
-                onClick={(e) => e.stopPropagation()}
-              />
-              {/* Loading overlay */}
-              {loadingVideos.has(activeMedia.id) && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
-                  <Loader2 className="h-10 w-10 text-white animate-spin" />
-                </div>
-              )}
-            </div>
-          ) : (
-            // Video thumbnail with play button
-            <div 
-              className="relative w-full h-full group"
-              onClick={(e) => handlePlayVideo(activeMedia.id, e)}
-            >
-              {/* Thumbnail image or video fallback */}
-              {activeMedia.thumbnail_path ? (
-                <Image
-                  src={getMediaUrl(activeMedia.thumbnail_path)}
-                  alt=""
-                  fill
-                  className="object-contain bg-black"
-                  sizes="(max-width: 768px) 100vw, 800px"
-                  priority
-                />
-              ) : (
-                <video
-                  src={`${getMediaUrl(activeMedia.storage_path)}#t=0.001`}
-                  preload="metadata"
-                  muted
-                  playsInline
-                  className="w-full h-full object-contain bg-black pointer-events-none"
-                />
-              )}
-              {/* Play button overlay */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="p-5 bg-black/60 rounded-full group-hover:bg-black/80 group-hover:scale-110 transition-all">
-                  <Play className="h-12 w-12 text-white fill-white" />
-                </div>
-              </div>
-            </div>
-          )}
+      <div className="relative rounded-xl overflow-hidden bg-muted group/gallery">
+        <div className="overflow-hidden" ref={emblaRef}>
+          <div className="flex touch-pan-y">
+            {media.map((item) => (
+              <div 
+                key={item.id} 
+                className="flex-[0_0_100%] min-w-0 relative aspect-[4/3] cursor-pointer"
+                onClick={() => {
+                   if (item.type === "image") setIsFullscreen(true);
+                }}
+              >
+                {item.type === "image" ? (
+                  <Image
+                    src={getMediaUrl(item.storage_path)}
+                    alt=""
+                    fill
+                    className="object-contain bg-black select-none"
+                    sizes="(max-width: 768px) 100vw, 800px"
+                    priority={selectedIndex === media.indexOf(item)}
+                  />
+                ) : playingVideos.has(item.id) ? (
+                  <div className="relative w-full h-full">
+                    <video
+                      src={getMediaUrl(item.storage_path)}
+                      controls
+                      playsInline
+                      autoPlay
+                      preload="auto"
+                      onCanPlay={() => handleVideoCanPlay(item.id)}
+                      className="w-full h-full object-cover bg-black"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    {loadingVideos.has(item.id) && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
+                        <Loader2 className="h-10 w-10 text-white animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div 
+                    className="relative w-full h-full group"
+                    onClick={(e) => handlePlayVideo(item.id, e)}
+                  >
+                    {item.thumbnail_path ? (
+                      <Image
+                        src={getMediaUrl(item.thumbnail_path)}
+                        alt=""
+                        fill
+                        className="object-contain bg-black select-none"
+                        sizes="(max-width: 768px) 100vw, 800px"
+                        priority={selectedIndex === media.indexOf(item)}
+                      />
+                    ) : (
+                      <video
+                        src={`${getMediaUrl(item.storage_path)}#t=0.001`}
+                        preload="metadata"
+                        muted
+                        playsInline
+                        className="w-full h-full object-contain bg-black pointer-events-none"
+                      />
+                    )}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="p-5 bg-black/60 rounded-full group-hover:bg-black/80 group-hover:scale-110 transition-all">
+                        <Play className="h-12 w-12 text-white fill-white" />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
-          {/* Zoom hint for images */}
-          {activeMedia.type === "image" && (
-            <div className="absolute bottom-4 right-4 p-2 bg-black/50 rounded-full text-white opacity-0 hover:opacity-100 transition-opacity">
-              <ZoomIn className="h-5 w-5" />
-            </div>
-          )}
+                {/* Zoom hint for images */}
+                {item.type === "image" && (
+                  <div className="absolute bottom-4 right-4 p-2 bg-black/50 rounded-full text-white opacity-0 group-hover/gallery:opacity-100 transition-opacity pointer-events-none">
+                    <ZoomIn className="h-5 w-5" />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Navigation arrows */}
@@ -232,9 +201,9 @@ export function MediaGallery({ media }: MediaGalleryProps) {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                goToPrev();
+                scrollPrev();
               }}
-              className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
+              className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors opacity-0 group-hover/gallery:opacity-100"
               aria-label="Previous"
             >
               <ChevronLeft className="h-6 w-6" />
@@ -242,9 +211,9 @@ export function MediaGallery({ media }: MediaGalleryProps) {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                goToNext();
+                scrollNext();
               }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors opacity-0 group-hover/gallery:opacity-100"
               aria-label="Next"
             >
               <ChevronRight className="h-6 w-6" />
@@ -254,21 +223,16 @@ export function MediaGallery({ media }: MediaGalleryProps) {
 
         {/* Dots indicator */}
         {media.length > 1 && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 pointer-events-none">
             {media.map((_, index) => (
-              <button
+              <div
                 key={index}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveIndex(index);
-                }}
                 className={cn(
-                  "w-2 h-2 rounded-full transition-all",
-                  index === activeIndex
+                  "w-2 h-2 rounded-full transition-all shadow-sm",
+                  index === selectedIndex
                     ? "bg-white w-4"
-                    : "bg-white/50 hover:bg-white/75"
+                    : "bg-white/50"
                 )}
-                aria-label={`Go to slide ${index + 1}`}
               />
             ))}
           </div>
@@ -281,10 +245,10 @@ export function MediaGallery({ media }: MediaGalleryProps) {
           {media.map((item, index) => (
             <button
               key={item.id}
-              onClick={() => setActiveIndex(index)}
+              onClick={() => scrollTo(index)}
               className={cn(
                 "relative flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden transition-all",
-                index === activeIndex
+                index === selectedIndex
                   ? "ring-2 ring-saffron ring-offset-2"
                   : "opacity-60 hover:opacity-100"
               )}
@@ -321,59 +285,70 @@ export function MediaGallery({ media }: MediaGalleryProps) {
       )}
 
       {/* Fullscreen modal */}
-      {isFullscreen && activeMedia.type === "image" && (
-        <div
-          ref={fullscreenElRef}
-          className="fixed inset-0 z-50 bg-black flex items-center justify-center touch-none"
-          onClick={() => setIsFullscreen(false)}
-        >
+      {isFullscreen && (
+        <div className="fixed inset-0 z-[60] bg-black flex items-center justify-center animate-fade-in">
+          <div className="absolute inset-0 flex items-center justify-center w-full h-full overflow-hidden" ref={fullscreenEmblaRef}>
+            <div className="flex h-full w-full touch-pan-y">
+              {media.map((item) => (
+                <div key={item.id} className="flex-[0_0_100%] min-w-0 relative flex items-center justify-center h-full">
+                  {item.type === "image" ? (
+                    <Image
+                      src={getMediaUrl(item.storage_path)}
+                      alt=""
+                      fill
+                      className="object-contain"
+                      sizes="100vw"
+                      priority
+                    />
+                  ) : (
+                    <video
+                       src={getMediaUrl(item.storage_path)}
+                       controls
+                       className="max-h-full max-w-full"
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
           <button
-            className="absolute top-4 right-4 p-2 text-white hover:bg-white/10 rounded-full transition-colors"
+            className="absolute top-4 right-4 p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-colors z-50"
             onClick={() => setIsFullscreen(false)}
           >
-            <X className="h-6 w-6" />
+            <X className="h-8 w-8" />
           </button>
 
-          {/* Navigation in fullscreen */}
+          {/* Navigation in fullscreen (visible on desktop) */}
           {media.length > 1 && (
             <>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  goToPrev();
+                  if (fullscreenEmblaApi) fullscreenEmblaApi.scrollPrev();
                 }}
-                className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
+                className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors z-50 hidden md:block"
               >
                 <ChevronLeft className="h-8 w-8" />
               </button>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  goToNext();
+                  if (fullscreenEmblaApi) fullscreenEmblaApi.scrollNext();
                 }}
-                className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors z-50 hidden md:block"
               >
                 <ChevronRight className="h-8 w-8" />
               </button>
             </>
           )}
 
-          <Image
-            src={getMediaUrl(activeMedia.storage_path)}
-            alt=""
-            fill
-            className="object-contain"
-            sizes="100vw"
-            onClick={(e) => e.stopPropagation()}
-          />
-
           {/* Counter */}
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1 bg-black/50 rounded-full text-white text-sm">
-            {activeIndex + 1} / {media.length}
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-black/50 rounded-full text-white text-sm backdrop-blur-sm z-50">
+            {selectedIndex + 1} / {media.length}
           </div>
         </div>
       )}
     </>
   );
 }
-
