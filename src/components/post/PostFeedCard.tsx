@@ -225,23 +225,23 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
             </div>
           ))}
 
-          {/* Navigation arrows */}
+          {/* Navigation arrows (desktop only) */}
           {mediaCount > 1 && (
             <>
               {activeIndex > 0 && (
                 <button
                   onClick={goToPrev}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 bg-white/90 hover:bg-white rounded-full shadow-md transition-all opacity-0 sm:opacity-100 sm:hover:scale-110"
                 >
-                  <ChevronLeft className="h-5 w-5" />
+                  <ChevronLeft className="h-4 w-4 text-foreground" />
                 </button>
               )}
               {activeIndex < mediaCount - 1 && (
                 <button
                   onClick={goToNext}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-white/90 hover:bg-white rounded-full shadow-md transition-all opacity-0 sm:opacity-100 sm:hover:scale-110"
                 >
-                  <ChevronRight className="h-5 w-5" />
+                  <ChevronRight className="h-4 w-4 text-foreground" />
                 </button>
               )}
             </>
