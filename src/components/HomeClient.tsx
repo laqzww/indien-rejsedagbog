@@ -118,7 +118,7 @@ export function HomeClient({
   );
 
   return (
-    <div className="h-dvh h-[100svh] bg-white flex flex-col overflow-hidden overflow-x-hidden w-full max-w-full">
+    <div className="h-dvh h-[100svh] bg-white flex flex-col overflow-hidden w-full max-w-full">
       {/* Redirect admin PWA users if opened at wrong URL */}
       <AdminPwaRedirect />
       
@@ -226,7 +226,7 @@ interface FeedViewProps {
 
 function FeedView({ hasPosts, groupedPosts, focusPostId }: FeedViewProps) {
   return (
-    <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain w-full max-w-full">
+    <div className="flex-1 overflow-y-auto w-full max-w-full">
       <main className="max-w-2xl mx-auto pb-8">
         {hasPosts ? (
           <PostFeed groups={groupedPosts} focusPostId={focusPostId} />
