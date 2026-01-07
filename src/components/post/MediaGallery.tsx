@@ -291,7 +291,7 @@ export function MediaGallery({ media }: MediaGalleryProps) {
       {/* Fullscreen modal */}
       {isFullscreen && (
         <div className="fixed inset-0 z-[60] bg-black flex items-center justify-center animate-fade-in">
-          <div className="absolute inset-0 flex items-center justify-center w-full h-full overflow-hidden" style={{ touchAction: 'pan-y pinch-zoom' }} ref={fullscreenEmblaRef}>
+          <div className="absolute inset-0 flex items-center justify-center w-full h-full overflow-hidden" style={{ touchAction: 'none' }} ref={fullscreenEmblaRef}>
             <div className="flex h-full w-full">
               {media.map((item) => (
                 <div key={item.id} className="flex-[0_0_100%] min-w-0 relative flex items-center justify-center h-full">
