@@ -61,10 +61,14 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${outfit.variable} ${jetbrainsMono.variable} ${tillana.variable} antialiased overflow-x-hidden`}
+        className={`${outfit.variable} ${jetbrainsMono.variable} ${tillana.variable} antialiased`}
       >
-        <BadgeManager />
-        {children}
+        <div className="fixed inset-0 overflow-hidden">
+          <div className="h-full w-full overflow-y-auto overflow-x-hidden overscroll-none">
+            <BadgeManager />
+            {children}
+          </div>
+        </div>
       </body>
     </html>
   );
