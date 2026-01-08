@@ -1,12 +1,27 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Mail, Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import { ADMIN_CONTEXT_COOKIE } from "@/components/AdminPwaRedirect";
+
+/**
+ * Sets the admin-context cookie to mark that the user is in admin context.
+ * This cookie is used by AdminPwaRedirect to redirect standalone PWA users
+ * back to /admin when the PWA incorrectly opens at / due to cached manifest issues.
+ */
+function setAdminContextCookie() {
+  if (typeof document === "undefined") return;
+  
+  const expires = new Date();
+  expires.setFullYear(expires.getFullYear() + 1);
+  
+  document.cookie = `${ADMIN_CONTEXT_COOKIE}=1; expires=${expires.toUTCString()}; path=/; SameSite=Lax`;
+}
 
 interface LoginClientProps {
   redirect: string;
@@ -19,6 +34,17 @@ export function LoginClient({ redirect, errorParam }: LoginClientProps) {
   const [mode, setMode] = useState<"magiclink" | "password">("password");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Set admin-context cookie if we're redirecting to admin
+  // This ensures the cookie is set BEFORE the user logs in, so if they install the PWA
+  // from the login page, future opens will have the admin context
+  useEffect(() => {
+    if (redirect.startsWith("/admin")) {
+      setAdminContextCookie();
+      // Also set localStorage for redundancy
+      localStorage.setItem("admin-pwa-user", "true");
+    }
+  }, [redirect]);
 
   const initialError = useMemo(() => {
     if (!errorParam) return null;
