@@ -4,34 +4,47 @@ import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
+// Cookie name for admin context (also used by AdminPwaMarker)
+export const ADMIN_CONTEXT_COOKIE = "admin-context";
+
 /**
- * Redirects to /admin if:
- * 1. Running as installed PWA (standalone mode)
- * 2. User has previously visited admin (localStorage flag)
- * 3. User is at the root URL without any view parameters (not intentional navigation)
- * 
- * This handles the case where the admin PWA bookmark incorrectly
- * opens at / due to cached manifest issues. The middleware will
- * then redirect to /login if not authenticated.
- * 
- * If the user has intentionally navigated to /?view=feed or /?view=map,
- * we should NOT redirect them back to /admin.
+ * Checks if the admin-context cookie is set.
+ * This cookie is set when user visits /admin and persists longer than localStorage.
+ */
+function hasAdminContextCookie(): boolean {
+  if (typeof document === "undefined") return false;
+  return document.cookie.split(";").some((c) => c.trim().startsWith(`${ADMIN_CONTEXT_COOKIE}=`));
+}
+
+/**
+ * Redirects to /admin if running as installed PWA (standalone mode) and:
+ * 1. User has admin context (localStorage flag OR admin-context cookie), OR
+ * 2. User has no valid session (fail-safe: if no session in standalone, redirect to /admin for login)
+ *
+ * This handles multiple scenarios:
+ * - Admin PWA opens at "/" due to Safari caching issues
+ * - User cleared localStorage but still has the admin cookie
+ * - User has no signals but also no session (likely an admin PWA that lost context)
+ *
+ * The middleware will redirect to /login if not authenticated.
  */
 export function AdminPwaRedirect() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    // Check if user has ever visited admin
-    const isAdminUser = localStorage.getItem("admin-pwa-user") === "true";
-    if (!isAdminUser) return;
-
     // Check if running as installed PWA (standalone mode)
     const isStandalone =
       window.matchMedia("(display-mode: standalone)").matches ||
       (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
 
+    // Only apply this logic in standalone mode
     if (!isStandalone) return;
+
+    // Check for admin context signals
+    const hasLocalStorageFlag = localStorage.getItem("admin-pwa-user") === "true";
+    const hasCookie = hasAdminContextCookie();
+    const hasAdminContext = hasLocalStorageFlag || hasCookie;
 
     // Check if this is intentional navigation (has view parameter or other params)
     // If user clicked on "Opslag" or "Kort" from admin, they will have ?view=feed or ?view=map
@@ -40,32 +53,57 @@ export function AdminPwaRedirect() {
     const hasFocusParams = searchParams.has("lat") || searchParams.has("lng");
     const hasIntentionalParams = hasViewParam || hasPostParam || hasFocusParams;
 
-    // If the PWA launches at "/" with query params, we normally assume it was intentional navigation.
-    // However, when the admin user has been logged out/forgotten, this causes the app to open
-    // without the admin gear (author state), which is confusing. In that case, force /admin so
-    // middleware can redirect to /login.
+    // Helper function to check session and redirect if needed
     const ensureAdminOrLogin = async () => {
       try {
         const supabase = createClient();
         const { data, error } = await supabase.auth.getSession();
 
-        // If we can't read session reliably, fail safe into /admin -> /login.
+        // If no valid session, redirect to /admin (middleware will send to /login)
         if (error || !data.session) {
           router.replace("/admin");
         }
       } catch {
+        // On any error, fail safe to /admin
         router.replace("/admin");
       }
     };
 
-    if (hasIntentionalParams) {
+    // Case 1: Known admin user with intentional navigation params
+    // Still check session to ensure they get redirected to login if logged out
+    if (hasAdminContext && hasIntentionalParams) {
       void ensureAdminOrLogin();
       return;
     }
 
-    // Admin PWA opened at wrong URL without any view params - redirect to /admin.
-    // Middleware will handle redirect to /login if not authenticated.
-    router.replace("/admin");
+    // Case 2: Known admin user without params - redirect to /admin
+    if (hasAdminContext && !hasIntentionalParams) {
+      router.replace("/admin");
+      return;
+    }
+
+    // Case 3: No admin context and no intentional params
+    // This could be:
+    // - A regular user PWA (should stay on /)
+    // - An admin PWA that lost all context (localStorage + cookies cleared)
+    //
+    // We CANNOT reliably distinguish between these two cases.
+    // However, the admin context cookie is very persistent (1 year expiry).
+    // If it's missing, the user most likely:
+    // - Has never visited /admin before, OR
+    // - Explicitly cleared all cookies
+    //
+    // In both cases, we should NOT automatically redirect to /admin because:
+    // - Regular user PWAs should stay on /
+    // - Admin users who cleared everything will simply need to navigate to /admin manually once
+    //
+    // The admin manifest has start_url="/admin" which should handle most cases.
+    // This redirect logic is just a fallback for Safari caching issues.
+    //
+    // DO NOTHING - stay on /
+
+    // Case 4: No admin context but has intentional params
+    // This is intentional navigation - don't redirect
   }, [router, searchParams]);
 
   return null;
