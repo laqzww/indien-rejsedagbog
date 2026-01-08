@@ -2,7 +2,6 @@
 
 import { useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { Header } from "./Header";
 import { InstallBanner } from "./InstallBanner";
 import { AdminPwaRedirect } from "./AdminPwaRedirect";
@@ -241,13 +240,12 @@ function FeedView({ hasPosts, groupedPosts, focusPostId }: FeedViewProps) {
         <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
           <span>© {new Date().getFullYear()} Tommy & Amalie</span>
           <span className="text-muted-foreground/30">·</span>
-          <Link 
+          <a 
             href="/admin"
-            prefetch={false}
             className="text-muted-foreground/50 hover:text-muted-foreground transition-colors px-2 py-1 -mx-2 -my-1"
           >
             Admin
-          </Link>
+          </a>
         </div>
       </footer>
     </div>
