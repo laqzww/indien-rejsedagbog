@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { getMediaUrl } from "@/lib/upload";
+import { getMediaUrl, getCarouselThumbnailUrl } from "@/lib/upload";
 import { MapPin, ChevronLeft, ChevronRight, Play, Loader2 } from "lucide-react";
 import { formatDayLabel } from "@/lib/journey";
+import { useInViewport } from "@/hooks";
 import type { PostWithDayInfo } from "@/lib/journey";
 
 interface PostFeedCardProps {
@@ -21,9 +22,22 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
   const touchCurrentX = useRef<number | null>(null);
   const isHorizontalGesture = useRef<boolean | null>(null);
   
+  // Viewport tracking for smart loading
+  const { ref: viewportRef, isInViewport, hasBeenInViewport } = useInViewport<HTMLElement>({
+    rootMargin: "200px", // Preload 200px before entering viewport
+    threshold: 0.1,
+  });
+  
+  // Track which images have been fully loaded (for fade-in effect)
+  const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
+  
   // Track which videos are playing (by media id)
   const [playingVideos, setPlayingVideos] = useState<Set<string>>(new Set());
   const [loadingVideos, setLoadingVideos] = useState<Set<string>>(new Set());
+  
+  const handleImageLoad = useCallback((mediaId: string) => {
+    setLoadedImages(prev => new Set(prev).add(mediaId));
+  }, []);
   
   const handlePlayVideo = (mediaId: string) => {
     setLoadingVideos(prev => new Set(prev).add(mediaId));
@@ -125,7 +139,7 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
     : post.body.slice(0, MAX_BODY_LENGTH) + "...";
 
   return (
-    <article className="bg-white border-b border-border">
+    <article ref={viewportRef} className="bg-white border-b border-border">
       {/* Header with author and time */}
       <header className="flex items-center justify-between px-3 py-2.5 sm:px-4">
         <div className="flex items-center gap-2.5">
@@ -178,23 +192,62 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         >
-          {sortedMedia.map((media, index) => (
+          {sortedMedia.map((media, index) => {
+            // Smart loading logic:
+            // - Only load full resolution for active image when in viewport
+            // - Preload adjacent images (index ± 1)
+            // - Use carousel thumbnails as placeholder/fallback
+            const isActive = index === activeIndex;
+            const isAdjacent = Math.abs(index - activeIndex) === 1;
+            const shouldLoadFull = hasBeenInViewport && (isActive || isAdjacent);
+            const isFullLoaded = loadedImages.has(media.id);
+            
+            // Get carousel thumbnail URL (for images)
+            const thumbnailUrl = media.type === "image" 
+              ? getCarouselThumbnailUrl(media.storage_path)
+              : null;
+            const fullUrl = getMediaUrl(media.storage_path);
+            
+            return (
             <div
               key={media.id}
               className={cn(
                 "absolute inset-0 transition-opacity duration-300",
-                index === activeIndex ? "opacity-100" : "opacity-0 pointer-events-none"
+                isActive ? "opacity-100" : "opacity-0 pointer-events-none"
               )}
             >
               {media.type === "image" ? (
-                <Image
-                  src={getMediaUrl(media.storage_path)}
-                  alt=""
-                  fill
-                  className="object-contain"
-                  sizes="100vw"
-                  priority={index === 0}
-                />
+                <div className="relative w-full h-full">
+                  {/* Thumbnail layer - always visible initially, fades out when full loads */}
+                  {thumbnailUrl && (
+                    <Image
+                      src={thumbnailUrl}
+                      alt=""
+                      fill
+                      className={cn(
+                        "object-contain transition-opacity duration-300",
+                        isFullLoaded ? "opacity-0" : "opacity-100"
+                      )}
+                      sizes="100vw"
+                      priority={index === 0}
+                    />
+                  )}
+                  {/* Full resolution layer - loads when in viewport and active/adjacent */}
+                  {shouldLoadFull && (
+                    <Image
+                      src={fullUrl}
+                      alt=""
+                      fill
+                      className={cn(
+                        "object-contain transition-opacity duration-500",
+                        isFullLoaded ? "opacity-100" : "opacity-0"
+                      )}
+                      sizes="100vw"
+                      priority={index === 0 && isInViewport}
+                      onLoad={() => handleImageLoad(media.id)}
+                    />
+                  )}
+                </div>
               ) : playingVideos.has(media.id) ? (
                 // Video is playing - show actual video
                 <div className="relative w-full h-full">
@@ -248,7 +301,8 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
                 </div>
               )}
             </div>
-          ))}
+          );
+          })}
 
           {/* Navigation arrows (desktop only) */}
           {mediaCount > 1 && (

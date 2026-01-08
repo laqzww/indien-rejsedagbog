@@ -7,6 +7,13 @@ export type {
   UseViewNavigationOptions,
 } from "./useViewNavigation";
 
+// Viewport detection hooks
+export { useInViewport } from "./useInViewport";
+export type {
+  UseInViewportOptions,
+  UseInViewportResult,
+} from "./useInViewport";
+
 // Journey carousel hooks
 export { useJourneyCarousel } from "./useJourneyCarousel";
 export type {
