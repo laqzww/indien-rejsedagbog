@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,10 @@ import { ADMIN_CONTEXT_COOKIE } from "@/components/AdminPwaRedirect";
  * Sets the admin-context cookie to mark that the user is in admin context.
  * This cookie is used by AdminPwaRedirect to redirect standalone PWA users
  * back to /admin when the PWA incorrectly opens at / due to cached manifest issues.
+ * 
+ * NOTE: This should ONLY be called after successful login, not just by visiting the login page.
  */
-function setAdminContextCookie() {
+export function setAdminContextCookie() {
   if (typeof document === "undefined") return;
   
   const expires = new Date();
@@ -35,16 +37,10 @@ export function LoginClient({ redirect, errorParam }: LoginClientProps) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Set admin-context cookie if we're redirecting to admin
-  // This ensures the cookie is set BEFORE the user logs in, so if they install the PWA
-  // from the login page, future opens will have the admin context
-  useEffect(() => {
-    if (redirect.startsWith("/admin")) {
-      setAdminContextCookie();
-      // Also set localStorage for redundancy
-      localStorage.setItem("admin-pwa-user", "true");
-    }
-  }, [redirect]);
+  // NOTE: We do NOT set admin context here on page load.
+  // Admin context should only be set after successful login to /admin.
+  // Setting it on page load would break the regular user PWA if they
+  // accidentally visited the login page with ?redirect=/admin.
 
   const initialError = useMemo(() => {
     if (!errorParam) return null;
@@ -70,6 +66,11 @@ export function LoginClient({ redirect, errorParam }: LoginClientProps) {
       if (error) {
         setMessage({ type: "error", text: error.message });
       } else {
+        // Set admin context if logging in to admin
+        if (redirect.startsWith("/admin")) {
+          setAdminContextCookie();
+          localStorage.setItem("admin-pwa-user", "true");
+        }
         // Server-side pages rely on auth cookies; hard navigation ensures fresh session.
         window.location.assign(redirect);
       }

@@ -2,6 +2,9 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse, type NextRequest } from "next/server";
 import { isEmailAllowlisted } from "@/lib/author";
 
+// Cookie name for admin context (must match AdminPwaRedirect.tsx)
+const ADMIN_CONTEXT_COOKIE = "admin-context";
+
 // Helper to create redirect URL using nextUrl (correctly handles proxy headers)
 function createRedirectUrl(request: NextRequest, pathname: string, searchParams?: Record<string, string>) {
   const url = request.nextUrl.clone();
@@ -13,6 +16,25 @@ function createRedirectUrl(request: NextRequest, pathname: string, searchParams?
     });
   }
   return url;
+}
+
+// Helper to create redirect response with optional admin context cookie
+function createRedirectResponse(request: NextRequest, pathname: string, setAdminContext: boolean, searchParams?: Record<string, string>) {
+  const response = NextResponse.redirect(createRedirectUrl(request, pathname, searchParams));
+  
+  if (setAdminContext) {
+    // Set admin-context cookie with 1 year expiry
+    const expires = new Date();
+    expires.setFullYear(expires.getFullYear() + 1);
+    
+    response.cookies.set(ADMIN_CONTEXT_COOKIE, "1", {
+      expires,
+      path: "/",
+      sameSite: "lax",
+    });
+  }
+  
+  return response;
 }
 
 export async function GET(request: NextRequest) {
@@ -37,13 +59,16 @@ export async function GET(request: NextRequest) {
       .upsert({ id: user.id, is_author: true }, { onConflict: "id" });
   };
 
+  // Determine if we should set admin context cookie (only for admin redirects)
+  const shouldSetAdminContext = redirect.startsWith("/admin");
+
   // Handle PKCE flow (code exchange)
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     
     if (!error) {
       await maybeProvisionAuthor();
-      return NextResponse.redirect(createRedirectUrl(request, redirect));
+      return createRedirectResponse(request, redirect, shouldSetAdminContext);
     }
     console.error("Code exchange error:", error);
   }
@@ -60,12 +85,10 @@ export async function GET(request: NextRequest) {
 
       // Password recovery: after verification, direct user to set new password.
       if (type === "recovery") {
-        return NextResponse.redirect(
-          createRedirectUrl(request, "/auth/update-password", { redirect })
-        );
+        return createRedirectResponse(request, "/auth/update-password", shouldSetAdminContext, { redirect });
       }
 
-      return NextResponse.redirect(createRedirectUrl(request, redirect));
+      return createRedirectResponse(request, redirect, shouldSetAdminContext);
     }
     console.error("Token verification error:", error);
   }
