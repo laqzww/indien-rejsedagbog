@@ -15,12 +15,25 @@ interface PostFeedCardProps {
   showDayBadge?: boolean;
 }
 
+// Resistance factor for edge swipe (lower = more resistance)
+const EDGE_RESISTANCE = 0.3;
+// Minimum swipe distance to trigger slide change
+const SWIPE_THRESHOLD = 50;
+// Animation duration in ms
+const ANIMATION_DURATION = 300;
+
 export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
   const [activeIndex, setActiveIndex] = useState(0);
+  // Drag offset in pixels (for real-time finger tracking)
+  const [dragOffset, setDragOffset] = useState(0);
+  // Whether we're currently dragging (controls transition)
+  const [isDragging, setIsDragging] = useState(false);
+  
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
   const touchCurrentX = useRef<number | null>(null);
   const isHorizontalGesture = useRef<boolean | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   
   // Viewport tracking for smart loading
   const { ref: viewportRef, isInViewport, hasBeenInViewport } = useInViewport<HTMLElement>({
@@ -77,12 +90,13 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
   const mediaCount = sortedMedia.length;
   const hasMedia = mediaCount > 0;
 
-  // Swipe handlers
+  // Swipe handlers with real-time finger tracking
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
     touchCurrentX.current = e.touches[0].clientX;
     isHorizontalGesture.current = null;
+    setIsDragging(true);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -98,20 +112,37 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
       isHorizontalGesture.current = Math.abs(deltaX) > Math.abs(deltaY);
     }
     
-    // If horizontal gesture, prevent vertical scroll
+    // If horizontal gesture, prevent vertical scroll and update drag offset
     if (isHorizontalGesture.current) {
       e.preventDefault();
       touchCurrentX.current = currentX;
+      
+      // Apply edge resistance when at boundaries
+      let offset = deltaX;
+      const isAtStart = activeIndex === 0 && deltaX > 0;
+      const isAtEnd = activeIndex === mediaCount - 1 && deltaX < 0;
+      
+      if (isAtStart || isAtEnd) {
+        // Apply resistance - the further you drag, the more resistance
+        offset = deltaX * EDGE_RESISTANCE;
+      }
+      
+      setDragOffset(offset);
     }
   };
 
   const handleTouchEnd = () => {
-    if (touchStartX.current === null || touchCurrentX.current === null) return;
+    if (touchStartX.current === null || touchCurrentX.current === null) {
+      setIsDragging(false);
+      setDragOffset(0);
+      return;
+    }
     
     // Only change slide if it was a horizontal gesture
     if (isHorizontalGesture.current) {
       const deltaX = touchStartX.current - touchCurrentX.current;
-      if (Math.abs(deltaX) > 50) {
+      
+      if (Math.abs(deltaX) > SWIPE_THRESHOLD) {
         if (deltaX > 0 && activeIndex < mediaCount - 1) {
           setActiveIndex((i) => i + 1);
         } else if (deltaX < 0 && activeIndex > 0) {
@@ -119,6 +150,10 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
         }
       }
     }
+    
+    // Reset drag state - animation will handle the transition
+    setIsDragging(false);
+    setDragOffset(0);
     
     touchStartX.current = null;
     touchStartY.current = null;
@@ -204,130 +239,136 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
       {/* Media carousel */}
       {hasMedia && (
         <div
-          className="relative bg-black select-none"
+          ref={containerRef}
+          className="relative bg-black select-none overflow-hidden"
           style={{ aspectRatio: MEDIA_ASPECT_RATIO }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         >
-          {sortedMedia.map((media, index) => {
-            // Smart loading logic (3-tier):
-            // 1. Far from viewport: Show placeholder only (no network requests)
-            // 2. Near viewport (hasBeenInViewport): Load thumbnails for ALL media
-            // 3. Full resolution: Load when index is in fullResIndices (persists after viewing)
-            const isActive = index === activeIndex;
-            const shouldLoadThumbnail = hasBeenInViewport; // Load thumbnail when near viewport
-            const shouldLoadFull = fullResIndices.has(index); // Full res once visited/adjacent
-            const isFullLoaded = loadedImages.has(media.id);
-            
-            // Get carousel thumbnail URL (for images)
-            const thumbnailUrl = media.type === "image" 
-              ? getCarouselThumbnailUrl(media.storage_path)
-              : null;
-            const fullUrl = getMediaUrl(media.storage_path);
-            
-            return (
-            <div
-              key={media.id}
-              className={cn(
-                "absolute inset-0 transition-opacity duration-300",
-                isActive ? "opacity-100" : "opacity-0 pointer-events-none"
-              )}
-            >
-              {media.type === "image" ? (
-                <div className="relative w-full h-full">
-                  {/* Placeholder layer - shown when far from viewport (no network request) */}
-                  {!shouldLoadThumbnail && (
-                    <div className="absolute inset-0 bg-muted animate-pulse" />
-                  )}
-                  {/* Thumbnail layer - loads when near viewport, hidden when full loads */}
-                  {shouldLoadThumbnail && thumbnailUrl && !isFullLoaded && (
-                    <Image
-                      src={thumbnailUrl}
-                      alt=""
-                      fill
-                      className="object-contain"
-                      sizes="100vw"
-                      priority={index === 0 && isInViewport}
-                    />
-                  )}
-                  {/* Full resolution layer - loads when in viewport and active/adjacent */}
-                  {shouldLoadFull && (
-                    <Image
-                      src={fullUrl}
-                      alt=""
-                      fill
-                      className="object-contain"
-                      sizes="100vw"
-                      priority={index === 0 && isInViewport}
-                      onLoad={() => handleImageLoad(media.id)}
-                    />
-                  )}
-                </div>
-              ) : !shouldLoadThumbnail ? (
-                // Placeholder for video when far from viewport
-                <div className="relative w-full h-full bg-muted animate-pulse">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="p-4 bg-black/30 rounded-full">
-                      <Play className="h-10 w-10 text-white/50 fill-white/50" />
-                    </div>
-                  </div>
-                </div>
-              ) : playingVideos.has(media.id) ? (
-                // Video is playing - show actual video
-                <div className="relative w-full h-full">
-                  <video
-                    src={getMediaUrl(media.storage_path)}
-                    controls
-                    playsInline
-                    autoPlay
-                    preload="auto"
-                    onCanPlay={() => handleVideoCanPlay(media.id)}
-                    className="w-full h-full bg-black object-contain"
-                  />
-                  {/* Loading overlay */}
-                  {loadingVideos.has(media.id) && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                      <Loader2 className="h-10 w-10 text-white animate-spin" />
-                    </div>
-                  )}
-                </div>
-              ) : (
-                // Video thumbnail with play button - only loads when near viewport
-                <div 
-                  className="relative w-full h-full cursor-pointer group"
-                  onClick={() => handlePlayVideo(media.id)}
+          {/* Sliding container - moves all items together */}
+          <div
+            className="flex h-full"
+            style={{
+              transform: `translateX(calc(-${activeIndex * 100}% + ${dragOffset}px))`,
+              transition: isDragging ? 'none' : `transform ${ANIMATION_DURATION}ms ease-out`,
+            }}
+          >
+            {sortedMedia.map((media, index) => {
+              // Smart loading logic (3-tier):
+              // 1. Far from viewport: Show placeholder only (no network requests)
+              // 2. Near viewport (hasBeenInViewport): Load thumbnails for ALL media
+              // 3. Full resolution: Load when index is in fullResIndices (persists after viewing)
+              const shouldLoadThumbnail = hasBeenInViewport; // Load thumbnail when near viewport
+              const shouldLoadFull = fullResIndices.has(index); // Full res once visited/adjacent
+              const isFullLoaded = loadedImages.has(media.id);
+              
+              // Get carousel thumbnail URL (for images)
+              const thumbnailUrl = media.type === "image" 
+                ? getCarouselThumbnailUrl(media.storage_path)
+                : null;
+              const fullUrl = getMediaUrl(media.storage_path);
+              
+              return (
+                <div
+                  key={media.id}
+                  className="relative flex-shrink-0 w-full h-full"
                 >
-                  {/* Thumbnail image or video fallback */}
-                  {media.thumbnail_path ? (
-                    <Image
-                      src={getMediaUrl(media.thumbnail_path)}
-                      alt=""
-                      fill
-                      className="object-contain"
-                      sizes="100vw"
-                      priority={index === 0 && isInViewport}
-                    />
-                  ) : (
-                    <video
-                      src={`${getMediaUrl(media.storage_path)}#t=0.001`}
-                      preload="metadata"
-                      muted
-                      playsInline
-                      className="w-full h-full pointer-events-none object-contain"
-                    />
-                  )}
-                  {/* Play button overlay */}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="p-4 bg-black/60 rounded-full group-hover:bg-black/80 group-hover:scale-110 transition-all">
-                      <Play className="h-10 w-10 text-white fill-white" />
+                  {media.type === "image" ? (
+                    <div className="relative w-full h-full">
+                      {/* Placeholder layer - shown when far from viewport (no network request) */}
+                      {!shouldLoadThumbnail && (
+                        <div className="absolute inset-0 bg-muted animate-pulse" />
+                      )}
+                      {/* Thumbnail layer - loads when near viewport, hidden when full loads */}
+                      {shouldLoadThumbnail && thumbnailUrl && !isFullLoaded && (
+                        <Image
+                          src={thumbnailUrl}
+                          alt=""
+                          fill
+                          className="object-contain"
+                          sizes="100vw"
+                          priority={index === 0 && isInViewport}
+                        />
+                      )}
+                      {/* Full resolution layer - loads when index has been visited/adjacent */}
+                      {shouldLoadFull && (
+                        <Image
+                          src={fullUrl}
+                          alt=""
+                          fill
+                          className="object-contain"
+                          sizes="100vw"
+                          priority={index === 0 && isInViewport}
+                          onLoad={() => handleImageLoad(media.id)}
+                        />
+                      )}
                     </div>
-                  </div>
+                  ) : !shouldLoadThumbnail ? (
+                    // Placeholder for video when far from viewport
+                    <div className="relative w-full h-full bg-muted animate-pulse">
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="p-4 bg-black/30 rounded-full">
+                          <Play className="h-10 w-10 text-white/50 fill-white/50" />
+                        </div>
+                      </div>
+                    </div>
+                  ) : playingVideos.has(media.id) ? (
+                    // Video is playing - show actual video
+                    <div className="relative w-full h-full">
+                      <video
+                        src={getMediaUrl(media.storage_path)}
+                        controls
+                        playsInline
+                        autoPlay
+                        preload="auto"
+                        onCanPlay={() => handleVideoCanPlay(media.id)}
+                        className="w-full h-full bg-black object-contain"
+                      />
+                      {/* Loading overlay */}
+                      {loadingVideos.has(media.id) && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                          <Loader2 className="h-10 w-10 text-white animate-spin" />
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    // Video thumbnail with play button - only loads when near viewport
+                    <div 
+                      className="relative w-full h-full cursor-pointer group"
+                      onClick={() => handlePlayVideo(media.id)}
+                    >
+                      {/* Thumbnail image or video fallback */}
+                      {media.thumbnail_path ? (
+                        <Image
+                          src={getMediaUrl(media.thumbnail_path)}
+                          alt=""
+                          fill
+                          className="object-contain"
+                          sizes="100vw"
+                          priority={index === 0 && isInViewport}
+                        />
+                      ) : (
+                        <video
+                          src={`${getMediaUrl(media.storage_path)}#t=0.001`}
+                          preload="metadata"
+                          muted
+                          playsInline
+                          className="w-full h-full pointer-events-none object-contain"
+                        />
+                      )}
+                      {/* Play button overlay */}
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="p-4 bg-black/60 rounded-full group-hover:bg-black/80 group-hover:scale-110 transition-all">
+                          <Play className="h-10 w-10 text-white fill-white" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          );
-          })}
+              );
+            })}
+          </div>
 
           {/* Navigation arrows (desktop only) */}
           {mediaCount > 1 && (
