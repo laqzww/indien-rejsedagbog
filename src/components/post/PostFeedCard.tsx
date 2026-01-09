@@ -223,16 +223,13 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
                   {!shouldLoadThumbnail && (
                     <div className="absolute inset-0 bg-muted animate-pulse" />
                   )}
-                  {/* Thumbnail layer - loads when near viewport, fades out when full loads */}
-                  {shouldLoadThumbnail && thumbnailUrl && (
+                  {/* Thumbnail layer - loads when near viewport, hidden when full loads */}
+                  {shouldLoadThumbnail && thumbnailUrl && !isFullLoaded && (
                     <Image
                       src={thumbnailUrl}
                       alt=""
                       fill
-                      className={cn(
-                        "object-contain transition-opacity duration-300",
-                        isFullLoaded ? "opacity-0" : "opacity-100"
-                      )}
+                      className="object-contain"
                       sizes="100vw"
                       priority={index === 0 && isInViewport}
                     />
@@ -243,10 +240,7 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
                       src={fullUrl}
                       alt=""
                       fill
-                      className={cn(
-                        "object-contain transition-opacity duration-500",
-                        isFullLoaded ? "opacity-100" : "opacity-0"
-                      )}
+                      className="object-contain"
                       sizes="100vw"
                       priority={index === 0 && isInViewport}
                       onLoad={() => handleImageLoad(media.id)}
