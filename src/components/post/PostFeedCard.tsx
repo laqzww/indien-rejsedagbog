@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -28,12 +28,30 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
     threshold: 0.1,
   });
   
-  // Track which images have been fully loaded (for fade-in effect)
+  // Track which images have been fully loaded
   const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
+  
+  // Track which media indices should load full resolution
+  // This persists even when scrolling away - once triggered, stays triggered
+  const [fullResIndices, setFullResIndices] = useState<Set<number>>(() => new Set([0])); // Start with first image
   
   // Track which videos are playing (by media id)
   const [playingVideos, setPlayingVideos] = useState<Set<string>>(new Set());
   const [loadingVideos, setLoadingVideos] = useState<Set<string>>(new Set());
+  
+  // When activeIndex changes or viewport is entered, mark current + adjacent for full res loading
+  useEffect(() => {
+    if (hasBeenInViewport) {
+      setFullResIndices(prev => {
+        const next = new Set(prev);
+        // Add current, previous, and next indices
+        next.add(activeIndex);
+        if (activeIndex > 0) next.add(activeIndex - 1);
+        if (activeIndex < post.media.length - 1) next.add(activeIndex + 1);
+        return next;
+      });
+    }
+  }, [activeIndex, hasBeenInViewport, post.media.length]);
   
   const handleImageLoad = useCallback((mediaId: string) => {
     setLoadedImages(prev => new Set(prev).add(mediaId));
@@ -195,12 +213,11 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
           {sortedMedia.map((media, index) => {
             // Smart loading logic (3-tier):
             // 1. Far from viewport: Show placeholder only (no network requests)
-            // 2. Near viewport (hasBeenInViewport): Load thumbnails
-            // 3. In viewport + active/adjacent: Load full resolution
+            // 2. Near viewport (hasBeenInViewport): Load thumbnails for ALL media
+            // 3. Full resolution: Load when index is in fullResIndices (persists after viewing)
             const isActive = index === activeIndex;
-            const isAdjacent = Math.abs(index - activeIndex) === 1;
             const shouldLoadThumbnail = hasBeenInViewport; // Load thumbnail when near viewport
-            const shouldLoadFull = isInViewport && (isActive || isAdjacent); // Full only when actually visible
+            const shouldLoadFull = fullResIndices.has(index); // Full res once visited/adjacent
             const isFullLoaded = loadedImages.has(media.id);
             
             // Get carousel thumbnail URL (for images)
