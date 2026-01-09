@@ -193,13 +193,14 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
           onTouchEnd={handleTouchEnd}
         >
           {sortedMedia.map((media, index) => {
-            // Smart loading logic:
-            // - Only load full resolution for active image when in viewport
-            // - Preload adjacent images (index ± 1)
-            // - Use carousel thumbnails as placeholder/fallback
+            // Smart loading logic (3-tier):
+            // 1. Far from viewport: Show placeholder only (no network requests)
+            // 2. Near viewport (hasBeenInViewport): Load thumbnails
+            // 3. In viewport + active/adjacent: Load full resolution
             const isActive = index === activeIndex;
             const isAdjacent = Math.abs(index - activeIndex) === 1;
-            const shouldLoadFull = hasBeenInViewport && (isActive || isAdjacent);
+            const shouldLoadThumbnail = hasBeenInViewport; // Load thumbnail when near viewport
+            const shouldLoadFull = isInViewport && (isActive || isAdjacent); // Full only when actually visible
             const isFullLoaded = loadedImages.has(media.id);
             
             // Get carousel thumbnail URL (for images)
@@ -218,8 +219,12 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
             >
               {media.type === "image" ? (
                 <div className="relative w-full h-full">
-                  {/* Thumbnail layer - always visible initially, fades out when full loads */}
-                  {thumbnailUrl && (
+                  {/* Placeholder layer - shown when far from viewport (no network request) */}
+                  {!shouldLoadThumbnail && (
+                    <div className="absolute inset-0 bg-muted animate-pulse" />
+                  )}
+                  {/* Thumbnail layer - loads when near viewport, fades out when full loads */}
+                  {shouldLoadThumbnail && thumbnailUrl && (
                     <Image
                       src={thumbnailUrl}
                       alt=""
@@ -229,7 +234,7 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
                         isFullLoaded ? "opacity-0" : "opacity-100"
                       )}
                       sizes="100vw"
-                      priority={index === 0}
+                      priority={index === 0 && isInViewport}
                     />
                   )}
                   {/* Full resolution layer - loads when in viewport and active/adjacent */}
@@ -247,6 +252,15 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
                       onLoad={() => handleImageLoad(media.id)}
                     />
                   )}
+                </div>
+              ) : !shouldLoadThumbnail ? (
+                // Placeholder for video when far from viewport
+                <div className="relative w-full h-full bg-muted animate-pulse">
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="p-4 bg-black/30 rounded-full">
+                      <Play className="h-10 w-10 text-white/50 fill-white/50" />
+                    </div>
+                  </div>
                 </div>
               ) : playingVideos.has(media.id) ? (
                 // Video is playing - show actual video
@@ -268,7 +282,7 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
                   )}
                 </div>
               ) : (
-                // Video thumbnail with play button
+                // Video thumbnail with play button - only loads when near viewport
                 <div 
                   className="relative w-full h-full cursor-pointer group"
                   onClick={() => handlePlayVideo(media.id)}
@@ -281,7 +295,7 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
                       fill
                       className="object-contain"
                       sizes="100vw"
-                      priority={index === 0}
+                      priority={index === 0 && isInViewport}
                     />
                   ) : (
                     <video
