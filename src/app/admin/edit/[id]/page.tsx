@@ -536,10 +536,18 @@ export default function EditPostPage() {
         });
 
         // Upload all files in parallel with progress tracking
+        // Create a set of primary file IDs (excluding thumbnails) for progress display
+        const primaryFileIds = new Set(newFiles.map(f => f.id));
+        
         uploadResult = await uploadFilesInParallel(uploadItems, {
           onProgress: (progress) => {
-            setFileProgress(progress);
-            setOverallProgress(calculateOverallProgress(progress));
+            // Filter to only show primary files (not thumbnails) in progress display
+            // Thumbnails have IDs like "${id}-thumb" or "${id}-carousel"
+            const filteredProgress = new Map<string, UploadProgress>(
+              Array.from(progress.entries()).filter(([id]) => primaryFileIds.has(id))
+            );
+            setFileProgress(filteredProgress);
+            setOverallProgress(calculateOverallProgress(filteredProgress));
           },
         });
 
