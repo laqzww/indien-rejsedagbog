@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import Image from "next/image";
-import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
+import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
 import { cn } from "@/lib/utils";
 import { getMediaUrl, getCarouselThumbnailUrl } from "@/lib/upload";
 import { X, ChevronLeft, ChevronRight, Play, Loader2 } from "lucide-react";
@@ -21,9 +21,9 @@ interface MediaLightboxProps {
 }
 
 // Threshold for swipe-to-close (in pixels)
-const SWIPE_CLOSE_THRESHOLD = 100;
+const SWIPE_CLOSE_THRESHOLD = 80;
 // Threshold for horizontal swipe to change slide
-const SWIPE_SLIDE_THRESHOLD = 50;
+const SWIPE_SLIDE_THRESHOLD = 40;
 // Animation duration
 const ANIMATION_DURATION = 200;
 
@@ -31,34 +31,32 @@ export function MediaLightbox({ media, initialIndex, onClose }: MediaLightboxPro
   const [activeIndex, setActiveIndex] = useState(initialIndex);
   const [isClosing, setIsClosing] = useState(false);
   
-  // Vertical drag state for swipe-to-close
-  const [dragY, setDragY] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
-  
-  // Horizontal swipe state
-  const [dragX, setDragX] = useState(0);
-  const [isHorizontalSwipe, setIsHorizontalSwipe] = useState(false);
-  
-  // Track loaded full-resolution images
+  // Track loaded full-resolution images (only load when in lightbox)
   const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
   
   // Video state
   const [playingVideo, setPlayingVideo] = useState<string | null>(null);
   const [loadingVideo, setLoadingVideo] = useState(false);
   
-  // Touch tracking refs
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
-  const gestureDirectionRef = useRef<"horizontal" | "vertical" | null>(null);
-  const isZoomedRef = useRef(false);
+  // Zoom state - when zoomed, disable swipe navigation
+  const [isZoomed, setIsZoomed] = useState(false);
   
-  // Container ref for touch events
-  const containerRef = useRef<HTMLDivElement>(null);
+  // Drag state for swipe gestures (only used when NOT zoomed)
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  
+  // Touch tracking
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const gestureDirectionRef = useRef<"horizontal" | "vertical" | null>(null);
+  
+  // Ref to TransformWrapper for resetting zoom
+  const transformRef = useRef<ReactZoomPanPinchRef | null>(null);
   
   const activeMedia = media[activeIndex];
   const mediaCount = media.length;
   
-  // Calculate opacity based on drag distance (Instagram-like fade)
-  const backgroundOpacity = Math.max(0, 1 - Math.abs(dragY) / 300);
+  // Calculate background opacity based on vertical drag (Instagram-like fade)
+  const backgroundOpacity = Math.max(0.3, 1 - Math.abs(dragOffset.y) / 250);
   
   // Handle image load
   const handleImageLoad = useCallback((mediaId: string) => {
@@ -78,7 +76,8 @@ export function MediaLightbox({ media, initialIndex, onClose }: MediaLightboxPro
     if (activeIndex < mediaCount - 1) {
       setActiveIndex(i => i + 1);
       setPlayingVideo(null);
-      isZoomedRef.current = false;
+      setIsZoomed(false);
+      transformRef.current?.resetTransform();
     }
   }, [activeIndex, mediaCount]);
   
@@ -86,7 +85,8 @@ export function MediaLightbox({ media, initialIndex, onClose }: MediaLightboxPro
     if (activeIndex > 0) {
       setActiveIndex(i => i - 1);
       setPlayingVideo(null);
-      isZoomedRef.current = false;
+      setIsZoomed(false);
+      transformRef.current?.resetTransform();
     }
   }, [activeIndex]);
   
@@ -100,21 +100,28 @@ export function MediaLightbox({ media, initialIndex, onClose }: MediaLightboxPro
     setLoadingVideo(false);
   }, []);
   
-  // Touch handlers for swipe-to-close and horizontal swipe
+  // Track zoom state
+  const handleZoomChange = useCallback((ref: ReactZoomPanPinchRef) => {
+    const scale = ref.state.scale;
+    setIsZoomed(scale > 1.05);
+  }, []);
+  
+  // Touch handlers - only active when NOT zoomed
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    // Don't handle if zoomed in
-    if (isZoomedRef.current) return;
+    // Don't handle swipes when zoomed - let TransformWrapper handle panning
+    if (isZoomed) return;
     
     touchStartRef.current = {
       x: e.touches[0].clientX,
       y: e.touches[0].clientY,
+      time: Date.now(),
     };
     gestureDirectionRef.current = null;
     setIsDragging(true);
-  }, []);
+  }, [isZoomed]);
   
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!touchStartRef.current || isZoomedRef.current) return;
+    if (!touchStartRef.current || isZoomed) return;
     
     const currentX = e.touches[0].clientX;
     const currentY = e.touches[0].clientY;
@@ -122,91 +129,85 @@ export function MediaLightbox({ media, initialIndex, onClose }: MediaLightboxPro
     const deltaY = currentY - touchStartRef.current.y;
     
     // Determine gesture direction on first significant movement
-    if (!gestureDirectionRef.current && (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10)) {
+    if (!gestureDirectionRef.current && (Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8)) {
       gestureDirectionRef.current = Math.abs(deltaY) > Math.abs(deltaX) ? "vertical" : "horizontal";
     }
     
     if (gestureDirectionRef.current === "vertical") {
-      // Vertical swipe - for closing
-      setDragY(deltaY);
-      setIsHorizontalSwipe(false);
+      // Vertical swipe - for closing (allow both up and down)
+      setDragOffset({ x: 0, y: deltaY });
     } else if (gestureDirectionRef.current === "horizontal") {
       // Horizontal swipe - for changing slides
-      // Apply edge resistance
-      let adjustedDeltaX = deltaX;
+      // Apply edge resistance at boundaries
+      let adjustedX = deltaX;
       if ((activeIndex === 0 && deltaX > 0) || (activeIndex === mediaCount - 1 && deltaX < 0)) {
-        adjustedDeltaX = deltaX * 0.3; // Resistance at edges
+        adjustedX = deltaX * 0.25;
       }
-      setDragX(adjustedDeltaX);
-      setIsHorizontalSwipe(true);
+      setDragOffset({ x: adjustedX, y: 0 });
     }
-  }, [activeIndex, mediaCount]);
+  }, [isZoomed, activeIndex, mediaCount]);
   
   const handleTouchEnd = useCallback(() => {
-    if (!touchStartRef.current) return;
+    if (!touchStartRef.current || isZoomed) {
+      setIsDragging(false);
+      setDragOffset({ x: 0, y: 0 });
+      return;
+    }
+    
+    const velocity = Date.now() - touchStartRef.current.time < 300;
     
     // Handle vertical swipe-to-close
-    if (gestureDirectionRef.current === "vertical" && Math.abs(dragY) > SWIPE_CLOSE_THRESHOLD) {
-      handleClose();
-    } else if (gestureDirectionRef.current === "horizontal") {
-      // Handle horizontal swipe for navigation
-      if (dragX < -SWIPE_SLIDE_THRESHOLD && activeIndex < mediaCount - 1) {
-        goToNext();
-      } else if (dragX > SWIPE_SLIDE_THRESHOLD && activeIndex > 0) {
-        goToPrev();
+    if (gestureDirectionRef.current === "vertical") {
+      if (Math.abs(dragOffset.y) > SWIPE_CLOSE_THRESHOLD || (velocity && Math.abs(dragOffset.y) > 40)) {
+        handleClose();
+        return;
       }
     }
     
-    // Reset state
-    setDragY(0);
-    setDragX(0);
+    // Handle horizontal swipe for navigation
+    if (gestureDirectionRef.current === "horizontal") {
+      if (dragOffset.x < -SWIPE_SLIDE_THRESHOLD || (velocity && dragOffset.x < -20)) {
+        if (activeIndex < mediaCount - 1) goToNext();
+      } else if (dragOffset.x > SWIPE_SLIDE_THRESHOLD || (velocity && dragOffset.x > 20)) {
+        if (activeIndex > 0) goToPrev();
+      }
+    }
+    
+    // Reset
+    setDragOffset({ x: 0, y: 0 });
     setIsDragging(false);
-    setIsHorizontalSwipe(false);
     touchStartRef.current = null;
     gestureDirectionRef.current = null;
-  }, [dragY, dragX, activeIndex, mediaCount, handleClose, goToNext, goToPrev]);
+  }, [isZoomed, dragOffset, activeIndex, mediaCount, handleClose, goToNext, goToPrev]);
   
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        handleClose();
-      } else if (e.key === "ArrowLeft") {
-        goToPrev();
-      } else if (e.key === "ArrowRight") {
-        goToNext();
-      }
+      if (e.key === "Escape") handleClose();
+      else if (e.key === "ArrowLeft") goToPrev();
+      else if (e.key === "ArrowRight") goToNext();
     };
-    
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleClose, goToPrev, goToNext]);
   
   // Prevent body scroll when lightbox is open
   useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
-      document.body.style.overflow = "";
+      document.body.style.overflow = originalOverflow;
     };
-  }, []);
-  
-  // Track zoom state from TransformWrapper
-  const handleZoomChange = useCallback((ref: { state: { scale: number } }) => {
-    isZoomedRef.current = ref.state.scale > 1.1;
   }, []);
   
   return (
     <div
-      ref={containerRef}
       className={cn(
         "fixed inset-0 z-50 flex items-center justify-center",
         "transition-opacity duration-200",
         isClosing ? "opacity-0" : "opacity-100"
       )}
       style={{ backgroundColor: `rgba(0, 0, 0, ${backgroundOpacity})` }}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
     >
       {/* Close button */}
       <button
@@ -256,25 +257,32 @@ export function MediaLightbox({ media, initialIndex, onClose }: MediaLightboxPro
         </>
       )}
       
-      {/* Main content area with drag transform */}
+      {/* Main content area - touch handler wrapper */}
       <div
         className="w-full h-full flex items-center justify-center"
         style={{
-          transform: `translateY(${dragY}px) translateX(${isHorizontalSwipe ? dragX : 0}px)`,
+          transform: `translateY(${dragOffset.y}px) translateX(${dragOffset.x}px)`,
           transition: isDragging ? "none" : `transform ${ANIMATION_DURATION}ms ease-out`,
         }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
-        {/* Media slides */}
+        {/* Media content */}
         <div className="relative w-full h-full flex items-center justify-center">
           {activeMedia.type === "image" ? (
             <ImageSlide
+              key={activeMedia.id}
               media={activeMedia}
               isLoaded={loadedImages.has(activeMedia.id)}
               onLoad={() => handleImageLoad(activeMedia.id)}
               onZoomChange={handleZoomChange}
+              transformRef={transformRef}
+              isZoomed={isZoomed}
             />
           ) : (
             <VideoSlide
+              key={activeMedia.id}
               media={activeMedia}
               isPlaying={playingVideo === activeMedia.id}
               isLoading={loadingVideo && playingVideo === activeMedia.id}
@@ -287,22 +295,14 @@ export function MediaLightbox({ media, initialIndex, onClose }: MediaLightboxPro
       
       {/* Dot indicators (mobile) */}
       {mediaCount > 1 && mediaCount <= 10 && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 flex gap-1.5 md:hidden">
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 flex gap-1.5 md:hidden pointer-events-none">
           {media.map((_, index) => (
-            <button
+            <div
               key={index}
-              onClick={() => {
-                setActiveIndex(index);
-                setPlayingVideo(null);
-                isZoomedRef.current = false;
-              }}
               className={cn(
                 "w-2 h-2 rounded-full transition-all",
-                index === activeIndex
-                  ? "bg-white w-4"
-                  : "bg-white/40"
+                index === activeIndex ? "bg-white w-4" : "bg-white/40"
               )}
-              aria-label={`Gå til medie ${index + 1}`}
             />
           ))}
         </div>
@@ -319,41 +319,50 @@ interface ImageSlideProps {
   media: MediaItem;
   isLoaded: boolean;
   onLoad: () => void;
-  onZoomChange: (ref: { state: { scale: number } }) => void;
+  onZoomChange: (ref: ReactZoomPanPinchRef) => void;
+  transformRef: React.MutableRefObject<ReactZoomPanPinchRef | null>;
+  isZoomed: boolean;
 }
 
-function ImageSlide({ media, isLoaded, onLoad, onZoomChange }: ImageSlideProps) {
+function ImageSlide({ media, isLoaded, onLoad, onZoomChange, transformRef, isZoomed }: ImageSlideProps) {
+  // Use carousel thumbnail as placeholder (already cached from feed)
   const thumbnailUrl = getCarouselThumbnailUrl(media.storage_path);
   const fullUrl = getMediaUrl(media.storage_path);
   
   return (
     <TransformWrapper
+      ref={transformRef}
       initialScale={1}
       minScale={1}
       maxScale={4}
       centerOnInit
       doubleClick={{ mode: "toggle", step: 2 }}
-      panning={{ velocityDisabled: true }}
+      panning={{ 
+        disabled: !isZoomed, // Only allow panning when zoomed
+        velocityDisabled: true,
+      }}
       onTransformed={onZoomChange}
+      // Disable wheel zoom on mobile to prevent conflicts
+      wheel={{ disabled: true }}
     >
       <TransformComponent
         wrapperClass="!w-full !h-full"
         contentClass="!w-full !h-full flex items-center justify-center"
       >
         <div className="relative w-full h-full flex items-center justify-center">
-          {/* Thumbnail layer (always visible until full loads) */}
+          {/* Thumbnail layer - uses cached image from feed, shown while full loads */}
           {!isLoaded && (
             <Image
               src={thumbnailUrl}
               alt=""
               fill
-              className="object-contain blur-sm"
+              className="object-contain"
               sizes="100vw"
-              priority
+              // Don't use priority - thumbnail should already be in cache
             />
           )}
           
-          {/* Full resolution layer */}
+          {/* Full resolution layer - loads on demand */}
           <Image
             src={fullUrl}
             alt=""
@@ -363,8 +372,8 @@ function ImageSlide({ media, isLoaded, onLoad, onZoomChange }: ImageSlideProps) 
               isLoaded ? "opacity-100" : "opacity-0"
             )}
             sizes="100vw"
-            priority
             onLoad={onLoad}
+            // No priority - load normally, don't block other resources
           />
           
           {/* Loading indicator */}
@@ -438,7 +447,7 @@ function VideoSlide({ media, isPlaying, isLoading, onPlay, onCanPlay }: VideoSli
           fill
           className="object-contain"
           sizes="100vw"
-          priority
+          // No priority - use cached thumbnail
         />
       ) : (
         <video
