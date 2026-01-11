@@ -5,9 +5,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { getMediaUrl, getCarouselThumbnailUrl } from "@/lib/upload";
-import { MapPin, ChevronLeft, ChevronRight, Play, Loader2 } from "lucide-react";
+import { MapPin, ChevronLeft, ChevronRight, Play, Loader2, Maximize2 } from "lucide-react";
 import { formatDayLabel } from "@/lib/journey";
 import { useInViewport } from "@/hooks";
+import { MediaLightbox } from "./MediaLightbox";
 import type { PostWithDayInfo } from "@/lib/journey";
 
 interface PostFeedCardProps {
@@ -52,6 +53,10 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
   const [playingVideos, setPlayingVideos] = useState<Set<string>>(new Set());
   const [loadingVideos, setLoadingVideos] = useState<Set<string>>(new Set());
   
+  // Lightbox state
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxInitialIndex, setLightboxInitialIndex] = useState(0);
+  
   // When activeIndex changes or viewport is entered, mark current + adjacent for full res loading
   useEffect(() => {
     if (hasBeenInViewport) {
@@ -70,7 +75,11 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
     setLoadedImages(prev => new Set(prev).add(mediaId));
   }, []);
   
-  const handlePlayVideo = (mediaId: string) => {
+  const handlePlayVideo = (mediaId: string, e?: React.MouseEvent) => {
+    // Stop propagation to prevent lightbox from opening
+    if (e) {
+      e.stopPropagation();
+    }
     setLoadingVideos(prev => new Set(prev).add(mediaId));
     setPlayingVideos(prev => new Set(prev).add(mediaId));
   };
@@ -81,6 +90,26 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
       next.delete(mediaId);
       return next;
     });
+  };
+  
+  // Open lightbox at specific index
+  const openLightbox = useCallback((index: number) => {
+    setLightboxInitialIndex(index);
+    setLightboxOpen(true);
+    // Pause any playing videos when opening lightbox
+    setPlayingVideos(new Set());
+  }, []);
+  
+  // Close lightbox
+  const closeLightbox = useCallback(() => {
+    setLightboxOpen(false);
+  }, []);
+  
+  // Handle expand button on playing video
+  const handleExpandVideo = (index: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setPlayingVideos(new Set()); // Stop inline playback
+    openLightbox(index);
   };
 
   // Sort media by display_order to ensure correct order
@@ -275,7 +304,11 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
                   className="relative flex-shrink-0 w-full h-full"
                 >
                   {media.type === "image" ? (
-                    <div className="relative w-full h-full">
+                    // IMAGE: Tap opens lightbox
+                    <div 
+                      className="relative w-full h-full cursor-pointer"
+                      onClick={() => openLightbox(index)}
+                    >
                       {/* Placeholder layer - shown when far from viewport (no network request) */}
                       {!shouldLoadThumbnail && (
                         <div className="absolute inset-0 bg-muted animate-pulse" />
@@ -314,7 +347,7 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
                       </div>
                     </div>
                   ) : playingVideos.has(media.id) ? (
-                    // Video is playing - show actual video
+                    // VIDEO PLAYING: Show video with expand button
                     <div className="relative w-full h-full">
                       <video
                         src={getMediaUrl(media.storage_path)}
@@ -327,16 +360,24 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
                       />
                       {/* Loading overlay */}
                       {loadingVideos.has(media.id) && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
                           <Loader2 className="h-10 w-10 text-white animate-spin" />
                         </div>
                       )}
+                      {/* Expand button to open in lightbox */}
+                      <button
+                        onClick={(e) => handleExpandVideo(index, e)}
+                        className="absolute top-3 right-3 p-2 bg-black/60 rounded-full text-white hover:bg-black/80 transition-colors z-10"
+                        aria-label="Åbn i fuldskærm"
+                      >
+                        <Maximize2 className="h-5 w-5" />
+                      </button>
                     </div>
                   ) : (
-                    // Video thumbnail with play button - only loads when near viewport
+                    // VIDEO THUMBNAIL: Tap on thumbnail opens lightbox, tap on play button starts inline
                     <div 
                       className="relative w-full h-full cursor-pointer group"
-                      onClick={() => handlePlayVideo(media.id)}
+                      onClick={() => openLightbox(index)}
                     >
                       {/* Thumbnail image or video fallback */}
                       {media.thumbnail_path ? (
@@ -357,11 +398,15 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
                           className="w-full h-full pointer-events-none object-contain"
                         />
                       )}
-                      {/* Play button overlay */}
+                      {/* Play button overlay - starts inline playback */}
                       <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="p-4 bg-black/60 rounded-full group-hover:bg-black/80 group-hover:scale-110 transition-all">
+                        <button
+                          onClick={(e) => handlePlayVideo(media.id, e)}
+                          className="p-4 bg-black/60 rounded-full group-hover:bg-black/80 group-hover:scale-110 transition-all"
+                          aria-label="Afspil video"
+                        >
                           <Play className="h-10 w-10 text-white fill-white" />
-                        </div>
+                        </button>
                       </div>
                     </div>
                   )}
@@ -418,6 +463,20 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
             </div>
           )}
         </div>
+      )}
+      
+      {/* Fullscreen Lightbox */}
+      {lightboxOpen && hasMedia && (
+        <MediaLightbox
+          media={sortedMedia.map(m => ({
+            id: m.id,
+            type: m.type as "image" | "video",
+            storage_path: m.storage_path,
+            thumbnail_path: m.thumbnail_path,
+          }))}
+          initialIndex={lightboxInitialIndex}
+          onClose={closeLightbox}
+        />
       )}
 
       {/* Content section */}
