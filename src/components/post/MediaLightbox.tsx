@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import Image from "next/image";
 import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
 import { cn } from "@/lib/utils";
-import { getMediaUrl, getCarouselThumbnailUrl } from "@/lib/upload";
+import { getMediaUrl } from "@/lib/upload";
 import { X, ChevronLeft, ChevronRight, Play, Loader2 } from "lucide-react";
 
 interface MediaItem {
@@ -325,8 +325,6 @@ interface ImageSlideProps {
 }
 
 function ImageSlide({ media, isLoaded, onLoad, onZoomChange, transformRef, isZoomed }: ImageSlideProps) {
-  // Use carousel thumbnail as placeholder (already cached from feed)
-  const thumbnailUrl = getCarouselThumbnailUrl(media.storage_path);
   const fullUrl = getMediaUrl(media.storage_path);
   
   return (
@@ -350,30 +348,18 @@ function ImageSlide({ media, isLoaded, onLoad, onZoomChange, transformRef, isZoo
         contentClass="!w-full !h-full flex items-center justify-center"
       >
         <div className="relative w-full h-full flex items-center justify-center">
-          {/* Thumbnail layer - uses cached image from feed, shown while full loads */}
-          {!isLoaded && (
-            <Image
-              src={thumbnailUrl}
-              alt=""
-              fill
-              className="object-contain"
-              sizes="100vw"
-              // Don't use priority - thumbnail should already be in cache
-            />
-          )}
-          
-          {/* Full resolution layer - loads on demand */}
+          {/* Full resolution image - load directly with priority */}
           <Image
             src={fullUrl}
             alt=""
             fill
             className={cn(
-              "object-contain transition-opacity duration-300",
+              "object-contain transition-opacity duration-200",
               isLoaded ? "opacity-100" : "opacity-0"
             )}
             sizes="100vw"
             onLoad={onLoad}
-            // No priority - load normally, don't block other resources
+            priority // Load immediately when lightbox opens
           />
           
           {/* Loading indicator */}
