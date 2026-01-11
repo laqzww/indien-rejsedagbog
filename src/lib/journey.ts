@@ -97,6 +97,46 @@ function parseDateOnlyInt(dateStr: string): number {
 }
 
 /**
+ * Get today's date as an integer (YYYYMMDD format)
+ * Uses local time for comparison with journey dates
+ */
+function getTodayDateInt(): number {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const day = now.getDate();
+  return year * 10000 + month * 100 + day;
+}
+
+/**
+ * Check if the journey has ended based on milestones
+ * Returns true if today's date is after the last milestone's departure_date
+ * 
+ * Note: The journey is considered "ended" the day AFTER the last departure_date,
+ * so posts are shown newest-first until the journey is truly over.
+ */
+export function isJourneyEnded(milestones: Milestone[]): boolean {
+  if (milestones.length === 0) return false;
+  
+  // Sort milestones by display_order to find the last one
+  const sortedMilestones = [...milestones].sort(
+    (a, b) => b.display_order - a.display_order
+  );
+  
+  const lastMilestone = sortedMilestones[0];
+  
+  // If last milestone has no departure_date, journey is still ongoing
+  if (!lastMilestone.departure_date) return false;
+  
+  const lastDepartureInt = parseDateOnlyInt(lastMilestone.departure_date);
+  const todayInt = getTodayDateInt();
+  
+  // Journey is ended if today is AFTER the departure date
+  // (the day after departure_date)
+  return todayInt > lastDepartureInt;
+}
+
+/**
  * Find which milestone a post belongs to based on its date
  * Posts are assigned to the milestone whose date range they fall within
  * Returns special markers for posts before/after the journey
@@ -213,8 +253,10 @@ export interface MilestoneGroup {
 
 /**
  * Helper to create day groups from a list of posts
+ * @param posts - Posts to group by day
+ * @param newestFirst - If true, sort days and posts newest first. If false, oldest first.
  */
-function createDayGroups(posts: PostWithDayInfo[]): DayGroup[] {
+function createDayGroups(posts: PostWithDayInfo[], newestFirst: boolean = true): DayGroup[] {
   const dayMap = new Map<number, PostWithDayInfo[]>();
   for (const post of posts) {
     if (!dayMap.has(post.dayNumber)) {
@@ -223,23 +265,29 @@ function createDayGroups(posts: PostWithDayInfo[]): DayGroup[] {
     dayMap.get(post.dayNumber)!.push(post);
   }
   
-  // Sort days (newest first)
-  const sortedDays = Array.from(dayMap.entries()).sort((a, b) => b[0] - a[0]);
+  // Sort days based on direction
+  const sortedDays = Array.from(dayMap.entries()).sort((a, b) => 
+    newestFirst ? b[0] - a[0] : a[0] - b[0]
+  );
   
   return sortedDays.map(([dayNumber, dayPosts]) => ({
     dayNumber,
     label: formatDayWithDate(dayNumber),
-    // Sort posts within day by time (newest first)
-    posts: dayPosts.sort(
-      (a, b) =>
-        new Date(b.captured_at || b.created_at).getTime() -
-        new Date(a.captured_at || a.created_at).getTime()
-    ),
+    // Sort posts within day by time based on direction
+    posts: dayPosts.sort((a, b) => {
+      const timeA = new Date(a.captured_at || a.created_at).getTime();
+      const timeB = new Date(b.captured_at || b.created_at).getTime();
+      return newestFirst ? timeB - timeA : timeA - timeB;
+    }),
   }));
 }
 
 /**
  * Group posts by milestone and then by day
+ * 
+ * Sorting behavior:
+ * - While journey is ongoing: newest posts/days/milestones first
+ * - After journey ends (day after last milestone's departure_date): oldest first (chronological)
  */
 export function groupPostsByMilestoneAndDay<T extends {
   id: string;
@@ -267,6 +315,10 @@ export function groupPostsByMilestoneAndDay<T extends {
   posts: T[],
   milestones: Milestone[]
 ): MilestoneGroup[] {
+  // Determine sort direction based on whether journey has ended
+  const journeyEnded = isJourneyEnded(milestones);
+  const newestFirst = !journeyEnded; // When journey is ongoing, show newest first
+  
   // Create maps for different post categories
   const milestoneMap = new Map<string, Map<number, PostWithDayInfo[]>>();
   const beforeJourneyPosts: PostWithDayInfo[] = [];
@@ -310,9 +362,13 @@ export function groupPostsByMilestoneAndDay<T extends {
     }
   }
   
-  // Sort milestones by display_order (descending - newest/most recent first)
-  const sortedMilestones = [...milestones].sort(
-    (a, b) => b.display_order - a.display_order
+  // Sort milestones by display_order based on direction
+  // newestFirst=true: descending (newest/most recent first)
+  // newestFirst=false: ascending (oldest/chronological first)
+  const sortedMilestones = [...milestones].sort((a, b) => 
+    newestFirst 
+      ? b.display_order - a.display_order 
+      : a.display_order - b.display_order
   );
   
   // Build the result, only including milestones that have posts
@@ -327,51 +383,107 @@ export function groupPostsByMilestoneAndDay<T extends {
     milestonePositionMap.set(m.id, idx + 1);
   });
   
-  // Add "Efter rejsen" first (newest - at the top)
-  if (afterJourneyPosts.length > 0) {
-    result.push({
-      milestone: null,
-      milestoneName: "Efter rejsen",
-      milestoneNumber: "B",
-      days: createDayGroups(afterJourneyPosts),
-    });
-  }
+  // When journey is ongoing (newestFirst): "Efter rejsen" first, then milestones, then "Før afrejse"
+  // When journey ended (!newestFirst): "Før afrejse" first, then milestones, then "Efter rejsen"
   
-  // Add milestone groups (newest first based on display_order)
-  for (const milestone of sortedMilestones) {
-    const dayMap = milestoneMap.get(milestone.id);
-    if (!dayMap || dayMap.size === 0) continue;
+  if (newestFirst) {
+    // Journey ongoing: newest first
     
-    // Sort days (newest first)
-    const sortedDays = Array.from(dayMap.entries()).sort((a, b) => b[0] - a[0]);
+    // Add "Efter rejsen" first (newest - at the top)
+    if (afterJourneyPosts.length > 0) {
+      result.push({
+        milestone: null,
+        milestoneName: "Efter rejsen",
+        milestoneNumber: "B",
+        days: createDayGroups(afterJourneyPosts, newestFirst),
+      });
+    }
     
-    const days: DayGroup[] = sortedDays.map(([dayNumber, dayPosts]) => ({
-      dayNumber,
-      label: formatDayWithDate(dayNumber),
-      // Sort posts within day by time (newest first)
-      posts: dayPosts.sort(
-        (a, b) =>
-          new Date(b.captured_at || b.created_at).getTime() -
-          new Date(a.captured_at || a.created_at).getTime()
-      ),
-    }));
+    // Add milestone groups (newest first based on display_order)
+    for (const milestone of sortedMilestones) {
+      const dayMap = milestoneMap.get(milestone.id);
+      if (!dayMap || dayMap.size === 0) continue;
+      
+      // Sort days based on direction
+      const sortedDays = Array.from(dayMap.entries()).sort((a, b) => b[0] - a[0]);
+      
+      const days: DayGroup[] = sortedDays.map(([dayNumber, dayPosts]) => ({
+        dayNumber,
+        label: formatDayWithDate(dayNumber),
+        // Sort posts within day by time (newest first)
+        posts: dayPosts.sort(
+          (a, b) =>
+            new Date(b.captured_at || b.created_at).getTime() -
+            new Date(a.captured_at || a.created_at).getTime()
+        ),
+      }));
+      
+      result.push({
+        milestone,
+        milestoneName: milestone.name,
+        milestoneNumber: String(milestonePositionMap.get(milestone.id) ?? "?"),
+        days,
+      });
+    }
     
-    result.push({
-      milestone,
-      milestoneName: milestone.name,
-      milestoneNumber: String(milestonePositionMap.get(milestone.id) ?? "?"),
-      days,
-    });
-  }
-  
-  // Add "Før afrejse" last (oldest - at the bottom)
-  if (beforeJourneyPosts.length > 0) {
-    result.push({
-      milestone: null,
-      milestoneName: "Før afrejse",
-      milestoneNumber: "A",
-      days: createDayGroups(beforeJourneyPosts),
-    });
+    // Add "Før afrejse" last (oldest - at the bottom)
+    if (beforeJourneyPosts.length > 0) {
+      result.push({
+        milestone: null,
+        milestoneName: "Før afrejse",
+        milestoneNumber: "A",
+        days: createDayGroups(beforeJourneyPosts, newestFirst),
+      });
+    }
+  } else {
+    // Journey ended: oldest first (chronological)
+    
+    // Add "Før afrejse" first (oldest - at the top)
+    if (beforeJourneyPosts.length > 0) {
+      result.push({
+        milestone: null,
+        milestoneName: "Før afrejse",
+        milestoneNumber: "A",
+        days: createDayGroups(beforeJourneyPosts, newestFirst),
+      });
+    }
+    
+    // Add milestone groups (oldest first based on display_order)
+    for (const milestone of sortedMilestones) {
+      const dayMap = milestoneMap.get(milestone.id);
+      if (!dayMap || dayMap.size === 0) continue;
+      
+      // Sort days based on direction (oldest first)
+      const sortedDays = Array.from(dayMap.entries()).sort((a, b) => a[0] - b[0]);
+      
+      const days: DayGroup[] = sortedDays.map(([dayNumber, dayPosts]) => ({
+        dayNumber,
+        label: formatDayWithDate(dayNumber),
+        // Sort posts within day by time (oldest first)
+        posts: dayPosts.sort(
+          (a, b) =>
+            new Date(a.captured_at || a.created_at).getTime() -
+            new Date(b.captured_at || b.created_at).getTime()
+        ),
+      }));
+      
+      result.push({
+        milestone,
+        milestoneName: milestone.name,
+        milestoneNumber: String(milestonePositionMap.get(milestone.id) ?? "?"),
+        days,
+      });
+    }
+    
+    // Add "Efter rejsen" last (newest - at the bottom)
+    if (afterJourneyPosts.length > 0) {
+      result.push({
+        milestone: null,
+        milestoneName: "Efter rejsen",
+        milestoneNumber: "B",
+        days: createDayGroups(afterJourneyPosts, newestFirst),
+      });
+    }
   }
   
   // Add unknown posts (when no milestones exist) at the end
@@ -380,7 +492,7 @@ export function groupPostsByMilestoneAndDay<T extends {
       milestone: null,
       milestoneName: "Opslag",
       milestoneNumber: "?",
-      days: createDayGroups(unknownPosts),
+      days: createDayGroups(unknownPosts, newestFirst),
     });
   }
   

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   getDayNumber,
   formatDayLabel,
@@ -6,6 +6,7 @@ import {
   formatDayWithDate,
   findMilestoneForDate,
   groupPostsByMilestoneAndDay,
+  isJourneyEnded,
   type MilestoneResult,
 } from "@/lib/journey";
 import type { Milestone } from "@/types/database";
@@ -205,6 +206,78 @@ describe("journey.ts", () => {
     });
   });
 
+  describe("isJourneyEnded", () => {
+    it("returns false for empty milestones array", () => {
+      expect(isJourneyEnded([])).toBe(false);
+    });
+
+    it("returns false when last milestone has no departure_date", () => {
+      const milestones: Milestone[] = [
+        createMilestone({
+          id: "1",
+          name: "Kochi",
+          lat: 10,
+          lng: 76,
+          display_order: 0,
+          arrival_date: "2025-12-18",
+          departure_date: "2025-12-20",
+        }),
+        createMilestone({
+          id: "2",
+          name: "Munnar",
+          lat: 10,
+          lng: 77,
+          display_order: 1,
+          arrival_date: "2025-12-20",
+          departure_date: null, // Journey ongoing
+        }),
+      ];
+      expect(isJourneyEnded(milestones)).toBe(false);
+    });
+
+    it("returns true when today is after last departure_date", () => {
+      // Mock today to be January 10, 2026
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-01-10T12:00:00Z"));
+
+      const milestones: Milestone[] = [
+        createMilestone({
+          id: "1",
+          name: "Kochi",
+          lat: 10,
+          lng: 76,
+          display_order: 0,
+          arrival_date: "2025-12-18",
+          departure_date: "2025-12-25",
+        }),
+      ];
+      expect(isJourneyEnded(milestones)).toBe(true);
+
+      vi.useRealTimers();
+    });
+
+    it("returns false when today is on or before last departure_date", () => {
+      // Mock today to be December 25, 2025 (on departure date)
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2025-12-25T12:00:00Z"));
+
+      const milestones: Milestone[] = [
+        createMilestone({
+          id: "1",
+          name: "Kochi",
+          lat: 10,
+          lng: 76,
+          display_order: 0,
+          arrival_date: "2025-12-18",
+          departure_date: "2025-12-25",
+        }),
+      ];
+      expect(isJourneyEnded(milestones)).toBe(false);
+
+      vi.useRealTimers();
+    });
+  });
+
   describe("groupPostsByMilestoneAndDay", () => {
     const milestones: Milestone[] = [
       createMilestone({
@@ -240,55 +313,131 @@ describe("journey.ts", () => {
       profile: null,
     });
 
-    it("groups posts by milestone and day", () => {
-      const posts = [
-        createPost("1", "2025-12-18T10:00:00Z"),
-        createPost("2", "2025-12-18T14:00:00Z"),
-        createPost("3", "2025-12-21T10:00:00Z"),
-      ];
+    describe("when journey is ongoing (newest first)", () => {
+      beforeEach(() => {
+        // Mock today to be during the journey
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2025-12-21T12:00:00Z"));
+      });
 
-      const groups = groupPostsByMilestoneAndDay(posts, milestones);
+      afterEach(() => {
+        vi.useRealTimers();
+      });
 
-      // Should have 2 milestone groups (Munnar first as it's newest, then Kochi)
-      expect(groups.length).toBe(2);
+      it("groups posts by milestone and day with newest first", () => {
+        const posts = [
+          createPost("1", "2025-12-18T10:00:00Z"),
+          createPost("2", "2025-12-18T14:00:00Z"),
+          createPost("3", "2025-12-21T10:00:00Z"),
+        ];
 
-      // First group should be Munnar (newest)
-      expect(groups[0].milestoneName).toBe("Munnar");
-      expect(groups[0].milestoneNumber).toBe("2");
+        const groups = groupPostsByMilestoneAndDay(posts, milestones);
 
-      // Second group should be Kochi
-      expect(groups[1].milestoneName).toBe("Kochi");
-      expect(groups[1].milestoneNumber).toBe("1");
+        // Should have 2 milestone groups (Munnar first as it's newest, then Kochi)
+        expect(groups.length).toBe(2);
+
+        // First group should be Munnar (newest)
+        expect(groups[0].milestoneName).toBe("Munnar");
+        expect(groups[0].milestoneNumber).toBe("2");
+
+        // Second group should be Kochi
+        expect(groups[1].milestoneName).toBe("Kochi");
+        expect(groups[1].milestoneNumber).toBe("1");
+      });
+
+      it("places before_journey posts at end", () => {
+        const posts = [
+          createPost("1", "2025-12-15T10:00:00Z"), // Before journey
+          createPost("2", "2025-12-18T10:00:00Z"), // During journey
+        ];
+
+        const groups = groupPostsByMilestoneAndDay(posts, milestones);
+
+        // "Før afrejse" should be at the end
+        const beforeGroup = groups.find((g) => g.milestoneName === "Før afrejse");
+        expect(beforeGroup).toBeDefined();
+        expect(beforeGroup?.milestoneNumber).toBe("A");
+        expect(beforeGroup?.days[0].posts.length).toBe(1);
+        expect(groups[groups.length - 1].milestoneName).toBe("Før afrejse");
+      });
+
+      it("sorts posts within day by time (newest first)", () => {
+        const posts = [
+          createPost("1", "2025-12-18T08:00:00Z"),
+          createPost("2", "2025-12-18T16:00:00Z"),
+          createPost("3", "2025-12-18T12:00:00Z"),
+        ];
+
+        const groups = groupPostsByMilestoneAndDay(posts, milestones);
+        const kochiGroup = groups.find((g) => g.milestoneName === "Kochi");
+        const day0Posts = kochiGroup?.days[0].posts;
+
+        expect(day0Posts?.[0].id).toBe("2"); // 16:00 first
+        expect(day0Posts?.[1].id).toBe("3"); // 12:00 second
+        expect(day0Posts?.[2].id).toBe("1"); // 08:00 last
+      });
     });
 
-    it("places before_journey posts in separate group", () => {
-      const posts = [
-        createPost("1", "2025-12-15T10:00:00Z"), // Before journey
-        createPost("2", "2025-12-18T10:00:00Z"), // During journey
-      ];
+    describe("when journey has ended (oldest first / chronological)", () => {
+      beforeEach(() => {
+        // Mock today to be after the journey
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-01-10T12:00:00Z"));
+      });
 
-      const groups = groupPostsByMilestoneAndDay(posts, milestones);
+      afterEach(() => {
+        vi.useRealTimers();
+      });
 
-      const beforeGroup = groups.find((g) => g.milestoneName === "Før afrejse");
-      expect(beforeGroup).toBeDefined();
-      expect(beforeGroup?.milestoneNumber).toBe("A");
-      expect(beforeGroup?.days[0].posts.length).toBe(1);
-    });
+      it("groups posts by milestone and day with oldest first", () => {
+        const posts = [
+          createPost("1", "2025-12-18T10:00:00Z"),
+          createPost("2", "2025-12-18T14:00:00Z"),
+          createPost("3", "2025-12-21T10:00:00Z"),
+        ];
 
-    it("sorts posts within day by time (newest first)", () => {
-      const posts = [
-        createPost("1", "2025-12-18T08:00:00Z"),
-        createPost("2", "2025-12-18T16:00:00Z"),
-        createPost("3", "2025-12-18T12:00:00Z"),
-      ];
+        const groups = groupPostsByMilestoneAndDay(posts, milestones);
 
-      const groups = groupPostsByMilestoneAndDay(posts, milestones);
-      const kochiGroup = groups.find((g) => g.milestoneName === "Kochi");
-      const day0Posts = kochiGroup?.days[0].posts;
+        // Should have 2 milestone groups (Kochi first as it's oldest, then Munnar)
+        expect(groups.length).toBe(2);
 
-      expect(day0Posts?.[0].id).toBe("2"); // 16:00 first
-      expect(day0Posts?.[1].id).toBe("3"); // 12:00 second
-      expect(day0Posts?.[2].id).toBe("1"); // 08:00 last
+        // First group should be Kochi (oldest)
+        expect(groups[0].milestoneName).toBe("Kochi");
+        expect(groups[0].milestoneNumber).toBe("1");
+
+        // Second group should be Munnar
+        expect(groups[1].milestoneName).toBe("Munnar");
+        expect(groups[1].milestoneNumber).toBe("2");
+      });
+
+      it("places before_journey posts at start", () => {
+        const posts = [
+          createPost("1", "2025-12-15T10:00:00Z"), // Before journey
+          createPost("2", "2025-12-18T10:00:00Z"), // During journey
+        ];
+
+        const groups = groupPostsByMilestoneAndDay(posts, milestones);
+
+        // "Før afrejse" should be at the start
+        expect(groups[0].milestoneName).toBe("Før afrejse");
+        expect(groups[0].milestoneNumber).toBe("A");
+      });
+
+      it("sorts posts within day by time (oldest first)", () => {
+        const posts = [
+          createPost("1", "2025-12-18T08:00:00Z"),
+          createPost("2", "2025-12-18T16:00:00Z"),
+          createPost("3", "2025-12-18T12:00:00Z"),
+        ];
+
+        const groups = groupPostsByMilestoneAndDay(posts, milestones);
+        const kochiGroup = groups.find((g) => g.milestoneName === "Kochi");
+        const day0Posts = kochiGroup?.days[0].posts;
+
+        expect(day0Posts?.[0].id).toBe("1"); // 08:00 first
+        expect(day0Posts?.[1].id).toBe("3"); // 12:00 second
+        expect(day0Posts?.[2].id).toBe("2"); // 16:00 last
+      });
     });
 
     it("handles empty posts array", () => {
