@@ -348,7 +348,7 @@ function ImageSlide({ media, isLoaded, onLoad, onZoomChange, transformRef, isZoo
         contentClass="!w-full !h-full flex items-center justify-center"
       >
         <div className="relative w-full h-full flex items-center justify-center">
-          {/* Full resolution image - load directly with priority */}
+          {/* Full resolution image - load on-demand when lightbox opens */}
           <Image
             src={fullUrl}
             alt=""
@@ -359,7 +359,8 @@ function ImageSlide({ media, isLoaded, onLoad, onZoomChange, transformRef, isZoo
             )}
             sizes="100vw"
             onLoad={onLoad}
-            priority // Load immediately when lightbox opens
+            // No priority - component is conditionally rendered, so this only
+            // loads when lightbox opens. Priority would preload on page visit.
           />
           
           {/* Loading indicator */}
