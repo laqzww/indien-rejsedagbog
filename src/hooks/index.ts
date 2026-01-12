@@ -30,3 +30,10 @@ export type {
   MapStateActions,
   UseMapStateOptions,
 } from "./useMapState";
+
+// Progressive rendering hooks
+export { useProgressiveRender } from "./useProgressiveRender";
+export type {
+  UseProgressiveRenderOptions,
+  UseProgressiveRenderResult,
+} from "./useProgressiveRender";

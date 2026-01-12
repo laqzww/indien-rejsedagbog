@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { PostFeedCard } from "./PostFeedCard";
 import { cn } from "@/lib/utils";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Loader2 } from "lucide-react";
 import type { MilestoneGroup, DayGroup } from "@/lib/journey";
+import { useProgressiveRender } from "@/hooks";
 
 interface PostFeedProps {
   groups: MilestoneGroup[];
@@ -14,6 +15,21 @@ interface PostFeedProps {
 export function PostFeed({ groups, focusPostId }: PostFeedProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const hasScrolledToFocusRef = useRef(false);
+
+  // Calculate total posts for progressive rendering
+  const totalPosts = useMemo(() => {
+    return groups.reduce((sum, group) =>
+      sum + group.days.reduce((daySum, day) => daySum + day.posts.length, 0), 0
+    );
+  }, [groups]);
+
+  // Progressive rendering - start with 5 posts, load 3 more as user scrolls
+  const { renderedCount, sentinelRef, isComplete } = useProgressiveRender({
+    totalItems: totalPosts,
+    initialBatch: 5,
+    batchSize: 3,
+    loadMoreThreshold: 600, // Start loading when 600px from bottom
+  });
 
   // Find which milestone contains the focus post
   const focusMilestoneId = focusPostId ? (() => {
@@ -37,17 +53,17 @@ export function PostFeed({ groups, focusPostId }: PostFeedProps) {
       if (postElement) {
         // Scroll the post into view with some offset for the header
         postElement.scrollIntoView({ behavior: "smooth", block: "center" });
-        
+
         // Add highlight effect using inline styles for reliability
         postElement.style.boxShadow = "0 0 0 3px #FF9933";
         postElement.style.borderRadius = "8px";
         postElement.style.transition = "box-shadow 0.3s ease";
-        
+
         setTimeout(() => {
           postElement.style.boxShadow = "";
           postElement.style.borderRadius = "";
         }, 2500);
-        
+
         hasScrolledToFocusRef.current = true;
       }
     }, 150);
@@ -60,16 +76,46 @@ export function PostFeed({ groups, focusPostId }: PostFeedProps) {
     hasScrolledToFocusRef.current = false;
   }, [focusPostId]);
 
+  // Track current post index across all groups/days for progressive rendering
+  let globalPostIndex = 0;
+
   return (
     <div ref={containerRef} className="space-y-0">
-      {groups.map((group, index) => (
-        <MilestoneSection 
-          key={group.milestone?.id || "unknown"} 
-          group={group} 
-          index={index}
-          forceExpanded={focusMilestoneId === group.milestone?.id}
-        />
-      ))}
+      {groups.map((group, index) => {
+        // Calculate how many posts this group can render
+        const groupPostCount = group.days.reduce((sum, day) => sum + day.posts.length, 0);
+        const groupStartIndex = globalPostIndex;
+        const postsToRenderInGroup = Math.max(0, Math.min(groupPostCount, renderedCount - groupStartIndex));
+
+        // Skip this group entirely if no posts should render
+        if (postsToRenderInGroup <= 0) {
+          globalPostIndex += groupPostCount;
+          return null;
+        }
+
+        globalPostIndex += groupPostCount;
+
+        return (
+          <MilestoneSection
+            key={group.milestone?.id || "unknown"}
+            group={group}
+            index={index}
+            forceExpanded={focusMilestoneId === group.milestone?.id}
+            renderLimit={postsToRenderInGroup}
+            startIndex={groupStartIndex}
+          />
+        );
+      })}
+
+      {/* Sentinel element for loading more posts */}
+      {!isComplete && (
+        <div
+          ref={sentinelRef}
+          className="flex items-center justify-center py-8"
+        >
+          <Loader2 className="h-6 w-6 text-muted-foreground animate-spin" />
+        </div>
+      )}
     </div>
   );
 }
@@ -78,9 +124,11 @@ interface MilestoneSectionProps {
   group: MilestoneGroup;
   index: number;
   forceExpanded?: boolean;
+  renderLimit: number;
+  startIndex: number;
 }
 
-function MilestoneSection({ group, index, forceExpanded }: MilestoneSectionProps) {
+function MilestoneSection({ group, index, forceExpanded, renderLimit, startIndex }: MilestoneSectionProps) {
   const [isExpanded, setIsExpanded] = useState(true); // All milestones expanded by default
 
   // Expand when forceExpanded becomes true
@@ -90,23 +138,41 @@ function MilestoneSection({ group, index, forceExpanded }: MilestoneSectionProps
     }
   }, [forceExpanded]);
 
+  // Track posts rendered across days for this milestone
+  let postsRenderedInMilestone = 0;
+
   return (
     <section className="border-b border-border last:border-b-0">
       {/* Days and posts - each day has combined milestone+day header */}
       {isExpanded && (
         <div>
-          {group.days.map((day) => (
-            <DaySection 
-              key={day.dayNumber} 
-              day={day} 
-              milestoneNumber={group.milestoneNumber}
-              milestoneName={group.milestoneName}
-              onToggleExpanded={() => setIsExpanded(!isExpanded)}
-            />
-          ))}
+          {group.days.map((day) => {
+            // Calculate how many posts this day can render
+            const dayPostCount = day.posts.length;
+            const postsToRenderInDay = Math.max(0, Math.min(dayPostCount, renderLimit - postsRenderedInMilestone));
+
+            // Skip this day if no posts should render
+            if (postsToRenderInDay <= 0) {
+              postsRenderedInMilestone += dayPostCount;
+              return null;
+            }
+
+            postsRenderedInMilestone += dayPostCount;
+
+            return (
+              <DaySection
+                key={day.dayNumber}
+                day={day}
+                milestoneNumber={group.milestoneNumber}
+                milestoneName={group.milestoneName}
+                onToggleExpanded={() => setIsExpanded(!isExpanded)}
+                renderLimit={postsToRenderInDay}
+              />
+            );
+          })}
         </div>
       )}
-      
+
       {/* Collapsed state - show compact milestone header */}
       {!isExpanded && (
         <button
@@ -138,9 +204,13 @@ interface DaySectionProps {
   milestoneNumber: string;
   milestoneName: string;
   onToggleExpanded: () => void;
+  renderLimit: number;
 }
 
-function DaySection({ day, milestoneNumber, milestoneName, onToggleExpanded }: DaySectionProps) {
+function DaySection({ day, milestoneNumber, milestoneName, onToggleExpanded, renderLimit }: DaySectionProps) {
+  // Only render posts up to the limit
+  const postsToRender = day.posts.slice(0, renderLimit);
+
   return (
     <div>
       {/* Combined milestone + day header - compact, non-sticky */}
@@ -166,9 +236,9 @@ function DaySection({ day, milestoneNumber, milestoneName, onToggleExpanded }: D
         </span>
       </div>
 
-      {/* Posts for this day */}
+      {/* Posts for this day - only render up to limit */}
       <div>
-        {day.posts.map((post) => (
+        {postsToRender.map((post) => (
           <div key={post.id} id={`post-${post.id}`}>
             <PostFeedCard post={post} showDayBadge={false} />
           </div>
