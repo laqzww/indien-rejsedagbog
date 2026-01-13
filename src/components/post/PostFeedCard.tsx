@@ -37,8 +37,9 @@ export function PostFeedCard({ post, showDayBadge = true }: PostFeedCardProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   
   // Viewport tracking for smart loading
+  // Reduced margin to prevent loading too many images ahead of visible area
   const { ref: viewportRef, isInViewport, hasBeenInViewport } = useInViewport<HTMLElement>({
-    rootMargin: "200px", // Preload 200px before entering viewport
+    rootMargin: "50px", // Preload 50px before entering viewport (reduced from 200px)
     threshold: 0.1,
   });
   
