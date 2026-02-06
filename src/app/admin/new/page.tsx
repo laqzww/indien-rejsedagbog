@@ -351,12 +351,16 @@ export default function NewPostPage() {
             }
           }
 
+          // Video compression metadata
+          const isCompressed = !!mediaFile.videoCompression;
+          const compressionMeta = mediaFile.videoCompression;
+
           return {
             post_id: post.id,
             storage_path: storagePath,
             thumbnail_path: thumbnailPath,
             type,
-            mime_type: mimeType,
+            mime_type: type === "video" ? "video/mp4" : mimeType,
             width,
             height,
             exif_data: mediaFile.exif?.raw ?? null,
@@ -364,6 +368,20 @@ export default function NewPostPage() {
             lng: mediaFile.exif?.lng ?? null,
             captured_at: mediaFile.exif?.capturedAt?.toISOString() ?? null,
             display_order: i,
+            // Compression fields
+            is_compressed: isCompressed,
+            original_size: mediaFile.originalSize ?? null,
+            compressed_size: isCompressed ? mediaFile.compressedSize ?? null : null,
+            compression_codec: compressionMeta?.codec ?? null,
+            compression_settings: compressionMeta ? {
+              crf: compressionMeta.settings.crf,
+              preset: compressionMeta.settings.preset,
+              maxResolution: compressionMeta.settings.maxResolution,
+              audioBitrate: compressionMeta.settings.audioBitrate,
+              name: compressionMeta.settings.name,
+            } : null,
+            original_width: compressionMeta?.originalWidth ?? null,
+            original_height: compressionMeta?.originalHeight ?? null,
           };
         });
 

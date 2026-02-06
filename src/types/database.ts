@@ -58,14 +58,22 @@ export type Database = {
       media: {
         Row: {
           captured_at: string | null
+          compressed_size: number | null
+          compressed_storage_path: string | null
+          compression_codec: string | null
+          compression_settings: Json | null
           created_at: string
           display_order: number
           exif_data: Json | null
           height: number | null
           id: string
+          is_compressed: boolean
           lat: number | null
           lng: number | null
           mime_type: string | null
+          original_height: number | null
+          original_size: number | null
+          original_width: number | null
           post_id: string
           storage_path: string
           thumbnail_path: string | null
@@ -74,14 +82,22 @@ export type Database = {
         }
         Insert: {
           captured_at?: string | null
+          compressed_size?: number | null
+          compressed_storage_path?: string | null
+          compression_codec?: string | null
+          compression_settings?: Json | null
           created_at?: string
           display_order?: number
           exif_data?: Json | null
           height?: number | null
           id?: string
+          is_compressed?: boolean
           lat?: number | null
           lng?: number | null
           mime_type?: string | null
+          original_height?: number | null
+          original_size?: number | null
+          original_width?: number | null
           post_id: string
           storage_path: string
           thumbnail_path?: string | null
@@ -90,14 +106,22 @@ export type Database = {
         }
         Update: {
           captured_at?: string | null
+          compressed_size?: number | null
+          compressed_storage_path?: string | null
+          compression_codec?: string | null
+          compression_settings?: Json | null
           created_at?: string
           display_order?: number
           exif_data?: Json | null
           height?: number | null
           id?: string
+          is_compressed?: boolean
           lat?: number | null
           lng?: number | null
           mime_type?: string | null
+          original_height?: number | null
+          original_size?: number | null
+          original_width?: number | null
           post_id?: string
           storage_path?: string
           thumbnail_path?: string | null

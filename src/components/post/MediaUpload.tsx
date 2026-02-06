@@ -7,6 +7,8 @@ import { isHeicFile, convertHeicToJpeg } from "@/lib/heic";
 import { extractExifData, type ExifData } from "@/lib/exif";
 import { compressImage, shouldCompress, formatFileSize, generateCarouselThumbnail } from "@/lib/image-compression";
 import { generateVideoThumbnail } from "@/lib/video-thumbnail";
+import { compressVideo, shouldCompressVideo, COMPRESSION_PRESETS, type CompressionResult } from "@/lib/video-compression";
+import { probeVideo, type VideoMetadata } from "@/lib/video-probe";
 import { MediaSortable, type SortableMediaItem } from "./MediaSortable";
 import { MAX_FILE_SIZE_MB, MAX_FILE_SIZE_BYTES, formatBytes } from "@/lib/resumable-upload";
 
@@ -32,6 +34,16 @@ export interface MediaFile {
   carouselThumbnailBlob?: Blob;
   carouselThumbnailWidth?: number;
   carouselThumbnailHeight?: number;
+  // Video compression metadata
+  videoCompression?: {
+    codec: string;
+    settings: CompressionResult["settings"];
+    originalWidth: number;
+    originalHeight: number;
+    duration: number;
+    compressionRatio: number;
+  };
+  videoMetadata?: VideoMetadata;
 }
 
 interface MediaUploadProps {
@@ -171,23 +183,71 @@ export function MediaUpload({
           mediaFile.preview = URL.createObjectURL(blobToCompress);
         }
       } else {
-        // Video - generate thumbnail and use original file
+        // Video - probe, compress, and generate thumbnail
+        mediaFile.isConverting = true;
         mediaFile.uploadBlob = file;
-        
+
+        // STEP A: Probe video metadata (resolution, duration, bitrate)
+        let videoMeta: VideoMetadata | undefined;
         try {
-          // Generate thumbnail from first frame
-          const thumbnail = await generateVideoThumbnail(file);
+          videoMeta = await probeVideo(file);
+          mediaFile.videoMetadata = videoMeta;
+          console.log(
+            `Video probe for ${file.name}: ${videoMeta.width}x${videoMeta.height}, ` +
+            `${videoMeta.duration.toFixed(1)}s, ${(videoMeta.estimatedBitrate / 1_000_000).toFixed(1)} Mbps, ` +
+            `shouldCompress: ${videoMeta.shouldCompress}`
+          );
+        } catch (probeErr) {
+          console.warn("Video probe failed, skipping compression:", probeErr);
+        }
+
+        // STEP B: Compress video if it meets size/resolution thresholds
+        if (shouldCompressVideo(file) && videoMeta?.shouldCompress) {
+          try {
+            console.log(`[MediaUpload] Starting video compression for ${file.name}...`);
+            const compressionResult = await compressVideo(
+              file,
+              { preset: COMPRESSION_PRESETS.balanced },
+              videoMeta
+            );
+
+            mediaFile.uploadBlob = compressionResult.blob;
+            mediaFile.compressedSize = compressionResult.compressedSize;
+            mediaFile.compressedWidth = compressionResult.width;
+            mediaFile.compressedHeight = compressionResult.height;
+            mediaFile.videoCompression = {
+              codec: compressionResult.codec,
+              settings: compressionResult.settings,
+              originalWidth: videoMeta.width,
+              originalHeight: videoMeta.height,
+              duration: compressionResult.duration,
+              compressionRatio: compressionResult.compressionRatio,
+            };
+
+            const savings = Math.round((1 - compressionResult.compressionRatio) * 100);
+            console.log(
+              `Compressed video ${file.name}: ${formatFileSize(file.size)} → ${formatFileSize(compressionResult.compressedSize)} (${savings}% savings)`
+            );
+          } catch (compressErr) {
+            console.error("Video compression failed, using original:", compressErr);
+            // Fallback to original file
+            mediaFile.uploadBlob = file;
+          }
+        }
+
+        // STEP C: Generate thumbnail from video (use compressed if available)
+        try {
+          const thumbSource = mediaFile.uploadBlob || file;
+          const thumbnail = await generateVideoThumbnail(thumbSource);
           mediaFile.thumbnailBlob = thumbnail.blob;
           mediaFile.thumbnailWidth = thumbnail.width;
           mediaFile.thumbnailHeight = thumbnail.height;
-          // Use thumbnail as preview image
           mediaFile.preview = URL.createObjectURL(thumbnail.blob);
           console.log(
             `Generated thumbnail for ${file.name}: ${thumbnail.width}x${thumbnail.height} (${formatFileSize(thumbnail.blob.size)})`
           );
         } catch (error) {
           console.error("Thumbnail generation failed:", error);
-          // Fallback to video preview (will show black initially)
           mediaFile.preview = URL.createObjectURL(file);
         }
       }
@@ -404,9 +464,9 @@ export function MediaUpload({
                   )
                 )}
 
-                {/* Compression indicator (only for images, not on cover) */}
-                {file.type === "image" && file.compressedSize && file.originalSize && file.compressedSize < file.originalSize && index !== 0 && (
-                  <div 
+                {/* Compression indicator (images and videos, not on cover) */}
+                {file.compressedSize && file.originalSize && file.compressedSize < file.originalSize && index !== 0 && (
+                  <div
                     className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-india-green/90 text-white text-xs z-10"
                     title={`Komprimeret: ${formatFileSize(file.originalSize)} → ${formatFileSize(file.compressedSize)}`}
                   >

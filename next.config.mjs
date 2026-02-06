@@ -24,6 +24,26 @@ const nextConfig = {
       },
     ],
   },
+
+  // Enable SharedArrayBuffer for ffmpeg.wasm multi-threaded mode
+  // Scoped to /admin/compress to avoid breaking Supabase Auth and Mapbox on other pages
+  async headers() {
+    return [
+      {
+        source: "/admin/compress",
+        headers: [
+          {
+            key: "Cross-Origin-Embedder-Policy",
+            value: "require-corp",
+          },
+          {
+            key: "Cross-Origin-Opener-Policy",
+            value: "same-origin",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;
