@@ -5,7 +5,7 @@ import Image from "next/image";
 import useEmblaCarousel from "embla-carousel-react";
 import { MapPin, ImageIcon, Film, Play, ChevronLeft, ChevronRight, ChevronUp, X, MapPinIcon, Calendar, Route } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getMediaUrl } from "@/lib/upload";
+import { getMediaUrl } from "@/lib/url-utils";
 import { getDayNumber } from "@/lib/journey";
 import type { Milestone } from "@/types/database";
 

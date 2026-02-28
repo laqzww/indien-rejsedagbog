@@ -38,6 +38,9 @@ yarn-error.log*
 scripts/.temp-video-optimization/
 scripts/.optimization-progress.json
 
+# claude code
+.mcp.json
+
 # vercel
 .vercel
 

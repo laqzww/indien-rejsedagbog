@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { getMediaUrl, getCarouselThumbnailUrl } from "@/lib/upload";
+import { getMediaUrl, getCarouselThumbnailUrl } from "@/lib/url-utils";
 import { MapPin, ChevronLeft, ChevronRight, Play, Loader2, Maximize2 } from "lucide-react";
 import { formatDayLabel } from "@/lib/journey";
 import { useInViewport } from "@/hooks";

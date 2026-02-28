@@ -1,28 +1,33 @@
-import type { Metadata } from "next";
-import { redirect } from "next/navigation";
+"use client";
 
-export const metadata: Metadata = {
-  title: "Rejserute",
-  description: "Se hele rejseruten gennem Indien på kortet",
-};
+import { Suspense, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-interface PageProps {
-  searchParams: Promise<{ lat?: string; lng?: string; zoom?: string }>;
+function JourneyRedirect() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    let redirectUrl = "/?view=map";
+    const lat = searchParams.get("lat");
+    const lng = searchParams.get("lng");
+    const zoom = searchParams.get("zoom");
+    if (lat && lng) {
+      redirectUrl += `&lat=${lat}&lng=${lng}`;
+      if (zoom) {
+        redirectUrl += `&zoom=${zoom}`;
+      }
+    }
+    router.replace(redirectUrl);
+  }, [router, searchParams]);
+
+  return null;
 }
 
-// Redirect to home page - map is now integrated there
-// Forward lat/lng/zoom params to enable POI focus
-export default async function JourneyPage({ searchParams }: PageProps) {
-  const params = await searchParams;
-  
-  // Build redirect URL with optional POI focus parameters
-  let redirectUrl = "/?view=map";
-  if (params.lat && params.lng) {
-    redirectUrl += `&lat=${params.lat}&lng=${params.lng}`;
-    if (params.zoom) {
-      redirectUrl += `&zoom=${params.zoom}`;
-    }
-  }
-  
-  redirect(redirectUrl);
+export default function JourneyPage() {
+  return (
+    <Suspense>
+      <JourneyRedirect />
+    </Suspense>
+  );
 }

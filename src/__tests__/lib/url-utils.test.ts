@@ -1,16 +1,16 @@
 import { describe, it, expect, vi } from "vitest";
-import { getMediaUrl, isStoragePath, getAvatarUrl } from "@/lib/url-utils";
+import { getMediaUrl, isStoragePath, getAvatarUrl, getCarouselThumbnailUrl } from "@/lib/url-utils";
 
 // Mock environment variable
-vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://test-project.supabase.co");
+vi.stubEnv("NEXT_PUBLIC_MEDIA_URL", "https://pub-5e47b3255c9041c1834ddbed83e08fcb.r2.dev");
 
 describe("url-utils.ts", () => {
   describe("getMediaUrl", () => {
-    it("constructs correct Supabase storage URL", () => {
+    it("constructs correct R2 URL", () => {
       const path = "posts/123/image.jpg";
       const url = getMediaUrl(path);
       expect(url).toBe(
-        "https://test-project.supabase.co/storage/v1/object/public/media/posts/123/image.jpg"
+        "https://pub-5e47b3255c9041c1834ddbed83e08fcb.r2.dev/posts/123/image.jpg"
       );
     });
 
@@ -24,7 +24,7 @@ describe("url-utils.ts", () => {
       const path = "avatars/user123/profile/avatar.png";
       const url = getMediaUrl(path);
       expect(url).toBe(
-        "https://test-project.supabase.co/storage/v1/object/public/media/avatars/user123/profile/avatar.png"
+        "https://pub-5e47b3255c9041c1834ddbed83e08fcb.r2.dev/avatars/user123/profile/avatar.png"
       );
     });
   });
@@ -54,11 +54,11 @@ describe("url-utils.ts", () => {
   });
 
   describe("getAvatarUrl", () => {
-    it("returns full Supabase URL for storage paths", () => {
+    it("returns full URL for storage paths", () => {
       const path = "avatars/user123.jpg";
       const url = getAvatarUrl(path);
       expect(url).toBe(
-        "https://test-project.supabase.co/storage/v1/object/public/media/avatars/user123.jpg"
+        "https://pub-5e47b3255c9041c1834ddbed83e08fcb.r2.dev/avatars/user123.jpg"
       );
     });
 
@@ -70,6 +70,22 @@ describe("url-utils.ts", () => {
     it("returns original URL for external https URLs", () => {
       const externalUrl = "https://cdn.example.com/avatars/user.jpg";
       expect(getAvatarUrl(externalUrl)).toBe(externalUrl);
+    });
+  });
+
+  describe("getCarouselThumbnailUrl", () => {
+    it("inserts _carousel before file extension", () => {
+      const url = getCarouselThumbnailUrl("user/post/image.jpg");
+      expect(url).toBe(
+        "https://pub-5e47b3255c9041c1834ddbed83e08fcb.r2.dev/user/post/image_carousel.jpg"
+      );
+    });
+
+    it("handles path without extension", () => {
+      const url = getCarouselThumbnailUrl("user/post/image");
+      expect(url).toBe(
+        "https://pub-5e47b3255c9041c1834ddbed83e08fcb.r2.dev/user/post/image_carousel"
+      );
     });
   });
 });

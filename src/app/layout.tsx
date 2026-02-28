@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Outfit, JetBrains_Mono, Tillana } from "next/font/google";
 import "./globals.css";
-import { BadgeManager } from "@/components/BadgeManager";
 
 const outfit = Outfit({
   variable: "--font-outfit",
@@ -37,9 +36,16 @@ export const metadata: Metadata = {
     description: "Følg med på vores eventyr gennem Indien - fra Kerala til Delhi",
     type: "website",
   },
-  // Explicit manifest to allow proper override in admin layout
   manifest: "/manifest.webmanifest",
-  // Apple specific settings
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      { url: "/apple-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -63,7 +69,6 @@ export default function RootLayout({
       <body
         className={`${outfit.variable} ${jetbrainsMono.variable} ${tillana.variable} antialiased overflow-x-hidden`}
       >
-        <BadgeManager />
         {children}
       </body>
     </html>

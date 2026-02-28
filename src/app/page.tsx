@@ -1,88 +1,68 @@
 import { Suspense } from "react";
-import { createClient } from "@/lib/supabase/server";
-import { getIsAuthor } from "@/lib/author";
 import { groupPostsByMilestoneAndDay } from "@/lib/journey";
 import { HomeClient } from "@/components/HomeClient";
 import { Map as MapIcon } from "lucide-react";
+import postsData from "@/data/posts.json";
+import milestonesData from "@/data/milestones.json";
+import type { Milestone } from "@/types/database";
 
-export const revalidate = 60; // Revalidate every minute
-
-interface PageProps {
-  searchParams: Promise<{ 
-    view?: string;
-    lat?: string;
-    lng?: string;
-    zoom?: string;
+const posts = postsData as Array<{
+  id: string;
+  body: string;
+  location_name: string | null;
+  captured_at: string | null;
+  created_at: string;
+  tags: string[] | null;
+  lat: number | null;
+  lng: number | null;
+  media: Array<{
+    id: string;
+    type: string;
+    storage_path: string;
+    thumbnail_path: string | null;
+    width: number | null;
+    height: number | null;
+    display_order: number;
   }>;
-}
+  profile: {
+    display_name: string | null;
+    avatar_url: string | null;
+  } | null;
+}>;
+const milestones = milestonesData as Milestone[];
 
-export default async function HomePage({ searchParams }: PageProps) {
-  const params = await searchParams;
-  const initialView = params.view === "map" ? "map" : "feed";
-  
-  // Parse POI focus coordinates (for "Se på kort" feature)
-  const focusLat = params.lat ? parseFloat(params.lat) : undefined;
-  const focusLng = params.lng ? parseFloat(params.lng) : undefined;
-  const focusZoom = params.zoom ? parseFloat(params.zoom) : undefined;
-  
-  const supabase = await createClient();
-
-  // Get current user to check if author
-  const { data: { user } } = await supabase.auth.getUser();
-  const isAuthor = await getIsAuthor(supabase, user);
-
-  // Fetch posts with media and profile (using captured_at for ordering)
-  const { data: postsRaw } = await supabase
-    .from("posts")
-    .select(`
-      id,
-      body,
-      location_name,
-      captured_at,
-      created_at,
-      tags,
-      lat,
-      lng,
-      media (id, type, storage_path, thumbnail_path, width, height, display_order),
-      profile:profiles (display_name, avatar_url)
-    `)
-    .order("captured_at", { ascending: false, nullsFirst: false })
-    .order("created_at", { ascending: false })
-    .limit(100);
-
-  // Serialize to clean JSON (removes Supabase metadata)
-  const posts = postsRaw ? JSON.parse(JSON.stringify(postsRaw)) : [];
-
-  // Fetch milestones for grouping and map
-  const { data: milestones } = await supabase
-    .from("milestones")
-    .select("*")
-    .order("display_order", { ascending: true });
-
+export default function HomePage() {
   // Group posts by milestone and day
-  const groupedPosts = groupPostsByMilestoneAndDay(posts, milestones || []);
+  const groupedPosts = groupPostsByMilestoneAndDay(posts, milestones);
 
-  // Fetch posts with location for map (including media details for thumbnail markers)
-  // Order by captured_at (ascending) so earliest posts appear on the left in the carousel
-  const { data: mapPostsRaw } = await supabase
-    .from("posts")
-    .select(`
-      id,
-      body,
-      lat,
-      lng,
-      location_name,
-      created_at,
-      captured_at,
-      media (id, type, storage_path, thumbnail_path, display_order)
-    `)
-    .not("lat", "is", null)
-    .order("captured_at", { ascending: true, nullsFirst: false })
-    .order("created_at", { ascending: true });
+  // Filter posts with location for map (ascending by captured_at for carousel order)
+  const mapPosts = posts
+    .filter((p) => p.lat != null && p.lng != null)
+    .sort((a, b) => {
+      const dateA = new Date(a.captured_at || a.created_at).getTime();
+      const dateB = new Date(b.captured_at || b.created_at).getTime();
+      return dateA - dateB;
+    })
+    .map((p) => ({
+      id: p.id,
+      body: p.body,
+      lat: p.lat,
+      lng: p.lng,
+      location_name: p.location_name,
+      created_at: p.created_at,
+      captured_at: p.captured_at,
+      media: (p.media || [])
+        .sort((a, b) => a.display_order - b.display_order)
+        .map((m) => ({
+          id: m.id,
+          type: m.type,
+          storage_path: m.storage_path,
+          thumbnail_path: m.thumbnail_path,
+          display_order: m.display_order,
+        })),
+    }));
 
-  const mapPosts = mapPostsRaw ? JSON.parse(JSON.stringify(mapPostsRaw)) : [];
-
-  const hasPosts = posts && posts.length > 0;
+  const hasPosts = posts.length > 0;
 
   return (
     <Suspense fallback={
@@ -92,15 +72,11 @@ export default async function HomePage({ searchParams }: PageProps) {
       </div>
     }>
       <HomeClient
-        isAuthor={isAuthor}
+        isAuthor={false}
         groupedPosts={groupedPosts}
         hasPosts={hasPosts}
-        milestones={milestones || []}
+        milestones={milestones}
         mapPosts={mapPosts}
-        initialView={initialView}
-        focusLat={focusLat}
-        focusLng={focusLng}
-        focusZoom={focusZoom}
       />
     </Suspense>
   );

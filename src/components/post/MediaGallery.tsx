@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
-import { getMediaUrl } from "@/lib/upload";
+import { getMediaUrl } from "@/lib/url-utils";
 import { ChevronLeft, ChevronRight, X, Film, ZoomIn, Play, Loader2 } from "lucide-react";
 import type { Media } from "@/types/database";
 

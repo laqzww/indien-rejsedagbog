@@ -2,9 +2,9 @@
 
 import { useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
 import { Header } from "./Header";
 import { InstallBanner } from "./InstallBanner";
-import { AdminPwaRedirect } from "./AdminPwaRedirect";
 import { PostFeed } from "./post/PostFeed";
 import { EmptyFeed } from "./post/EmptyFeed";
 import { JourneyCarousel } from "./map/PostCarousel";
@@ -57,10 +57,6 @@ interface HomeClientProps {
   hasPosts: boolean;
   milestones: Milestone[];
   mapPosts: JourneyPost[];
-  initialView?: "feed" | "map";
-  focusLat?: number;
-  focusLng?: number;
-  focusZoom?: number;
 }
 
 export function HomeClient({
@@ -69,12 +65,15 @@ export function HomeClient({
   hasPosts,
   milestones,
   mapPosts,
-  initialView = "feed",
-  focusLat: initialFocusLat,
-  focusLng: initialFocusLng,
-  focusZoom: initialFocusZoom,
 }: HomeClientProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
+
+  // Read initial view/focus from URL search params (client-side)
+  const searchParams = useSearchParams();
+  const initialView = searchParams.get("view") === "map" ? "map" as const : "feed" as const;
+  const initialFocusLat = searchParams.get("lat") ? parseFloat(searchParams.get("lat")!) : undefined;
+  const initialFocusLng = searchParams.get("lng") ? parseFloat(searchParams.get("lng")!) : undefined;
+  const initialFocusZoom = searchParams.get("zoom") ? parseFloat(searchParams.get("zoom")!) : undefined;
 
   // URL-based navigation state
   const navigation = useViewNavigation({
@@ -118,9 +117,6 @@ export function HomeClient({
 
   return (
     <div className="h-dvh h-[100svh] bg-white flex flex-col overflow-hidden overflow-x-hidden w-full max-w-full">
-      {/* Redirect admin PWA users if opened at wrong URL */}
-      <AdminPwaRedirect />
-      
       <Header
         isAuthor={isAuthor}
         activeView={navigation.activeView}
@@ -239,13 +235,6 @@ function FeedView({ hasPosts, groupedPosts, focusPostId }: FeedViewProps) {
       <footer className="border-t border-border bg-white py-4">
         <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
           <span>© {new Date().getFullYear()} Tommy & Amalie</span>
-          <span className="text-muted-foreground/30">·</span>
-          <a 
-            href="/admin"
-            className="text-muted-foreground/50 hover:text-muted-foreground transition-colors px-2 py-1 -mx-2 -my-1"
-          >
-            Admin
-          </a>
         </div>
       </footer>
     </div>

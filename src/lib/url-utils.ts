@@ -4,11 +4,10 @@
  */
 
 /**
- * Get the public URL for a media file in Supabase Storage
+ * Get the public URL for a media file
  */
 export function getMediaUrl(path: string): string {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  return `${supabaseUrl}/storage/v1/object/public/media/${path}`;
+  return `${process.env.NEXT_PUBLIC_MEDIA_URL}/${path}`;
 }
 
 /**
@@ -26,4 +25,20 @@ export function getAvatarUrl(avatarUrl: string): string {
     return getMediaUrl(avatarUrl);
   }
   return avatarUrl;
+}
+
+/**
+ * Get the carousel thumbnail URL for an image.
+ * Carousel thumbnails are stored with a _carousel suffix before the extension.
+ * Example: "user/post/image.jpg" → "user/post/image_carousel.jpg"
+ */
+export function getCarouselThumbnailUrl(storagePath: string): string {
+  const lastDotIndex = storagePath.lastIndexOf(".");
+  if (lastDotIndex === -1) {
+    return getMediaUrl(`${storagePath}_carousel`);
+  }
+
+  const pathWithoutExt = storagePath.slice(0, lastDotIndex);
+  const ext = storagePath.slice(lastDotIndex);
+  return getMediaUrl(`${pathWithoutExt}_carousel${ext}`);
 }

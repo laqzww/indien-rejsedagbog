@@ -1,4 +1,3 @@
-import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/Header";
@@ -6,26 +5,60 @@ import { MediaGallery } from "@/components/post/MediaGallery";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, MapPin, Calendar, Share2, Pencil } from "lucide-react";
-import { DeletePostButton } from "@/components/post/DeletePostButton";
+import { ArrowLeft, MapPin, Calendar, Share2 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { getAvatarUrl } from "@/lib/url-utils";
 import type { Metadata } from "next";
-import { getIsAuthor } from "@/lib/author";
+import postsDataRaw from "@/data/posts.json";
+
+interface PostData {
+  id: string;
+  body: string;
+  location_name: string | null;
+  captured_at: string | null;
+  created_at: string;
+  tags: string[] | null;
+  lat: number | null;
+  lng: number | null;
+  author_id: string;
+  media: Array<{
+    id: string;
+    type: string;
+    storage_path: string;
+    thumbnail_path: string | null;
+    width: number | null;
+    height: number | null;
+    display_order: number;
+  }>;
+  links?: Array<{
+    id: string;
+    url: string;
+    title: string | null;
+    description: string | null;
+    image_url: string | null;
+    site_name: string | null;
+  }>;
+  profile: {
+    display_name: string | null;
+    avatar_url: string | null;
+  } | null;
+}
+
+const postsData = postsDataRaw as PostData[];
+
+export const dynamicParams = false;
 
 interface PageProps {
   params: Promise<{ id: string }>;
 }
 
+export async function generateStaticParams() {
+  return postsData.map((post) => ({ id: post.id }));
+}
+
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { id } = await params;
-  const supabase = await createClient();
-  
-  const { data: post } = await supabase
-    .from("posts")
-    .select("body, location_name")
-    .eq("id", id)
-    .single();
+  const post = postsData.find((p) => p.id === id);
 
   if (!post) {
     return { title: "Opslag ikke fundet" };
@@ -39,41 +72,35 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function PostPage({ params }: PageProps) {
   const { id } = await params;
-  const supabase = await createClient();
-
-  // Check if current user is author
-  const { data: { user } } = await supabase.auth.getUser();
-  const isAuthor = await getIsAuthor(supabase, user);
-  
-  // We'll check if the user is the post author after fetching the post
-
-  // Fetch post with relations
-  const { data: post } = await supabase
-    .from("posts")
-    .select(`
-      *,
-      media (*),
-      links (*),
-      profile:profiles (*)
-    `)
-    .eq("id", id)
-    .single();
+  const post = postsData.find((p) => p.id === id);
 
   if (!post) {
     notFound();
   }
-
-  // Check if current user is the author of this specific post
-  const isPostAuthor = user && post.author_id === user.id;
 
   // Sort media by display_order
   const sortedMedia = [...(post.media || [])].sort(
     (a, b) => a.display_order - b.display_order
   );
 
+  // Cast to the shape MediaGallery expects
+  const galleryMedia = sortedMedia.map((m) => ({
+    ...m,
+    post_id: post.id,
+    created_at: post.created_at,
+    captured_at: null as string | null,
+    exif_data: null,
+    lat: null as number | null,
+    lng: null as number | null,
+    mime_type: null as string | null,
+  }));
+
+  const profile = post.profile;
+  const links = post.links;
+
   return (
     <div className="min-h-screen bg-white">
-      <Header isAuthor={isAuthor} showNavigation={false} />
+      <Header isAuthor={false} showNavigation={false} />
 
       <main className="container mx-auto px-4 py-6 max-w-3xl">
         {/* Back button */}
@@ -87,9 +114,9 @@ export default async function PostPage({ params }: PageProps) {
         </div>
 
         {/* Media gallery */}
-        {sortedMedia.length > 0 && (
+        {galleryMedia.length > 0 && (
           <div className="mb-8">
-            <MediaGallery media={sortedMedia} />
+            <MediaGallery media={galleryMedia} />
           </div>
         )}
 
@@ -99,16 +126,16 @@ export default async function PostPage({ params }: PageProps) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Avatar className="h-12 w-12">
-                {post.profile?.avatar_url && (
-                  <AvatarImage src={getAvatarUrl(post.profile.avatar_url)} alt="" />
+                {profile?.avatar_url && (
+                  <AvatarImage src={getAvatarUrl(profile.avatar_url)} alt="" />
                 )}
                 <AvatarFallback className="text-lg">
-                  {post.profile?.display_name?.charAt(0) || "?"}
+                  {profile?.display_name?.charAt(0) || "?"}
                 </AvatarFallback>
               </Avatar>
               <div>
                 <p className="font-medium">
-                  {post.profile?.display_name || "Anonym"}
+                  {profile?.display_name || "Anonym"}
                 </p>
                 <p className="text-sm text-muted-foreground flex items-center gap-1">
                   <Calendar className="h-3.5 w-3.5" />
@@ -117,26 +144,8 @@ export default async function PostPage({ params }: PageProps) {
               </div>
             </div>
 
-            {/* Action buttons */}
+            {/* Share button */}
             <div className="flex items-center gap-1">
-              {/* Edit button - only for post author */}
-              {isPostAuthor && (
-                <Link href={`/admin/edit/${post.id}`}>
-                  <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-saffron">
-                    <Pencil className="h-5 w-5" />
-                  </Button>
-                </Link>
-              )}
-              
-              {/* Delete button - only for post author */}
-              {isPostAuthor && (
-                <DeletePostButton
-                  postId={post.id}
-                  mediaPaths={sortedMedia.map((m: { storage_path: string }) => m.storage_path)}
-                />
-              )}
-              
-              {/* Share button */}
               <Button variant="ghost" size="icon" className="text-muted-foreground">
                 <Share2 className="h-5 w-5" />
               </Button>
@@ -179,11 +188,11 @@ export default async function PostPage({ params }: PageProps) {
             </div>
           )}
 
-          {/* Links (hotel/restaurant cards) */}
-          {post.links && post.links.length > 0 && (
+          {/* Links */}
+          {links && links.length > 0 && (
             <div className="space-y-3 pt-4 border-t border-border">
               <h3 className="text-sm font-medium text-muted-foreground">Links</h3>
-              {post.links.map((link: { id: string; url: string; title: string | null; description: string | null; image_url: string | null; site_name: string | null }) => (
+              {links.map((link) => (
                 <a
                   key={link.id}
                   href={link.url}
@@ -220,10 +229,8 @@ export default async function PostPage({ params }: PageProps) {
               ))}
             </div>
           )}
-
         </article>
       </main>
     </div>
   );
 }
-

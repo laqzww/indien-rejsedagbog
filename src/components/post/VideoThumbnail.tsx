@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { Play, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getMediaUrl } from "@/lib/upload";
+import { getMediaUrl } from "@/lib/url-utils";
 
 interface VideoThumbnailProps {
   storagePath: string;

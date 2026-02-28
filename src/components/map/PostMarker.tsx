@@ -1,6 +1,6 @@
 "use client";
 
-import { getMediaUrl } from "@/lib/upload";
+import { getMediaUrl } from "@/lib/url-utils";
 
 // Post type for map markers
 export interface MapPost {

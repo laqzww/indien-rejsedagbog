@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import Image from "next/image";
 import { TransformWrapper, TransformComponent, ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
 import { cn } from "@/lib/utils";
-import { getMediaUrl } from "@/lib/upload";
+import { getMediaUrl } from "@/lib/url-utils";
 import { X, ChevronLeft, ChevronRight, Play, Loader2 } from "lucide-react";
 
 interface MediaItem {
