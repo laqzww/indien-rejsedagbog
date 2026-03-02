@@ -23,10 +23,28 @@ export function PostFeed({ groups, focusPostId }: PostFeedProps) {
     );
   }, [groups]);
 
-  // Progressive rendering - start with 5 posts, load 3 more as user scrolls
+  // Calculate minimum posts needed to include the focus post
+  const minRenderCount = useMemo(() => {
+    if (!focusPostId) return 5;
+    let index = 0;
+    for (const group of groups) {
+      for (const day of group.days) {
+        for (const post of day.posts) {
+          index++;
+          if (post.id === focusPostId) {
+            // Render enough to include the focus post plus a few extra
+            return Math.max(5, index + 2);
+          }
+        }
+      }
+    }
+    return 5;
+  }, [groups, focusPostId]);
+
+  // Progressive rendering - start with enough posts to include focus post
   const { renderedCount, sentinelRef, isComplete } = useProgressiveRender({
     totalItems: totalPosts,
-    initialBatch: 5,
+    initialBatch: minRenderCount,
     batchSize: 3,
     loadMoreThreshold: 600, // Start loading when 600px from bottom
   });
@@ -47,28 +65,44 @@ export function PostFeed({ groups, focusPostId }: PostFeedProps) {
   useEffect(() => {
     if (!focusPostId || hasScrolledToFocusRef.current) return;
 
-    // Small delay to allow DOM to render and milestones to expand
-    const scrollTimeout = setTimeout(() => {
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 15;
+
+    // Retry until the element exists in the DOM (handles view transitions on iOS)
+    function tryScroll() {
+      if (cancelled || hasScrolledToFocusRef.current) return;
+      attempts++;
+
       const postElement = document.getElementById(`post-${focusPostId}`);
       if (postElement) {
-        // Scroll the post into view with some offset for the header
-        postElement.scrollIntoView({ behavior: "smooth", block: "center" });
+        // Use requestAnimationFrame to ensure layout is complete before scrolling
+        requestAnimationFrame(() => {
+          if (cancelled) return;
+          postElement.scrollIntoView({ behavior: "instant", block: "center" });
 
-        // Add highlight effect using inline styles for reliability
-        postElement.style.boxShadow = "0 0 0 3px #FF9933";
-        postElement.style.borderRadius = "8px";
-        postElement.style.transition = "box-shadow 0.3s ease";
+          // Add highlight effect using inline styles for reliability
+          postElement.style.boxShadow = "0 0 0 3px #FF9933";
+          postElement.style.borderRadius = "8px";
+          postElement.style.transition = "box-shadow 0.3s ease";
 
-        setTimeout(() => {
-          postElement.style.boxShadow = "";
-          postElement.style.borderRadius = "";
-        }, 2500);
+          setTimeout(() => {
+            postElement.style.boxShadow = "";
+            postElement.style.borderRadius = "";
+          }, 2500);
 
-        hasScrolledToFocusRef.current = true;
+          hasScrolledToFocusRef.current = true;
+        });
+      } else if (attempts < maxAttempts) {
+        // Element not in DOM yet - retry with increasing delay
+        setTimeout(tryScroll, attempts < 3 ? 100 : 200);
       }
-    }, 150);
+    }
 
-    return () => clearTimeout(scrollTimeout);
+    // Initial delay to allow view transition
+    setTimeout(tryScroll, 50);
+
+    return () => { cancelled = true; };
   }, [focusPostId]);
 
   // Reset scroll ref when focusPostId changes
